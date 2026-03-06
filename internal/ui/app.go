@@ -316,6 +316,7 @@ func nextActivityFilter(current ActivityKind) ActivityKind {
 // Must be called whenever sessions, filters, search, or time window change.
 func (m *Model) refreshVisible() {
 	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
+	lowerQuery := strings.ToLower(m.searchQuery)
 	m.visible = m.visible[:0]
 	for _, s := range m.sessions {
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
@@ -324,8 +325,8 @@ func (m *Model) refreshVisible() {
 		if m.activityFilter != "" && m.activityFor(s.SessionID) != m.activityFilter {
 			continue
 		}
-		if m.searchQuery != "" &&
-			!strings.Contains(strings.ToLower(s.CWD), strings.ToLower(m.searchQuery)) {
+		if lowerQuery != "" &&
+			!strings.Contains(strings.ToLower(s.CWD), lowerQuery) {
 			continue
 		}
 		m.visible = append(m.visible, s)
@@ -709,8 +710,6 @@ func (m Model) renderHelp() string {
 		return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
 	}
 
-
-
 	if m.focus == 0 {
 		parts = []string{
 			helpKeyStyle.Render("k/↑") + helpStyle.Render(" prev"),
@@ -794,9 +793,3 @@ func clamp(lo, hi, v int) int {
 	return v
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

@@ -7,23 +7,12 @@ var (
 	colorPrimary     = lipgloss.Color("#7C3AED")
 	colorAccent      = lipgloss.Color("#10B981")
 	colorWarning     = lipgloss.Color("#F59E0B")
-	colorDanger      = lipgloss.Color("#EF4444")
 	colorMuted       = lipgloss.Color("#6B7280")
 	colorText        = lipgloss.Color("#F9FAFB")
 	colorSubtext     = lipgloss.Color("#9CA3AF")
 	colorBorder      = lipgloss.Color("#374151")
 	colorBorderFocus = lipgloss.Color("#7C3AED")
 	colorSelBg       = lipgloss.Color("#3730A3") // visible indigo selection
-
-	// Status colors map
-	statusColors = map[string]lipgloss.Color{
-		"waiting":    colorAccent,
-		"thinking":   colorWarning,
-		"tool":       colorPrimary,
-		"processing": colorWarning,
-		"idle":       colorMuted,
-		"unknown":    colorMuted,
-	}
 
 	// Panels: border only, no padding (avoids width overflow)
 	panelStyle = lipgloss.NewStyle().
@@ -59,21 +48,3 @@ var (
 			Bold(true).
 			Padding(0, 1)
 )
-
-// statusDot returns a single ASCII dot colored by status (no emoji = no width bugs).
-func statusDot(status string) string {
-	color, ok := statusColors[status]
-	if !ok {
-		color = colorMuted
-	}
-	return lipgloss.NewStyle().Foreground(color).Render("●")
-}
-
-// statusLabel returns the status string styled with its color.
-func statusLabel(status string) string {
-	color, ok := statusColors[status]
-	if !ok {
-		color = colorMuted
-	}
-	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(status)
-}

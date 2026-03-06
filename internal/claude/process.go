@@ -63,8 +63,12 @@ func DiscoverSessions() ([]*Session, error) {
 		return nil, fmt.Errorf("could not read projects dir: %w", err)
 	}
 
-	// Cache worktree lookups per CWD to avoid redundant git calls
-	wtCache := make(map[string][2]string) // cwd → [isWT, mainRepo]
+	// Cache worktree lookups per CWD to avoid redundant git calls.
+	type wtInfo struct {
+		isWorktree bool
+		mainRepo   string
+	}
+	wtCache := make(map[string]wtInfo)
 
 	var sessions []*Session
 	for _, projectEntry := range entries {
@@ -90,16 +94,11 @@ func DiscoverSessions() ([]*Session, error) {
 
 			if _, seen := wtCache[session.CWD]; !seen {
 				isWT, mainRepo := IsWorktree(session.CWD)
-				v := [2]string{"", ""}
-				if isWT {
-					v[0] = "1"
-				}
-				v[1] = mainRepo
-				wtCache[session.CWD] = v
+				wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
 			}
 			wt := wtCache[session.CWD]
-			session.IsWorktree = wt[0] == "1"
-			session.MainRepo = wt[1]
+			session.IsWorktree = wt.isWorktree
+			session.MainRepo = wt.mainRepo
 
 			sessions = append(sessions, session)
 		}
