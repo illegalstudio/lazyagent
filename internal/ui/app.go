@@ -147,7 +147,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(makeLoadCmd(), watchCmd(m.watcher.Events))
 
 	case renderTickMsg:
-		// Re-render only — no I/O.
+		// Re-render only — no I/O, but update in-memory activity states.
+		m.updateActivities(time.Now())
 		return m, renderTickCmd()
 
 	case tickMsg:
@@ -443,7 +444,7 @@ func (m Model) renderList(listW int) string {
 			lipgloss.NewStyle().Foreground(colorMuted).Render("loading..."),
 		)
 	}
-	if len(sessions) == 0 {
+	if len(sessions) == 0 && !m.searchMode {
 		return pStyle.Width(listW).Height(innerH).Render(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("no sessions found"),
 		)
@@ -486,6 +487,11 @@ func (m Model) renderList(listW int) string {
 
 	var rows []string
 	rows = append(rows, header, divider)
+
+	if len(sessions) == 0 {
+		rows = append(rows, lipgloss.NewStyle().Foreground(colorMuted).Render("no results"))
+		return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
+	}
 
 	for i := off; i < end; i++ {
 		rows = append(rows, m.renderListRow(sessions[i], nameW, i == m.cursor))
@@ -609,7 +615,13 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 
 	add(row("Messages", fmt.Sprintf("%d  (%d user, %d assistant)",
 		s.TotalMessages, s.UserMessages, s.AssistantMessages)))
-	add(row("Last activity", formatDuration(time.Since(s.LastActivity))))
+	if len(s.RecentTools) > 0 {
+		last := s.RecentTools[len(s.RecentTools)-1]
+		add(row("Last operation", last.Name+"  "+
+			lipgloss.NewStyle().Foreground(colorMuted).Render("("+formatDuration(time.Since(last.Timestamp))+")")))
+	} else {
+		add(row("Last operation", formatDuration(time.Since(s.LastActivity))))
+	}
 
 	if s.LastFileWrite != "" {
 		agePart := " (" + formatDuration(time.Since(s.LastFileWriteAt)) + ")"
@@ -635,7 +647,8 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 		if msgW < 4 {
 			msgW = 4
 		}
-		for _, msg := range msgs {
+		for i := len(msgs) - 1; i >= 0; i-- {
+			msg := msgs[i]
 			role := padRight(msg.Role, 4)
 			text := msg.Text
 			// Collapse newlines for single-line display
