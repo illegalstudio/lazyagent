@@ -19,6 +19,7 @@ type fileWatchMsg struct{}
 type projectWatcher struct {
 	fw     *fsnotify.Watcher
 	Events <-chan struct{}
+	done   chan struct{}
 }
 
 // newProjectWatcher starts an FSEvents watcher on ~/.claude/projects.
@@ -50,9 +51,19 @@ func newProjectWatcher() (*projectWatcher, error) {
 	}
 
 	ch := make(chan struct{}, 1)
-	w := &projectWatcher{fw: fw, Events: ch}
+	done := make(chan struct{})
+	w := &projectWatcher{fw: fw, Events: ch, done: done}
 	go w.run(projectsDir, ch)
 	return w, nil
+}
+
+// Close signals the watcher goroutine to stop and releases resources.
+func (w *projectWatcher) Close() {
+	select {
+	case <-w.done:
+	default:
+		close(w.done)
+	}
 }
 
 func (w *projectWatcher) run(projectsDir string, out chan<- struct{}) {
@@ -73,6 +84,8 @@ func (w *projectWatcher) run(projectsDir string, out chan<- struct{}) {
 
 	for {
 		select {
+		case <-w.done:
+			return
 		case event, ok := <-w.fw.Events:
 			if !ok {
 				return

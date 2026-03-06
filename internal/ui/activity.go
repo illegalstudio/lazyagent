@@ -139,11 +139,13 @@ func (m *Model) updateActivities(now time.Time) {
 	if m.waitingSince == nil {
 		m.waitingSince = make(map[string]time.Time)
 	}
+	activeIDs := make(map[string]struct{}, len(m.sessions))
 	for _, s := range m.sessions {
 		id := s.SessionID
 		if id == "" {
 			continue
 		}
+		activeIDs[id] = struct{}{}
 		activity := resolveActivity(s, now)
 
 		if activity == ActivityWaiting {
@@ -161,6 +163,13 @@ func (m *Model) updateActivities(now time.Time) {
 		}
 
 		m.activities[id] = &activityEntry{kind: activity, lastSeen: now}
+	}
+	// Remove stale entries for sessions that no longer exist.
+	for id := range m.activities {
+		if _, ok := activeIDs[id]; !ok {
+			delete(m.activities, id)
+			delete(m.waitingSince, id)
+		}
 	}
 }
 

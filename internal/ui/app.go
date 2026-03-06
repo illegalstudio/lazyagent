@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -55,6 +57,9 @@ type Model struct {
 	activityFilter ActivityKind // "" = show all
 	searchMode     bool
 	searchQuery    string
+
+	// Cached visible sessions, recomputed via refreshVisible().
+	visible []*claude.Session
 }
 
 type keyMap struct {
@@ -127,13 +132,9 @@ func makeLoadCmd() tea.Cmd {
 }
 
 func sortSessions(sessions []*claude.Session) {
-	for i := 0; i < len(sessions); i++ {
-		for j := i + 1; j < len(sessions); j++ {
-			if sessions[j].LastActivity.After(sessions[i].LastActivity) {
-				sessions[i], sessions[j] = sessions[j], sessions[i]
-			}
-		}
-	}
+	slices.SortFunc(sessions, func(a, b *claude.Session) int {
+		return cmp.Compare(b.LastActivity.UnixNano(), a.LastActivity.UnixNano())
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -149,6 +150,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case renderTickMsg:
 		// Re-render only — no I/O, but update in-memory activity states.
 		m.updateActivities(time.Now())
+		m.refreshVisible()
 		return m, renderTickCmd()
 
 	case tickMsg:
@@ -164,11 +166,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sessions = msg.sessions
 			m.updateActivities(now)
 			sortSessions(m.sessions)
-			visible := m.visibleSessions()
+			m.refreshVisible()
 			// Try to restore selection by session ID.
 			found := false
 			if m.selectedID != "" {
-				for i, s := range visible {
+				for i, s := range m.visible {
 					if s.SessionID == m.selectedID {
 						m.cursor = i
 						found = true
@@ -178,11 +180,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !found {
 				// Clamp cursor and update selectedID.
-				if n := len(visible); m.cursor >= n && n > 0 {
+				if n := len(m.visible); m.cursor >= n && n > 0 {
 					m.cursor = n - 1
 				}
-				if len(visible) > 0 {
-					m.selectedID = visible[m.cursor].SessionID
+				if len(m.visible) > 0 {
+					m.selectedID = m.visible[m.cursor].SessionID
 				}
 			}
 			m.ensureListVisible()
@@ -210,6 +212,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.listOffset = 0
 			}
+			m.refreshVisible()
 			return m, nil
 		}
 
@@ -225,7 +228,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.windowMinutes < 480 {
 				m.windowMinutes += 10
 			}
-			if n := len(m.visibleSessions()); m.cursor >= n && n > 0 {
+			m.refreshVisible()
+			if n := len(m.visible); m.cursor >= n && n > 0 {
 				m.cursor = n - 1
 			}
 
@@ -233,7 +237,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.windowMinutes > 10 {
 				m.windowMinutes -= 10
 			}
-			if n := len(m.visibleSessions()); m.cursor >= n && n > 0 {
+			m.refreshVisible()
+			if n := len(m.visible); m.cursor >= n && n > 0 {
 				m.cursor = n - 1
 			}
 
@@ -245,9 +250,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == 0 {
 				if m.cursor > 0 {
 					m.cursor--
+					m.detailOffset = 0
 					m.ensureListVisible()
-					if vis := m.visibleSessions(); m.cursor < len(vis) {
-						m.selectedID = vis[m.cursor].SessionID
+					if m.cursor < len(m.visible) {
+						m.selectedID = m.visible[m.cursor].SessionID
 					}
 				}
 			} else {
@@ -258,12 +264,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Down):
 			if m.focus == 0 {
-				vis := m.visibleSessions()
-				if m.cursor < len(vis)-1 {
+				if m.cursor < len(m.visible)-1 {
 					m.cursor++
+					m.detailOffset = 0
 					m.ensureListVisible()
-					if m.cursor < len(vis) {
-						m.selectedID = vis[m.cursor].SessionID
+					if m.cursor < len(m.visible) {
+						m.selectedID = m.visible[m.cursor].SessionID
 					}
 				}
 			} else {
@@ -274,6 +280,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activityFilter = nextActivityFilter(m.activityFilter)
 			m.cursor = 0
 			m.listOffset = 0
+			m.refreshVisible()
 
 		case key.Matches(msg, keys.Search):
 			m.searchMode = true
@@ -305,10 +312,11 @@ func nextActivityFilter(current ActivityKind) ActivityKind {
 	return ""
 }
 
-// visibleSessions returns sessions modified within the time window, excluding sidechains.
-func (m Model) visibleSessions() []*claude.Session {
+// refreshVisible recomputes the cached visible sessions list.
+// Must be called whenever sessions, filters, search, or time window change.
+func (m *Model) refreshVisible() {
 	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
-	var out []*claude.Session
+	m.visible = m.visible[:0]
 	for _, s := range m.sessions {
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
 			continue
@@ -320,9 +328,8 @@ func (m Model) visibleSessions() []*claude.Session {
 			!strings.Contains(strings.ToLower(s.CWD), strings.ToLower(m.searchQuery)) {
 			continue
 		}
-		out = append(out, s)
+		m.visible = append(m.visible, s)
 	}
-	return out
 }
 
 func (m *Model) ensureListVisible() {
@@ -330,7 +337,7 @@ func (m *Model) ensureListVisible() {
 	if vis <= 0 {
 		return
 	}
-	n := len(m.visibleSessions())
+	n := len(m.visible)
 	if m.cursor >= n && n > 0 {
 		m.cursor = n - 1
 	}
@@ -397,11 +404,10 @@ func (m Model) View() string {
 
 func (m Model) renderTitleBar() string {
 	left := titleStyle.Render("lazyclaude")
-	vis := m.visibleSessions()
 	count := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorSubtext).
 		Padding(0, 1).
-		Render(fmt.Sprintf("%d sessions [last %dm]", len(vis), m.windowMinutes))
+		Render(fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.windowMinutes))
 
 	parts := []string{left, count}
 
@@ -437,7 +443,7 @@ func (m Model) renderList(listW int) string {
 		pStyle = panelFocusStyle
 	}
 
-	sessions := m.visibleSessions()
+	sessions := m.visible
 
 	if m.loading && len(sessions) == 0 {
 		return pStyle.Width(listW).Height(innerH).Render(
@@ -535,14 +541,18 @@ func (m Model) renderDetail(detailW int) string {
 		pStyle = panelFocusStyle
 	}
 
-	sessions := m.visibleSessions()
-	if len(sessions) == 0 || m.cursor >= len(sessions) {
+	if m.err != nil && len(m.visible) == 0 {
+		return pStyle.Width(detailW).Height(innerH).Render(
+			lipgloss.NewStyle().Foreground(colorWarning).Render("error: "+m.err.Error()),
+		)
+	}
+	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
 		return pStyle.Width(detailW).Height(innerH).Render(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("select a session"),
 		)
 	}
 
-	lines := m.buildDetailLines(sessions[m.cursor], detailW)
+	lines := m.buildDetailLines(m.visible[m.cursor], detailW)
 
 	vis := m.detailVisibleLines()
 	maxOff := len(lines) - vis
@@ -649,12 +659,18 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 		}
 		for i := len(msgs) - 1; i >= 0; i-- {
 			msg := msgs[i]
-			role := padRight(msg.Role, 4)
+			roleLabel := msg.Role
+			if roleLabel == "assistant" {
+				roleLabel = "AI"
+			} else if roleLabel == "user" {
+				roleLabel = "User"
+			}
+			role := padRight(roleLabel, 4)
 			text := msg.Text
 			// Collapse newlines for single-line display
 			text = strings.ReplaceAll(text, "\n", " ")
 			if len(text) > msgW {
-				text = text[:msgW]
+				text = text[:msgW-1] + "…"
 			}
 			add(lipgloss.NewStyle().Foreground(colorSubtext).Render("  "+role+"  ") +
 				lipgloss.NewStyle().Foreground(colorText).Render(text))

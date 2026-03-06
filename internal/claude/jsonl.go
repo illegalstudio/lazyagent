@@ -24,9 +24,23 @@ type jsonlEntry struct {
 }
 
 type jsonlMessage struct {
-	Role    string        `json:"role"`
-	Model   string        `json:"model"`
-	Content []jsonlContent `json:"content"`
+	Role       string          `json:"role"`
+	Model      string          `json:"model"`
+	RawContent json.RawMessage `json:"content"`
+	Content    []jsonlContent  `json:"-"` // parsed from RawContent
+	TextContent string         `json:"-"` // set when content is a plain string
+}
+
+func (m *jsonlMessage) parseContent() {
+	if len(m.RawContent) == 0 {
+		return
+	}
+	// Content can be a plain string (user messages) or an array of objects.
+	if m.RawContent[0] == '"' {
+		json.Unmarshal(m.RawContent, &m.TextContent)
+	} else if m.RawContent[0] == '[' {
+		json.Unmarshal(m.RawContent, &m.Content)
+	}
 }
 
 type jsonlContent struct {
@@ -61,36 +75,48 @@ func ParseJSONL(path string) (*Session, error) {
 		LastActivity: info.ModTime(),
 	}
 
-	var entries []jsonlEntry
 	scanner := bufio.NewScanner(f)
-	// Increase buffer for large lines
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 4*1024*1024)
+
+	// Single-pass: extract metadata, count messages, collect recent tools/messages,
+	// and track the last meaningful entry for status determination.
+	var recentTools []ToolCall
+	var recentMessages []ConversationMessage
+	var lastMeaningful *jsonlEntry
+	var prevTimestamp time.Time
+	parsed := false
 
 	for scanner.Scan() {
 		var e jsonlEntry
 		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
 			continue
 		}
-		entries = append(entries, e)
-	}
+		parsed = true
+		if e.Message != nil {
+			e.Message.parseContent()
+		}
 
-	if len(entries) == 0 {
-		return session, nil
-	}
+		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
 
-	// Extract session metadata from the first user/assistant entry.
-	// isSidechain is set if ANY entry marks this as a sidechain.
-	// summary entries (type="summary") mark context compaction events.
-	for _, e := range entries {
 		if e.IsSidechain {
 			session.IsSidechain = true
 		}
+
 		if e.Type == "summary" {
-			// Summary entries have no timestamp; use the file mod time as proxy.
-			session.LastSummaryAt = session.LastActivity
+			if !prevTimestamp.IsZero() {
+				session.LastSummaryAt = prevTimestamp
+			} else {
+				session.LastSummaryAt = session.LastActivity
+			}
 		}
-		if e.Type == "user" || e.Type == "assistant" {
+
+		if !ts.IsZero() {
+			prevTimestamp = ts
+		}
+
+		switch e.Type {
+		case "user":
 			if session.CWD == "" && e.CWD != "" {
 				session.CWD = e.CWD
 			}
@@ -100,42 +126,48 @@ func ParseJSONL(path string) (*Session, error) {
 			if session.GitBranch == "" && e.GitBranch != "" {
 				session.GitBranch = e.GitBranch
 			}
-		}
-	}
-
-	// Count messages and collect tool calls, conversation messages, and last file write
-	var recentTools []ToolCall
-	var recentMessages []ConversationMessage
-	for _, e := range entries {
-		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
-		switch e.Type {
-		case "user":
-			if e.Message != nil && !isToolResult(e.Message.Content) {
+			lastMeaningful = &e
+			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
-				if text := firstTextBlock(e.Message.Content); text != "" {
+				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, ConversationMessage{
-						Role:      "user",
-						Text:      truncate(text, 300),
-						Timestamp: ts,
+						Role: "user", Text: truncate(text, 300), Timestamp: ts,
 					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
 				}
 			}
 		case "assistant":
+			if session.CWD == "" && e.CWD != "" {
+				session.CWD = e.CWD
+			}
+			if session.Version == "" && e.Version != "" {
+				session.Version = e.Version
+			}
+			if session.GitBranch == "" && e.GitBranch != "" {
+				session.GitBranch = e.GitBranch
+			}
+			lastMeaningful = &e
 			if e.Message != nil {
 				session.AssistantMessages++
 				if e.Message.Model != "" {
 					session.Model = e.Message.Model
 				}
-				if text := firstTextBlock(e.Message.Content); text != "" {
+				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, ConversationMessage{
-						Role:      "assistant",
-						Text:      truncate(text, 300),
-						Timestamp: ts,
+						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
 					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
 				}
 				for _, c := range e.Message.Content {
 					if c.Type == "tool_use" {
 						recentTools = append(recentTools, ToolCall{Name: c.Name, Timestamp: ts})
+						if len(recentTools) > 40 {
+							recentTools = recentTools[len(recentTools)-20:]
+						}
 						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
 							var input map[string]any
 							if err := json.Unmarshal(c.Input, &input); err == nil {
@@ -150,29 +182,31 @@ func ParseJSONL(path string) (*Session, error) {
 			}
 		}
 	}
+
+	if !parsed {
+		return session, nil
+	}
+
 	session.TotalMessages = session.UserMessages + session.AssistantMessages
 
-	// Keep last 20 tool calls
 	if len(recentTools) > 20 {
 		recentTools = recentTools[len(recentTools)-20:]
 	}
 	session.RecentTools = recentTools
 
-	// Keep last 10 conversation messages
 	if len(recentMessages) > 10 {
 		recentMessages = recentMessages[len(recentMessages)-10:]
 	}
 	session.RecentMessages = recentMessages
 
 	// Determine status from the last meaningful entry
-	last := lastMeaningful(entries)
-	session.Status = determineStatus(last)
-	if last != nil {
-		if ts, err := time.Parse(time.RFC3339Nano, last.Timestamp); err == nil {
+	session.Status = determineStatus(lastMeaningful)
+	if lastMeaningful != nil {
+		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
 			session.LastActivity = ts
 		}
-		if session.Status == StatusExecutingTool && last.Message != nil {
-			for _, c := range last.Message.Content {
+		if session.Status == StatusExecutingTool && lastMeaningful.Message != nil {
+			for _, c := range lastMeaningful.Message.Content {
 				if c.Type == "tool_use" {
 					session.CurrentTool = c.Name
 				}
@@ -183,8 +217,8 @@ func ParseJSONL(path string) (*Session, error) {
 	return session, nil
 }
 
-func isToolResult(content []jsonlContent) bool {
-	for _, c := range content {
+func isToolResult(m *jsonlMessage) bool {
+	for _, c := range m.Content {
 		if c.Type == "tool_result" {
 			return true
 		}
@@ -192,8 +226,11 @@ func isToolResult(content []jsonlContent) bool {
 	return false
 }
 
-func firstTextBlock(content []jsonlContent) string {
-	for _, c := range content {
+func firstText(m *jsonlMessage) string {
+	if m.TextContent != "" {
+		return m.TextContent
+	}
+	for _, c := range m.Content {
 		if c.Type == "text" && c.Text != "" {
 			return c.Text
 		}
@@ -205,17 +242,11 @@ func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n]
-}
-
-func lastMeaningful(entries []jsonlEntry) *jsonlEntry {
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
-		if e.Type == "user" || e.Type == "assistant" {
-			return &entries[i]
-		}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
 	}
-	return nil
+	return string(r[:n])
 }
 
 func determineStatus(e *jsonlEntry) SessionStatus {
@@ -238,7 +269,7 @@ func determineStatus(e *jsonlEntry) SessionStatus {
 		if e.Message == nil {
 			return StatusUnknown
 		}
-		if isToolResult(e.Message.Content) {
+		if isToolResult(e.Message) {
 			// Tool result was written — Claude is now thinking about it
 			return StatusProcessingResult
 		}
