@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyclaude/internal/claude"
+	"github.com/nahime0/lazyagent/internal/claude"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -403,7 +403,7 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTitleBar() string {
-	left := titleStyle.Render("lazyclaude")
+	left := titleStyle.Render("lazyagent")
 	count := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorSubtext).
 		Padding(0, 1).

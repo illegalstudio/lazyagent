@@ -8,7 +8,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/nahime0/lazyclaude/internal/claude"
+	"github.com/nahime0/lazyagent/internal/claude"
 )
 
 // fileWatchMsg is sent when any JSONL file in ~/.claude/projects changes.

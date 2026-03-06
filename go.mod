@@ -1,4 +1,4 @@
-module github.com/nahime0/lazyclaude
+module github.com/nahime0/lazyagent
 
 go 1.25.5
 

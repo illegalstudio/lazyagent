@@ -1,4 +1,4 @@
-# lazyclaude
+# lazyagent
 
 A terminal UI for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit) and [lazyworktree](https://github.com/chmouel/lazyworktree).
 
@@ -30,7 +30,7 @@ A terminal UI for monitoring all running [Claude Code](https://claude.ai/code) i
 
 ## How it works
 
-lazyclaude watches Claude Code's JSONL transcript files (`~/.claude/projects/*/`) to determine what each session is doing. No modifications to Claude Code are needed — it's purely observational.
+lazyagent watches Claude Code's JSONL transcript files (`~/.claude/projects/*/`) to determine what each session is doing. No modifications to Claude Code are needed — it's purely observational.
 
 From the JSONL stream it detects activity states with color-coded labels:
 
@@ -59,21 +59,21 @@ It also surfaces:
 ## Install
 
 ```bash
-go install github.com/nahime0/lazyclaude@latest
+go install github.com/nahime0/lazyagent@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/nahime0/lazyclaude
-cd lazyclaude
-go build -o lazyclaude .
+git clone https://github.com/nahime0/lazyagent
+cd lazyagent
+go build -o lazyagent .
 ```
 
 ## Usage
 
 ```
-lazyclaude
+lazyagent
 ```
 
 ### Keybindings
@@ -119,14 +119,14 @@ lazyclaude
 ### v0.4 — Hooks & Webhooks
 - [ ] Claude Code hook integration (read hook output files)
 - [ ] Outbound webhooks on status changes (e.g. waiting → send Slack notification)
-- [ ] Configurable via `~/.config/lazyclaude/config.yaml`
+- [ ] Configurable via `~/.config/lazyagent/config.yaml`
 - [ ] Webhook payload format (session ID, status, project, timestamp)
 
 ### v0.5 — Notifications & integrations
 - [ ] macOS native notifications when session needs input
 - [ ] Linear issue linking (detect issue refs in conversation)
 - [ ] Desktop menu bar icon (systray) showing active session count
-- [ ] `lazyclaude notify` CLI mode (run headless, only notify)
+- [ ] `lazyagent notify` CLI mode (run headless, only notify)
 
 ### Future ideas
 - [ ] Multi-machine support via shared config / remote API

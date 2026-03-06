@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyclaude/internal/claude"
+	"github.com/nahime0/lazyagent/internal/claude"
 )
 
 // ActivityTimeout is the duration a tool-based activity stays visible after
