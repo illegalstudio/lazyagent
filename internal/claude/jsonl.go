@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -49,8 +51,13 @@ func ParseJSONL(path string) (*Session, error) {
 		return nil, err
 	}
 
+	// The filename (without extension) is always the authoritative session ID.
+	// After compaction, the new JSONL starts with entries from the old session,
+	// so reading sessionId from entries would give the wrong (old) ID.
+	filenameID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	session := &Session{
 		JSONLPath:    path,
+		SessionID:    filenameID,
 		LastActivity: info.ModTime(),
 	}
 
@@ -84,9 +91,6 @@ func ParseJSONL(path string) (*Session, error) {
 			session.LastSummaryAt = session.LastActivity
 		}
 		if e.Type == "user" || e.Type == "assistant" {
-			if session.SessionID == "" {
-				session.SessionID = e.SessionID
-			}
 			if session.CWD == "" && e.CWD != "" {
 				session.CWD = e.CWD
 			}
