@@ -24,28 +24,30 @@ const WaitingGrace = 10 * time.Second
 type ActivityKind string
 
 const (
-	ActivityIdle      ActivityKind = "idle"
-	ActivityWaiting   ActivityKind = "waiting"   // Claude finished, awaiting user input
-	ActivityThinking  ActivityKind = "thinking"  // Claude generating a response
-	ActivityReading   ActivityKind = "reading"   // Read
-	ActivityWriting   ActivityKind = "writing"   // Write / Edit
-	ActivityRunning   ActivityKind = "running"   // Bash
-	ActivitySearching ActivityKind = "searching" // Glob / Grep
-	ActivityBrowsing  ActivityKind = "browsing"  // WebFetch / WebSearch
-	ActivitySpawning  ActivityKind = "spawning"  // Agent (subagent)
+	ActivityIdle       ActivityKind = "idle"
+	ActivityWaiting    ActivityKind = "waiting"    // Claude finished, awaiting user input
+	ActivityThinking   ActivityKind = "thinking"   // Claude generating a response
+	ActivityCompacting ActivityKind = "compacting" // Context compaction in progress
+	ActivityReading    ActivityKind = "reading"    // Read
+	ActivityWriting    ActivityKind = "writing"    // Write / Edit
+	ActivityRunning    ActivityKind = "running"    // Bash
+	ActivitySearching  ActivityKind = "searching"  // Glob / Grep
+	ActivityBrowsing   ActivityKind = "browsing"   // WebFetch / WebSearch
+	ActivitySpawning   ActivityKind = "spawning"   // Agent (subagent)
 )
 
 // activityColors maps each activity kind to a display color.
 var activityColors = map[ActivityKind]lipgloss.Color{
-	ActivityIdle:      colorMuted,
-	ActivityWaiting:   lipgloss.Color("#4ADE80"), // green
-	ActivityThinking:  colorWarning,              // amber
-	ActivityReading:   lipgloss.Color("#38BDF8"), // sky blue
-	ActivityWriting:   lipgloss.Color("#FB923C"), // orange
-	ActivityRunning:   lipgloss.Color("#A78BFA"), // violet
-	ActivitySearching: lipgloss.Color("#34D399"), // emerald
-	ActivityBrowsing:  lipgloss.Color("#22D3EE"), // cyan
-	ActivitySpawning:  lipgloss.Color("#F472B6"), // pink
+	ActivityIdle:       colorMuted,
+	ActivityWaiting:    lipgloss.Color("#4ADE80"), // green
+	ActivityThinking:   colorWarning,              // amber
+	ActivityCompacting: lipgloss.Color("#2DD4BF"), // teal
+	ActivityReading:    lipgloss.Color("#38BDF8"), // sky blue
+	ActivityWriting:    lipgloss.Color("#FB923C"), // orange
+	ActivityRunning:    lipgloss.Color("#A78BFA"), // violet
+	ActivitySearching:  lipgloss.Color("#34D399"), // emerald
+	ActivityBrowsing:   lipgloss.Color("#22D3EE"), // cyan
+	ActivitySpawning:   lipgloss.Color("#F472B6"), // pink
 }
 
 // activityEntry holds a session's current sticky activity state.
@@ -65,6 +67,11 @@ type activityEntry struct {
 //  4. Current JSONL status → thinking if Claude is processing, idle otherwise.
 func resolveActivity(s *claude.Session, now time.Time) ActivityKind {
 	sinceActivity := now.Sub(s.LastActivity)
+
+	// Context compaction: a summary entry was written recently.
+	if !s.LastSummaryAt.IsZero() && now.Sub(s.LastSummaryAt) < ActivityTimeout {
+		return ActivityCompacting
+	}
 
 	// Claude finished responding and is waiting for user input.
 	if s.Status == claude.StatusWaitingForUser {

@@ -74,9 +74,14 @@ func ParseJSONL(path string) (*Session, error) {
 
 	// Extract session metadata from the first user/assistant entry.
 	// isSidechain is set if ANY entry marks this as a sidechain.
+	// summary entries (type="summary") mark context compaction events.
 	for _, e := range entries {
 		if e.IsSidechain {
 			session.IsSidechain = true
+		}
+		if e.Type == "summary" {
+			// Summary entries have no timestamp; use the file mod time as proxy.
+			session.LastSummaryAt = session.LastActivity
 		}
 		if e.Type == "user" || e.Type == "assistant" {
 			if session.SessionID == "" {

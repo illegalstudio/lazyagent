@@ -58,6 +58,7 @@ type Session struct {
 	Status        SessionStatus
 	CurrentTool   string    // name of tool currently executing, if any
 	LastActivity  time.Time // timestamp of last JSONL entry
+	LastSummaryAt time.Time // timestamp of last compaction summary entry
 	TotalMessages int
 	RecentTools   []ToolCall // last N tool calls
 
