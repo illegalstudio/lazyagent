@@ -1,0 +1,68 @@
+package claude
+
+import "time"
+
+// SessionStatus represents the current activity of a Claude Code session.
+type SessionStatus int
+
+const (
+	StatusUnknown          SessionStatus = iota
+	StatusWaitingForUser                 // Claude responded, awaiting human input
+	StatusThinking                       // Claude is generating a response
+	StatusExecutingTool                  // Claude invoked a tool, waiting for result
+	StatusProcessingResult               // Tool result received, Claude is thinking
+	StatusIdle                           // Session file exists but process not running
+)
+
+func (s SessionStatus) String() string {
+	switch s {
+	case StatusWaitingForUser:
+		return "waiting"
+	case StatusThinking:
+		return "thinking"
+	case StatusExecutingTool:
+		return "tool"
+	case StatusProcessingResult:
+		return "processing"
+	case StatusIdle:
+		return "idle"
+	default:
+		return "unknown"
+	}
+}
+
+// ToolCall holds info about a single tool invocation.
+type ToolCall struct {
+	Name      string
+	Timestamp time.Time
+}
+
+// Session holds all observable information about a Claude Code instance.
+type Session struct {
+	// Identity
+	SessionID string
+	JSONLPath string
+
+	// Runtime
+	PID         int    // 0 if not found
+	CWD         string // working directory
+	Version     string // claude version
+	Model       string // model being used
+	GitBranch   string
+	IsDangerous bool // --dangerously-skip-permissions
+
+	// Git / worktree
+	IsWorktree bool
+	MainRepo   string // main repo path if worktree
+
+	// Status
+	Status        SessionStatus
+	CurrentTool   string    // name of tool currently executing, if any
+	LastActivity  time.Time // timestamp of last JSONL entry
+	TotalMessages int
+	RecentTools   []ToolCall // last N tool calls
+
+	// Counts
+	UserMessages      int
+	AssistantMessages int
+}
