@@ -2,31 +2,7 @@
 
 A terminal UI for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
-```
-╭─────────────────────────────╮╭──────────────────────────────────────────╮
-│ PROJECT          STATUS     ││ ~/developer/myapp                        │
-│ ────────────────────────     ││ ● running                                │
-│ myapp            running    ││                                           │
-│ myapp/worktree   waiting    ││ Session ID          0279269c…b3cb         │
-│ other-project    idle       ││ Version             2.1.70                │
-│                             ││ Model               claude-sonnet-4-6     │
-│                             ││ Git Branch          feat/new-api          │
-│                             ││ Worktree            no                    │
-│                             ││ Messages            42  (18 user, 24 ai)  │
-│                             ││ Last operation      Bash  (3s ago)        │
-│                             ││ Last file           src/main.go (12s ago) │
-│                             ││ ─────────────────────────────────         │
-│                             ││ Conversation                              │
-│                             ││   AI    Fixed the parsing bug…            │
-│                             ││   User  Can you also fix the tests?       │
-│                             ││ ─────────────────────────────────         │
-│                             ││ Recent Tools                              │
-│                             ││   Bash         5s ago                     │
-│                             ││   Read         12s ago                    │
-│                             ││   Write        30s ago                    │
-╰─────────────────────────────╯╰──────────────────────────────────────────╯
- k/↑ prev  j/↓ next  tab detail  +/- mins  f filter  / search  r refresh  q quit
-```
+![lazyagent](assets/screenshot.png)
 
 ## How it works
 
