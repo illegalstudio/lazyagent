@@ -16,12 +16,11 @@ type ActivityKind string
 
 const (
 	ActivityIdle      ActivityKind = "idle"
-	ActivityWaiting   ActivityKind = "waiting"   // Claude waiting for user input
 	ActivityThinking  ActivityKind = "thinking"  // Claude generating a response
-	ActivityReading   ActivityKind = "reading"   // Read / Glob / Grep
+	ActivityReading   ActivityKind = "reading"   // Read
 	ActivityWriting   ActivityKind = "writing"   // Write / Edit
 	ActivityRunning   ActivityKind = "running"   // Bash
-	ActivitySearching ActivityKind = "searching" // Grep / Glob
+	ActivitySearching ActivityKind = "searching" // Glob / Grep
 	ActivityBrowsing  ActivityKind = "browsing"  // WebFetch / WebSearch
 	ActivitySpawning  ActivityKind = "spawning"  // Agent (subagent)
 )
@@ -39,8 +38,7 @@ func (a ActivityKind) isTransient() bool {
 // activityColors maps each activity kind to a display color.
 var activityColors = map[ActivityKind]lipgloss.Color{
 	ActivityIdle:      colorMuted,
-	ActivityWaiting:   colorAccent,  // green — needs user attention
-	ActivityThinking:  colorWarning, // amber
+	ActivityThinking:  colorWarning,              // amber
 	ActivityReading:   lipgloss.Color("#38BDF8"), // sky blue
 	ActivityWriting:   lipgloss.Color("#FB923C"), // orange
 	ActivityRunning:   lipgloss.Color("#A78BFA"), // violet
@@ -60,7 +58,8 @@ type activityEntry struct {
 func resolveRawActivity(s *claude.Session) ActivityKind {
 	switch s.Status {
 	case claude.StatusWaitingForUser:
-		return ActivityWaiting
+		// Claude responded, session is effectively idle from the user's POV
+		return ActivityIdle
 	case claude.StatusThinking, claude.StatusProcessingResult:
 		return ActivityThinking
 	case claude.StatusExecutingTool:
