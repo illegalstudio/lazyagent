@@ -190,6 +190,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ensureListVisible()
 		}
 
+	case tea.MouseMsg:
+		if !m.searchMode {
+			m.handleMouse(msg)
+		}
+
 	case tea.KeyMsg:
 		// Search mode intercepts all keys except esc.
 		if m.searchMode {
@@ -288,6 +293,92 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleMouse processes mouse events for click selection and scroll.
+func (m *Model) handleMouse(msg tea.MouseMsg) {
+	listW, _, _ := m.dims()
+
+	// Content area starts at row 1 (after title bar) and ends before help bar.
+	// Panel borders add 1 row top + 1 row bottom.
+	contentTop := 1    // title bar is row 0
+	contentBot := m.height - 2 // help bar is last row
+
+	// Determine which panel the mouse is over based on X coordinate.
+	// List panel: x in [0, listW+2) (including border)
+	// Detail panel: x >= listW+2
+	panelBoundary := listW + 2
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if msg.X < panelBoundary {
+			// Scroll list up
+			if m.cursor > 0 {
+				m.cursor--
+				m.ensureListVisible()
+				if m.cursor < len(m.visible) {
+					m.selectedID = m.visible[m.cursor].SessionID
+				}
+				m.detailOffset = 0
+			}
+		} else {
+			// Scroll detail up
+			if m.detailOffset > 0 {
+				m.detailOffset -= 3
+				if m.detailOffset < 0 {
+					m.detailOffset = 0
+				}
+			}
+		}
+
+	case tea.MouseButtonWheelDown:
+		if msg.X < panelBoundary {
+			// Scroll list down
+			if m.cursor < len(m.visible)-1 {
+				m.cursor++
+				m.ensureListVisible()
+				if m.cursor < len(m.visible) {
+					m.selectedID = m.visible[m.cursor].SessionID
+				}
+				m.detailOffset = 0
+			}
+		} else {
+			// Scroll detail down
+			m.detailOffset += 3
+		}
+
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionPress {
+			return
+		}
+		if msg.Y < contentTop || msg.Y > contentBot {
+			return
+		}
+
+		if msg.X < panelBoundary {
+			// Click in list panel — switch focus and select session.
+			m.focus = 0
+
+			// Calculate which row was clicked.
+			// Inside the panel: row 0 = top border, row 1 = header, row 2 = divider,
+			// rows 3+ = session items.
+			rowInPanel := msg.Y - contentTop
+			// Subtract border (1), header (1), divider (1) = 3 rows before items.
+			itemRow := rowInPanel - 3
+			if itemRow < 0 {
+				return
+			}
+			idx := m.listOffset + itemRow
+			if idx >= 0 && idx < len(m.visible) {
+				m.cursor = idx
+				m.selectedID = m.visible[m.cursor].SessionID
+				m.detailOffset = 0
+			}
+		} else {
+			// Click in detail panel — switch focus.
+			m.focus = 1
+		}
+	}
 }
 
 var activityFilterOrder = []ActivityKind{
@@ -716,6 +807,8 @@ func (m Model) renderHelp() string {
 			helpKeyStyle.Render("k/↑") + helpStyle.Render(" prev"),
 			helpKeyStyle.Render("j/↓") + helpStyle.Render(" next"),
 			helpKeyStyle.Render("tab") + helpStyle.Render(" detail"),
+			helpKeyStyle.Render("click") + helpStyle.Render(" select"),
+			helpKeyStyle.Render("scroll") + helpStyle.Render(" navigate"),
 			helpKeyStyle.Render("+/-") + helpStyle.Render(" mins"),
 			helpKeyStyle.Render("f") + helpStyle.Render(" filter"),
 			helpKeyStyle.Render("/") + helpStyle.Render(" search"),
@@ -727,6 +820,8 @@ func (m Model) renderHelp() string {
 			helpKeyStyle.Render("k/↑") + helpStyle.Render(" scroll up"),
 			helpKeyStyle.Render("j/↓") + helpStyle.Render(" scroll dn"),
 			helpKeyStyle.Render("tab") + helpStyle.Render(" list"),
+			helpKeyStyle.Render("click") + helpStyle.Render(" focus"),
+			helpKeyStyle.Render("scroll") + helpStyle.Render(" navigate"),
 			helpKeyStyle.Render("+/-") + helpStyle.Render(" mins"),
 			helpKeyStyle.Render("f") + helpStyle.Render(" filter"),
 			helpKeyStyle.Render("/") + helpStyle.Render(" search"),
