@@ -39,6 +39,9 @@ type Model struct {
 	focus       int  // 0 = list, 1 = detail
 	showAll     bool // false = only sessions with a running process
 
+	// Sticky activity states, keyed by session ID
+	activities map[string]*activityEntry
+
 	// Kill confirmation: first K press arms it, second K fires
 	pendingKill bool
 }
@@ -64,7 +67,10 @@ var keys = keyMap{
 }
 
 func NewModel() Model {
-	return Model{loading: true}
+	return Model{
+		loading:    true,
+		activities: make(map[string]*activityEntry),
+	}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -124,11 +130,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sessionsMsg:
 		m.loading = false
-		m.lastRefresh = time.Now()
+		now := time.Now()
+		m.lastRefresh = now
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
 			m.sessions = msg.sessions
+			m.updateActivities(now)
 			// Clamp cursor to visible list
 			if n := len(m.visibleSessions()); m.cursor >= n && n > 0 {
 				m.cursor = n - 1
@@ -411,32 +419,29 @@ func (m Model) renderList(listW int) string {
 // then render each column independently with the SAME background (if selected)
 // so the background covers the full row width without gaps.
 func (m Model) renderListRow(s *claude.Session, nameW int, selected bool) string {
-	statusStr := s.Status.String()
-	statusColor, ok := statusColors[statusStr]
+	activity := m.activityFor(s.SessionID)
+	actColor, ok := activityColors[activity]
 	if !ok {
-		statusColor = colorMuted
+		actColor = colorMuted
 	}
+	actStr := padRight(string(activity), statusColW)
 
-	// Plain-text name, truncated/padded to exact nameW
 	name := shortName(s.CWD, nameW)
 	name = padRight(name, nameW)
-
-	// Plain-text status, padded to statusColW
-	padded := padRight(statusStr, statusColW)
 
 	if selected {
 		namePart := lipgloss.NewStyle().
 			Background(colorSelBg).Foreground(colorText).Bold(true).
 			Render(name)
-		statusPart := lipgloss.NewStyle().
-			Background(colorSelBg).Foreground(statusColor).Bold(true).
-			Render(padded)
-		return namePart + statusPart
+		actPart := lipgloss.NewStyle().
+			Background(colorSelBg).Foreground(actColor).Bold(true).
+			Render(actStr)
+		return namePart + actPart
 	}
 
 	namePart := lipgloss.NewStyle().Foreground(colorSubtext).Render(name)
-	statusPart := lipgloss.NewStyle().Foreground(statusColor).Render(padded)
-	return namePart + statusPart
+	actPart := lipgloss.NewStyle().Foreground(actColor).Render(actStr)
+	return namePart + actPart
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
@@ -481,11 +486,14 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	add(lipgloss.NewStyle().Foreground(colorText).Bold(true).
 		Render(shortName(s.CWD, width-2)))
 
-	// Status + current tool
-	statusLine := statusDot(s.Status.String()) + " " + statusLabel(s.Status.String())
+	// Activity (sticky) + raw status + current tool
+	activity := m.activityFor(s.SessionID)
+	actColor := activityColors[activity]
+	statusLine := lipgloss.NewStyle().Foreground(actColor).Bold(true).Render("● ") +
+		lipgloss.NewStyle().Foreground(actColor).Bold(true).Render(string(activity))
 	if s.CurrentTool != "" {
-		statusLine += "  " + lipgloss.NewStyle().Foreground(colorPrimary).
-			Render("-> "+s.CurrentTool)
+		statusLine += "  " + lipgloss.NewStyle().Foreground(colorMuted).
+			Render("("+s.CurrentTool+")")
 	}
 	add(statusLine)
 	add("")
