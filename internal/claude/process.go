@@ -15,6 +15,7 @@ type ProcessInfo struct {
 	CWD         string
 	Args        string
 	IsDangerous bool
+	ResumeUUID  string // session UUID from --resume flag, if present
 }
 
 // FindClaudeProcesses returns all running Claude Code processes on macOS.
@@ -56,6 +57,7 @@ func FindClaudeProcesses() ([]ProcessInfo, error) {
 			CWD:         cwd,
 			Args:        args,
 			IsDangerous: strings.Contains(args, "dangerously-skip-permissions"),
+			ResumeUUID:  extractResumeUUID(args),
 		})
 	}
 	return procs, nil
@@ -77,20 +79,45 @@ func getCWD(pid int) string {
 	return ""
 }
 
-// EnrichWithProcessInfo matches sessions to running processes by CWD.
+// EnrichWithProcessInfo matches sessions to running processes.
+// Matching strategy (in order):
+//  1. Session UUID → process --resume flag (exact match, most reliable)
+//  2. CWD → process working directory (for fresh sessions without --resume)
 func EnrichWithProcessInfo(sessions []*Session, procs []ProcessInfo) {
-	cwdToPID := make(map[string]ProcessInfo)
+	cwdToProc := make(map[string]ProcessInfo)
+	uuidToProc := make(map[string]ProcessInfo)
 	for _, p := range procs {
 		if p.CWD != "" {
-			cwdToPID[p.CWD] = p
+			cwdToProc[p.CWD] = p
+		}
+		if p.ResumeUUID != "" {
+			uuidToProc[p.ResumeUUID] = p
 		}
 	}
 	for _, s := range sessions {
-		if p, ok := cwdToPID[s.CWD]; ok {
+		// Prefer UUID match (handles resumed sessions and avoids CWD collisions)
+		if p, ok := uuidToProc[s.SessionID]; ok {
+			s.PID = p.PID
+			s.IsDangerous = p.IsDangerous
+			continue
+		}
+		// Fall back to CWD match (handles brand new sessions)
+		if p, ok := cwdToProc[s.CWD]; ok {
 			s.PID = p.PID
 			s.IsDangerous = p.IsDangerous
 		}
 	}
+}
+
+// extractResumeUUID parses the --resume <uuid> flag from Claude's args.
+func extractResumeUUID(args string) string {
+	fields := strings.Fields(args)
+	for i, f := range fields {
+		if f == "--resume" && i+1 < len(fields) {
+			return fields[i+1]
+		}
+	}
+	return ""
 }
 
 // IsWorktree detects if a path is a git worktree and returns the main repo.
@@ -138,6 +165,8 @@ func ProjectDirForCWD(cwd string) string {
 }
 
 // DiscoverSessions scans ~/.claude/projects for JSONL session files.
+// Every JSONL file is a separate session — we show all of them so that
+// multiple concurrent sessions in the same project are all visible.
 func DiscoverSessions() ([]*Session, error) {
 	projectsDir := ClaudeProjectsDir()
 	if projectsDir == "" {
@@ -149,6 +178,9 @@ func DiscoverSessions() ([]*Session, error) {
 		return nil, fmt.Errorf("could not read projects dir: %w", err)
 	}
 
+	// Cache worktree lookups per CWD to avoid redundant git calls
+	wtCache := make(map[string][2]string) // cwd → [isWT, mainRepo]
+
 	var sessions []*Session
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
@@ -159,23 +191,33 @@ func DiscoverSessions() ([]*Session, error) {
 		if err != nil || len(jsonlFiles) == 0 {
 			continue
 		}
-		// Each JSONL file is one session — take the most recent
-		latestFile := mostRecentFile(jsonlFiles)
-		if latestFile == "" {
-			continue
+
+		for _, jsonlFile := range jsonlFiles {
+			session, err := ParseJSONL(jsonlFile)
+			if err != nil {
+				continue
+			}
+			// If CWD is empty (brand new session not yet written), derive
+			// from the encoded directory name as a best-effort fallback
+			if session.CWD == "" {
+				session.CWD = decodeDirName(projectEntry.Name())
+			}
+
+			if _, seen := wtCache[session.CWD]; !seen {
+				isWT, mainRepo := IsWorktree(session.CWD)
+				v := [2]string{"", ""}
+				if isWT {
+					v[0] = "1"
+				}
+				v[1] = mainRepo
+				wtCache[session.CWD] = v
+			}
+			wt := wtCache[session.CWD]
+			session.IsWorktree = wt[0] == "1"
+			session.MainRepo = wt[1]
+
+			sessions = append(sessions, session)
 		}
-		session, err := ParseJSONL(latestFile)
-		if err != nil {
-			continue
-		}
-		// If CWD is empty, derive from directory name
-		if session.CWD == "" {
-			session.CWD = decodeDirName(projectEntry.Name())
-		}
-		isWT, mainRepo := IsWorktree(session.CWD)
-		session.IsWorktree = isWT
-		session.MainRepo = mainRepo
-		sessions = append(sessions, session)
 	}
 	return sessions, nil
 }
