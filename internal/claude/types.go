@@ -50,6 +50,7 @@ type Session struct {
 	Model       string // model being used
 	GitBranch   string
 	IsDangerous bool // --dangerously-skip-permissions
+	IsSidechain bool // true = sub-agent spawned by another session
 
 	// Git / worktree
 	IsWorktree bool

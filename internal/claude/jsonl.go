@@ -10,14 +10,15 @@ import (
 // Raw JSONL entry structures
 
 type jsonlEntry struct {
-	Type      string          `json:"type"`
-	SessionID string          `json:"sessionId"`
-	CWD       string          `json:"cwd"`
-	Version   string          `json:"version"`
-	GitBranch string          `json:"gitBranch"`
-	Timestamp string          `json:"timestamp"`
-	Message   *jsonlMessage   `json:"message"`
-	UUID      string          `json:"uuid"`
+	Type        string        `json:"type"`
+	SessionID   string        `json:"sessionId"`
+	CWD         string        `json:"cwd"`
+	Version     string        `json:"version"`
+	GitBranch   string        `json:"gitBranch"`
+	Timestamp   string        `json:"timestamp"`
+	Message     *jsonlMessage `json:"message"`
+	UUID        string        `json:"uuid"`
+	IsSidechain bool          `json:"isSidechain"`
 }
 
 type jsonlMessage struct {
@@ -71,8 +72,12 @@ func ParseJSONL(path string) (*Session, error) {
 		return session, nil
 	}
 
-	// Extract session metadata from the first user entry
+	// Extract session metadata from the first user/assistant entry.
+	// isSidechain is set if ANY entry marks this as a sidechain.
 	for _, e := range entries {
+		if e.IsSidechain {
+			session.IsSidechain = true
+		}
 		if e.Type == "user" || e.Type == "assistant" {
 			if session.SessionID == "" {
 				session.SessionID = e.SessionID
@@ -86,7 +91,6 @@ func ParseJSONL(path string) (*Session, error) {
 			if session.GitBranch == "" && e.GitBranch != "" {
 				session.GitBranch = e.GitBranch
 			}
-			break
 		}
 	}
 

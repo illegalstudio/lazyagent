@@ -188,17 +188,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // visibleSessions returns the sessions to display based on the current filter.
+// Sidechains (sub-agents) are always hidden from the main list.
 func (m Model) visibleSessions() []*claude.Session {
-	if m.showAll {
-		return m.sessions
-	}
-	var active []*claude.Session
+	var out []*claude.Session
 	for _, s := range m.sessions {
-		if s.PID > 0 {
-			active = append(active, s)
+		if s.IsSidechain {
+			continue
 		}
+		if !m.showAll && s.PID == 0 {
+			continue
+		}
+		out = append(out, s)
 	}
-	return active
+	return out
 }
 
 func (m *Model) ensureListVisible() {
