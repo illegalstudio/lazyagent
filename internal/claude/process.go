@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -156,12 +158,10 @@ func ClaudeProjectsDir() string {
 }
 
 // ProjectDirForCWD encodes a CWD path to the ~/.claude/projects directory name.
-// Claude encodes paths by replacing / with -.
+// Claude replaces every / and . with -, keeping the leading slash as a leading -.
 func ProjectDirForCWD(cwd string) string {
-	// Replace leading / and all / with -
-	encoded := strings.TrimPrefix(cwd, "/")
-	encoded = strings.ReplaceAll(encoded, "/", "-")
-	return encoded
+	r := strings.NewReplacer("/", "-", ".", "-")
+	return r.Replace(cwd)
 }
 
 // DiscoverActiveSessions builds the session list from running processes (process-first).
@@ -188,12 +188,17 @@ func DiscoverActiveSessions(procs []ProcessInfo) ([]*Session, error) {
 			}
 		}
 
-		// Strategy 2: most recent JSONL in the project directory
+		// Strategy 2: most recent JSONL in the project directory (encoded name)
 		if jsonlPath == "" && proc.CWD != "" {
 			encoded := ProjectDirForCWD(proc.CWD)
 			projectDir := filepath.Join(projectsDir, encoded)
 			jsonlFiles, _ := filepath.Glob(filepath.Join(projectDir, "*.jsonl"))
 			jsonlPath = mostRecentFile(jsonlFiles)
+		}
+
+		// Strategy 3: fallback — scan all project dirs for one whose JSONL CWD matches
+		if jsonlPath == "" && proc.CWD != "" {
+			jsonlPath = findJSONLByCWD(projectsDir, proc.CWD)
 		}
 
 		var session *Session
@@ -288,6 +293,53 @@ func DiscoverSessions() ([]*Session, error) {
 		}
 	}
 	return sessions, nil
+}
+
+// findJSONLByCWD scans all project directories for the most recent JSONL file
+// whose first CWD entry matches the given path. Used as a fallback when
+// ProjectDirForCWD produces a directory name that doesn't exist on disk.
+func findJSONLByCWD(projectsDir, cwd string) string {
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(projectsDir, e.Name())
+		files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+		latest := mostRecentFile(files)
+		if latest == "" {
+			continue
+		}
+		if jsonlCWD(latest) == cwd {
+			return latest
+		}
+	}
+	return ""
+}
+
+// jsonlCWD reads the CWD from the first user/assistant entry of a JSONL file.
+func jsonlCWD(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 4*1024*1024)
+	for scanner.Scan() {
+		var e jsonlEntry
+		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
+			continue
+		}
+		if (e.Type == "user" || e.Type == "assistant") && e.CWD != "" {
+			return e.CWD
+		}
+	}
+	return ""
 }
 
 func mostRecentFile(files []string) string {
