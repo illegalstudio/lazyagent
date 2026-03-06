@@ -636,8 +636,13 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	add(row("Last activity", formatDuration(time.Since(s.LastActivity))))
 
 	if s.LastFileWrite != "" {
-		filePart := shortName(s.LastFileWrite, width-22)
 		agePart := " (" + formatDuration(time.Since(s.LastFileWriteAt)) + ")"
+		// width-2 for panel borders, -22 for label, -len(agePart) for the age suffix
+		maxFile := width - 2 - 22 - len(agePart)
+		if maxFile < 4 {
+			maxFile = 4
+		}
+		filePart := shortName(s.LastFileWrite, maxFile)
 		add(row("Last file", filePart+lipgloss.NewStyle().Foreground(colorMuted).Render(agePart)))
 	}
 
