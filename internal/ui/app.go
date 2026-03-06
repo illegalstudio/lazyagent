@@ -68,7 +68,7 @@ func NewModel() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadSessions, tickCmd())
+	return tea.Batch(makeLoadCmd(m.showAll), tickCmd())
 }
 
 func tickCmd() tea.Cmd {
@@ -77,15 +77,30 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func loadSessions() tea.Msg {
-	sessions, err := claude.DiscoverSessions()
-	if err != nil {
-		return sessionsMsg{err: err}
+// makeLoadCmd returns a tea.Cmd that loads sessions in the appropriate mode.
+// Active mode (showAll=false): process-first — one entry per running process.
+// All mode (showAll=true):    JSONL-first — every conversation file, with PIDs enriched.
+func makeLoadCmd(showAll bool) tea.Cmd {
+	return func() tea.Msg {
+		procs, _ := claude.FindClaudeProcesses()
+
+		if !showAll {
+			sessions, err := claude.DiscoverActiveSessions(procs)
+			if err != nil {
+				return sessionsMsg{err: err}
+			}
+			sortSessions(sessions)
+			return sessionsMsg{sessions: sessions}
+		}
+
+		sessions, err := claude.DiscoverSessions()
+		if err != nil {
+			return sessionsMsg{err: err}
+		}
+		claude.EnrichWithProcessInfo(sessions, procs)
+		sortSessions(sessions)
+		return sessionsMsg{sessions: sessions}
 	}
-	procs, _ := claude.FindClaudeProcesses()
-	claude.EnrichWithProcessInfo(sessions, procs)
-	sortSessions(sessions)
-	return sessionsMsg{sessions: sessions}
 }
 
 func sortSessions(sessions []*claude.Session) {
@@ -105,7 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tickMsg:
-		return m, tea.Batch(loadSessions, tickCmd())
+		return m, tea.Batch(makeLoadCmd(m.showAll), tickCmd())
 
 	case sessionsMsg:
 		m.loading = false
@@ -140,7 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						killProcess(s.PID)
 						m.pendingKill = false
 						m.loading = true
-						return m, loadSessions
+						return m, makeLoadCmd(m.showAll)
 					}
 					// First K: arm confirmation
 					m.pendingKill = true
@@ -152,11 +167,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showAll = !m.showAll
 			m.cursor = 0
 			m.listOffset = 0
+			m.loading = true
+			return m, makeLoadCmd(m.showAll)
 
 		case key.Matches(msg, keys.Refresh):
 			m.pendingKill = false
 			m.loading = true
-			return m, loadSessions
+			return m, makeLoadCmd(m.showAll)
 
 		case key.Matches(msg, keys.Up):
 			m.pendingKill = false
@@ -187,18 +204,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// visibleSessions returns the sessions to display based on the current filter.
-// Sidechains (sub-agents) are always hidden from the main list.
+// visibleSessions returns sessions to display.
+// In active mode the list already contains only running sessions (process-first).
+// In all mode we filter out sidechains to keep the list clean.
 func (m Model) visibleSessions() []*claude.Session {
+	if !m.showAll {
+		return m.sessions // already process-first, no extra filtering needed
+	}
 	var out []*claude.Session
 	for _, s := range m.sessions {
-		if s.IsSidechain {
-			continue
+		if !s.IsSidechain {
+			out = append(out, s)
 		}
-		if !m.showAll && s.PID == 0 {
-			continue
-		}
-		out = append(out, s)
 	}
 	return out
 }

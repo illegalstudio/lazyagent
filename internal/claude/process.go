@@ -164,9 +164,77 @@ func ProjectDirForCWD(cwd string) string {
 	return encoded
 }
 
+// DiscoverActiveSessions builds the session list from running processes (process-first).
+// Each process yields exactly one session, so N processes → N entries, with no
+// historical duplicates from old JSONL files in the same project directory.
+func DiscoverActiveSessions(procs []ProcessInfo) ([]*Session, error) {
+	projectsDir := ClaudeProjectsDir()
+	if projectsDir == "" {
+		return nil, fmt.Errorf("could not find home directory")
+	}
+
+	wtCache := make(map[string][2]string)
+	var sessions []*Session
+
+	for _, proc := range procs {
+		var jsonlPath string
+
+		// Strategy 1: --resume <uuid> → direct file by UUID
+		if proc.ResumeUUID != "" && proc.CWD != "" {
+			encoded := ProjectDirForCWD(proc.CWD)
+			candidate := filepath.Join(projectsDir, encoded, proc.ResumeUUID+".jsonl")
+			if _, err := os.Stat(candidate); err == nil {
+				jsonlPath = candidate
+			}
+		}
+
+		// Strategy 2: most recent JSONL in the project directory
+		if jsonlPath == "" && proc.CWD != "" {
+			encoded := ProjectDirForCWD(proc.CWD)
+			projectDir := filepath.Join(projectsDir, encoded)
+			jsonlFiles, _ := filepath.Glob(filepath.Join(projectDir, "*.jsonl"))
+			jsonlPath = mostRecentFile(jsonlFiles)
+		}
+
+		var session *Session
+		if jsonlPath != "" {
+			var err error
+			session, err = ParseJSONL(jsonlPath)
+			if err != nil {
+				session = nil
+			}
+		}
+		if session == nil {
+			// Process running but no JSONL yet (just launched)
+			session = &Session{Status: StatusUnknown}
+		}
+
+		if session.CWD == "" {
+			session.CWD = proc.CWD
+		}
+		session.PID = proc.PID
+		session.IsDangerous = proc.IsDangerous
+
+		if _, seen := wtCache[session.CWD]; !seen {
+			isWT, mainRepo := IsWorktree(session.CWD)
+			v := [2]string{"", ""}
+			if isWT {
+				v[0] = "1"
+			}
+			v[1] = mainRepo
+			wtCache[session.CWD] = v
+		}
+		wt := wtCache[session.CWD]
+		session.IsWorktree = wt[0] == "1"
+		session.MainRepo = wt[1]
+
+		sessions = append(sessions, session)
+	}
+	return sessions, nil
+}
+
 // DiscoverSessions scans ~/.claude/projects for JSONL session files.
-// Every JSONL file is a separate session — we show all of them so that
-// multiple concurrent sessions in the same project are all visible.
+// Every JSONL file is a separate session — used for "show all" mode.
 func DiscoverSessions() ([]*Session, error) {
 	projectsDir := ClaudeProjectsDir()
 	if projectsDir == "" {
