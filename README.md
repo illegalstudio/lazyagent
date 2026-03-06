@@ -34,11 +34,20 @@ It also surfaces:
 
 ## Install
 
+### Homebrew
+
+```bash
+brew tap illegalstudio/tap
+brew install lazyagent
+```
+
+### Go
+
 ```bash
 go install github.com/nahime0/lazyagent@latest
 ```
 
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/nahime0/lazyagent
