@@ -34,7 +34,8 @@ type Model struct {
 	err         error
 	lastRefresh time.Time
 	loading     bool
-	focus       int // 0 = list, 1 = detail
+	focus       int  // 0 = list, 1 = detail
+	showAll     bool // false = only sessions with a running process
 }
 
 type keyMap struct {
@@ -43,6 +44,7 @@ type keyMap struct {
 	Tab     key.Binding
 	Quit    key.Binding
 	Refresh key.Binding
+	All     key.Binding
 }
 
 var keys = keyMap{
@@ -51,6 +53,7 @@ var keys = keyMap{
 	Tab:     key.NewBinding(key.WithKeys("tab")),
 	Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Refresh: key.NewBinding(key.WithKeys("r")),
+	All:     key.NewBinding(key.WithKeys("a")),
 }
 
 func NewModel() Model {
@@ -103,10 +106,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			if m.cursor >= len(msg.sessions) && len(msg.sessions) > 0 {
-				m.cursor = len(msg.sessions) - 1
-			}
 			m.sessions = msg.sessions
+			// Clamp cursor to visible list
+			if n := len(m.visibleSessions()); m.cursor >= n && n > 0 {
+				m.cursor = n - 1
+			}
 		}
 
 	case tea.KeyMsg:
@@ -117,6 +121,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Tab):
 			m.focus = (m.focus + 1) % 2
 			m.detailOffset = 0
+
+		case key.Matches(msg, keys.All):
+			m.showAll = !m.showAll
+			m.cursor = 0
+			m.listOffset = 0
 
 		case key.Matches(msg, keys.Refresh):
 			m.loading = true
@@ -136,7 +145,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Down):
 			if m.focus == 0 {
-				if m.cursor < len(m.sessions)-1 {
+				if m.cursor < len(m.visibleSessions())-1 {
 					m.cursor++
 					m.ensureListVisible()
 				}
@@ -149,10 +158,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// visibleSessions returns the sessions to display based on the current filter.
+func (m Model) visibleSessions() []*claude.Session {
+	if m.showAll {
+		return m.sessions
+	}
+	var active []*claude.Session
+	for _, s := range m.sessions {
+		if s.PID > 0 {
+			active = append(active, s)
+		}
+	}
+	return active
+}
+
 func (m *Model) ensureListVisible() {
 	vis := m.listVisibleRows()
 	if vis <= 0 {
 		return
+	}
+	n := len(m.visibleSessions())
+	if m.cursor >= n && n > 0 {
+		m.cursor = n - 1
 	}
 	if m.cursor < m.listOffset {
 		m.listOffset = m.cursor
@@ -231,10 +258,15 @@ func (m Model) View() string {
 
 func (m Model) renderTitleBar() string {
 	left := titleStyle.Render("lazyclaude")
+	vis := m.visibleSessions()
+	filterLabel := "active"
+	if m.showAll {
+		filterLabel = "all"
+	}
 	count := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorSubtext).
 		Padding(0, 1).
-		Render(fmt.Sprintf("%d sessions", len(m.sessions)))
+		Render(fmt.Sprintf("%d sessions [%s]", len(vis), filterLabel))
 	refresh := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorMuted).
 		Padding(0, 1).
@@ -259,14 +291,20 @@ func (m Model) renderList(listW int) string {
 		pStyle = panelFocusStyle
 	}
 
-	if m.loading && len(m.sessions) == 0 {
+	sessions := m.visibleSessions()
+
+	if m.loading && len(sessions) == 0 {
 		return pStyle.Width(listW).Height(innerH).Render(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("loading..."),
 		)
 	}
-	if len(m.sessions) == 0 {
+	if len(sessions) == 0 {
+		msg := "no active sessions"
+		if m.showAll {
+			msg = "no sessions found"
+		}
 		return pStyle.Width(listW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(colorMuted).Render("no sessions found"),
+			lipgloss.NewStyle().Foreground(colorMuted).Render(msg),
 		)
 	}
 
@@ -275,15 +313,14 @@ func (m Model) renderList(listW int) string {
 		vis = 1
 	}
 
-	// Clamp offset
-	maxOff := len(m.sessions) - vis
+	maxOff := len(sessions) - vis
 	if maxOff < 0 {
 		maxOff = 0
 	}
 	off := clamp(0, maxOff, m.listOffset)
 	end := off + vis
-	if end > len(m.sessions) {
-		end = len(m.sessions)
+	if end > len(sessions) {
+		end = len(sessions)
 	}
 
 	nameW := listW - statusColW
@@ -291,7 +328,6 @@ func (m Model) renderList(listW int) string {
 		nameW = 4
 	}
 
-	// Header row
 	header := lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).
 		Render(fmt.Sprintf("%-*s %s", nameW, "PROJECT", "STATUS"))
 	divider := lipgloss.NewStyle().Foreground(colorBorder).
@@ -301,7 +337,7 @@ func (m Model) renderList(listW int) string {
 	rows = append(rows, header, divider)
 
 	for i := off; i < end; i++ {
-		rows = append(rows, m.renderListRow(m.sessions[i], nameW, i == m.cursor))
+		rows = append(rows, m.renderListRow(sessions[i], nameW, i == m.cursor))
 	}
 
 	return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
@@ -351,13 +387,14 @@ func (m Model) renderDetail(detailW int) string {
 		pStyle = panelFocusStyle
 	}
 
-	if len(m.sessions) == 0 || m.cursor >= len(m.sessions) {
+	sessions := m.visibleSessions()
+	if len(sessions) == 0 || m.cursor >= len(sessions) {
 		return pStyle.Width(detailW).Height(innerH).Render(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("select a session"),
 		)
 	}
 
-	lines := m.buildDetailLines(m.sessions[m.cursor], detailW)
+	lines := m.buildDetailLines(sessions[m.cursor], detailW)
 
 	vis := m.detailVisibleLines()
 	maxOff := len(lines) - vis
@@ -466,11 +503,16 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 
 func (m Model) renderHelp() string {
 	var parts []string
+	allLabel := "show all"
+	if m.showAll {
+		allLabel = "active only"
+	}
 	if m.focus == 0 {
 		parts = []string{
 			helpKeyStyle.Render("k/↑") + helpStyle.Render(" prev"),
 			helpKeyStyle.Render("j/↓") + helpStyle.Render(" next"),
 			helpKeyStyle.Render("tab") + helpStyle.Render(" detail"),
+			helpKeyStyle.Render("a") + helpStyle.Render(" "+allLabel),
 			helpKeyStyle.Render("r") + helpStyle.Render(" refresh"),
 			helpKeyStyle.Render("q") + helpStyle.Render(" quit"),
 		}
@@ -479,6 +521,7 @@ func (m Model) renderHelp() string {
 			helpKeyStyle.Render("k/↑") + helpStyle.Render(" scroll up"),
 			helpKeyStyle.Render("j/↓") + helpStyle.Render(" scroll dn"),
 			helpKeyStyle.Render("tab") + helpStyle.Render(" list"),
+			helpKeyStyle.Render("a") + helpStyle.Render(" "+allLabel),
 			helpKeyStyle.Render("r") + helpStyle.Render(" refresh"),
 			helpKeyStyle.Render("q") + helpStyle.Render(" quit"),
 		}
