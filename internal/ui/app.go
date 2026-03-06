@@ -28,6 +28,7 @@ type sessionsMsg struct {
 type Model struct {
 	sessions     []*claude.Session
 	cursor       int
+	selectedID   string // session ID of the currently selected item
 	listOffset   int
 	detailOffset int
 
@@ -151,10 +152,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.sessions = msg.sessions
 			m.updateActivities(now)
-			// Clamp cursor to visible list
-			if n := len(m.visibleSessions()); m.cursor >= n && n > 0 {
-				m.cursor = n - 1
+			visible := m.visibleSessions()
+			// Try to restore selection by session ID.
+			found := false
+			if m.selectedID != "" {
+				for i, s := range visible {
+					if s.SessionID == m.selectedID {
+						m.cursor = i
+						found = true
+						break
+					}
+				}
 			}
+			if !found {
+				// Clamp cursor and update selectedID.
+				if n := len(visible); m.cursor >= n && n > 0 {
+					m.cursor = n - 1
+				}
+				if len(visible) > 0 {
+					m.selectedID = visible[m.cursor].SessionID
+				}
+			}
+			m.ensureListVisible()
 		}
 
 	case tea.KeyMsg:
@@ -191,6 +210,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor > 0 {
 					m.cursor--
 					m.ensureListVisible()
+					if vis := m.visibleSessions(); m.cursor < len(vis) {
+						m.selectedID = vis[m.cursor].SessionID
+					}
 				}
 			} else {
 				if m.detailOffset > 0 {
@@ -200,9 +222,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Down):
 			if m.focus == 0 {
-				if m.cursor < len(m.visibleSessions())-1 {
+				vis := m.visibleSessions()
+				if m.cursor < len(vis)-1 {
 					m.cursor++
 					m.ensureListVisible()
+					if m.cursor < len(vis) {
+						m.selectedID = vis[m.cursor].SessionID
+					}
 				}
 			} else {
 				m.detailOffset++
