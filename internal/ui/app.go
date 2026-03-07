@@ -28,6 +28,9 @@ type sessionsMsg struct {
 	err      error
 }
 
+// editorFinishedMsg is sent when a TUI editor (tea.Exec) exits.
+type editorFinishedMsg struct{ err error }
+
 // Model is the main bubbletea model.
 type Model struct {
 	sessions     []*claude.Session
@@ -63,6 +66,14 @@ type Model struct {
 
 	// Cached visible sessions, recomputed via refreshVisible().
 	visible []*claude.Session
+
+	// Flash message (modal popup, dismissed by any key)
+	flashMsg string
+
+	// Editor picker popup
+	editorPicker       bool
+	editorPickerCursor int // 0 = VISUAL (GUI), 1 = EDITOR (TUI)
+	editorPickerCWD    string
 }
 
 type keyMap struct {
@@ -148,6 +159,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case editorFinishedMsg:
+		// TUI editor exited, bubbletea resumes automatically.
+
 	case fileWatchMsg:
 		// A JSONL file changed — reload immediately and re-arm the watcher.
 		return m, tea.Batch(makeLoadCmd(), watchCmd(m.watcher.Events))
@@ -202,6 +216,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		// Flash popup: any key dismisses it.
+		if m.flashMsg != "" {
+			m.flashMsg = ""
+			return m, nil
+		}
+
+		// Editor picker popup.
+		if m.editorPicker {
+			switch msg.String() {
+			case "up", "k":
+				m.editorPickerCursor = 0
+			case "down", "j":
+				m.editorPickerCursor = 1
+			case "enter":
+				m.editorPicker = false
+				cwd := m.editorPickerCWD
+				if m.editorPickerCursor == 0 {
+					// GUI editor via VISUAL
+					c := exec.Command(os.Getenv("VISUAL"), cwd)
+					c.Stdin = nil
+					c.Stdout = nil
+					c.Stderr = nil
+					_ = c.Start()
+				} else {
+					// TUI editor via EDITOR — suspend the TUI
+					editor := os.Getenv("EDITOR")
+					c := exec.Command(editor, cwd)
+					return m, tea.ExecProcess(c, func(err error) tea.Msg {
+						return editorFinishedMsg{err}
+					})
+				}
+			case "esc":
+				m.editorPicker = false
+			}
+			return m, nil
+		}
+
 		// Search mode intercepts all keys except esc.
 		if m.searchMode {
 			switch msg.String() {
@@ -296,18 +347,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Open):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
 				cwd := m.visible[m.cursor].CWD
-				editor := os.Getenv("VISUAL")
-				if editor == "" {
-					editor = os.Getenv("EDITOR")
+				hasVisual := os.Getenv("VISUAL") != ""
+				hasEditor := os.Getenv("EDITOR") != ""
+
+				switch {
+				case hasVisual && hasEditor:
+					// Both set — let the user choose.
+					m.editorPicker = true
+					m.editorPickerCursor = 0
+					m.editorPickerCWD = cwd
+				case hasVisual:
+					c := exec.Command(os.Getenv("VISUAL"), cwd)
+					c.Stdin = nil
+					c.Stdout = nil
+					c.Stderr = nil
+					_ = c.Start()
+				case hasEditor:
+					c := exec.Command(os.Getenv("EDITOR"), cwd)
+					return m, tea.ExecProcess(c, func(err error) tea.Msg {
+						return editorFinishedMsg{err}
+					})
+				default:
+					m.flashMsg = "Set $VISUAL or $EDITOR, e.g.\n\n  export VISUAL=\"code\"  # add to ~/.zshrc or ~/.bashrc"
 				}
-				if editor == "" {
-					editor = "open"
-				}
-				c := exec.Command(editor, cwd)
-				c.Stdin = nil
-				c.Stdout = nil
-				c.Stderr = nil
-				_ = c.Start()
 			}
 
 		case key.Matches(msg, keys.Search):
@@ -515,6 +577,59 @@ func (m Model) View() string {
 			lines = lines[:m.height]
 		}
 		out = strings.Join(lines, "\n")
+	}
+
+	// Overlay editor picker popup.
+	if m.editorPicker {
+		visual := os.Getenv("VISUAL")
+		editor := os.Getenv("EDITOR")
+
+		opt0 := "  " + visual + "  (GUI)"
+		opt1 := "  " + editor + "  (TUI)"
+		if m.editorPickerCursor == 0 {
+			opt0 = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorText).Bold(true).Render("▸ " + visual + "  (GUI)")
+			opt1 = lipgloss.NewStyle().Foreground(colorSubtext).Render(opt1)
+		} else {
+			opt0 = lipgloss.NewStyle().Foreground(colorSubtext).Render(opt0)
+			opt1 = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorText).Bold(true).Render("▸ " + editor + "  (TUI)")
+		}
+
+		title := lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Open with:")
+		hint := lipgloss.NewStyle().Foreground(colorMuted).Render("↑/↓ select  enter confirm  esc cancel")
+		body := title + "\n\n" + opt0 + "\n" + opt1 + "\n\n" + hint
+
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorderFocus).
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(colorText).
+			Padding(1, 3).
+			Render(body)
+
+		out = lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			box,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+		)
+	}
+
+	// Overlay flash message centered over the existing UI.
+	if m.flashMsg != "" {
+		dismiss := lipgloss.NewStyle().Foreground(colorMuted).Render("Press any key to continue")
+		body := m.flashMsg + "\n\n" + dismiss
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorWarning).
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(colorText).
+			Padding(1, 3).
+			Render(body)
+
+		out = lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			box,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+		)
 	}
 
 	return out

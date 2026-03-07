@@ -80,9 +80,26 @@ lazyagent
 | `+` / `-` | Adjust time window (±10 minutes) |
 | `f` | Cycle activity filter |
 | `/` | Search sessions by project path |
-| `o` | Open session CWD in `$VISUAL` / `$EDITOR` |
+| `o` | Open session CWD in editor (see below) |
 | `r` | Force refresh |
 | `q` / `ctrl+c` | Quit |
+
+### Editor support
+
+Pressing `o` opens the selected session's working directory in your editor.
+
+| Configuration | Behavior |
+|---------------|----------|
+| Both `$VISUAL` and `$EDITOR` set | A picker popup asks which one to use |
+| Only `$VISUAL` set | Opens directly as GUI editor |
+| Only `$EDITOR` set | Opens directly as TUI editor (suspends the TUI) |
+| Neither set | Shows a hint to configure them |
+
+```bash
+# Example: add to ~/.zshrc or ~/.bashrc
+export VISUAL="code"   # GUI editor (VS Code, Cursor, Zed, …)
+export EDITOR="nvim"   # TUI editor (vim, nvim, nano, …)
+```
 
 ## Roadmap
 
@@ -105,7 +122,7 @@ lazyagent
 - [x] Activity sparkline graph in session list
 - [x] Token usage and cost estimation in detail panel
 - [x] Animated braille spinner for active sessions
-- [x] `o` key to open session CWD in editor
+- [x] `o` key to open session CWD in editor (GUI via `$VISUAL`, TUI via `$EDITOR`, picker when both set)
 - [ ] Display file diff for last written file
 
 ### v0.3 — HTTP API
