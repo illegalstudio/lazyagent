@@ -67,8 +67,10 @@ lazyagent/
 | Window model | **Single panel** attached to tray icon | Click tray → toggle panel. `HideOnFocusLost`. |
 | Data refresh | **FSEvents watcher + 1s render tick** | Same strategy as TUI. Core watcher shared. |
 | IPC | **Wails bindings** (auto-generated) | Go structs → TypeScript functions. Sub-ms latency. |
-| Build output | **.app bundle** | Signable, notarizable, distributable via DMG + Homebrew cask. |
+| Build output | **.app bundle (arm64)** | Signable, notarizable, distributable via DMG + Homebrew cask. |
 | TUI backward compat | **Keep working** | `go install` and `brew install lazyagent` still give the TUI. |
+| Config file | **`~/.config/lazyagent/config.yaml`** | Shared by TUI and app. Introduced in Phase 0. |
+| Auto-launch | **Yes** | "Launch at Login" via `LSSharedFileList` or launchd plist. |
 
 ### Risk: Wails v3 Alpha Stability
 
@@ -107,11 +109,27 @@ Extract framework-agnostic code from `internal/ui/` into `internal/core/` so bot
     - `SessionDetail(id string) *SessionDetailView` — single session full info
   - `SessionView` — lightweight struct for list display (ID, name, activity, sparkline data, cost)
   - `SessionDetailView` — full struct for detail panel (all fields from `claude.Session` + computed activity)
-- [ ] **0.6** Update `internal/ui/app.go` to import from `core`
+- [ ] **0.6** Create `internal/core/config.go` — config system
+  - `Config` struct:
+    ```go
+    type Config struct {
+        WindowMinutes  int    `yaml:"window_minutes"`   // default: 60
+        DefaultFilter  string `yaml:"default_filter"`   // default: "" (all)
+        Editor         string `yaml:"editor"`           // override $VISUAL/$EDITOR
+        LaunchAtLogin  bool   `yaml:"launch_at_login"`  // macOS only
+        Notifications  bool   `yaml:"notifications"`    // notify on waiting state
+        NotifyAfterSec int    `yaml:"notify_after_sec"` // seconds before notifying (default: 30)
+    }
+    ```
+  - `LoadConfig()` — reads `~/.config/lazyagent/config.yaml`, creates default if missing
+  - `SaveConfig()` — writes back (for runtime changes like launch_at_login toggle)
+  - Dependency: `gopkg.in/yaml.v3` (ask permission before adding)
+- [ ] **0.7** Update `internal/ui/app.go` to import from `core`
   - Replace local activity/watcher code with `core.` imports
+  - Load config at startup, use `Config.WindowMinutes` as default
   - TUI must still work identically
-- [ ] **0.7** Move `main.go` → `cmd/tui/main.go`, keep root `main.go` as alias
-- [ ] **0.8** Verify: `go build ./cmd/tui/` works, `go build .` works, all behavior unchanged
+- [ ] **0.8** Move `main.go` → `cmd/tui/main.go`, keep root `main.go` as alias
+- [ ] **0.9** Verify: `go build ./cmd/tui/` works, `go build .` works, all behavior unchanged
 
 ### Verification
 ```bash
@@ -311,10 +329,16 @@ wails3 dev
   - `HideOnEscape: true` — Esc closes panel
   - Arrow points to tray icon (native macOS popover style)
   - Remember last panel size
-- [ ] **4.5** macOS notifications (optional, via Go `exec.Command("osascript", ...)`)
-  - Notify when session enters "waiting" state for > 30s
-  - Configurable: on/off per session or globally
-- [ ] **4.6** Verify: tray icon updates, context menu works, panel shows/hides correctly
+- [ ] **4.5** macOS notifications (via `UserNotifications` framework or `osascript`)
+  - Notify when session enters "waiting" state for > `Config.NotifyAfterSec` seconds
+  - Configurable on/off via `Config.Notifications`
+  - Notification click → show panel + select session
+- [ ] **4.6** Launch at Login
+  - Toggle in context menu: "Launch at Login" (checkmark)
+  - Persisted in `Config.LaunchAtLogin`
+  - Implementation: `SMAppService.register` (modern macOS) or `launchd` plist in `~/Library/LaunchAgents/`
+  - Plist points to `/Applications/lazyagent.app`
+- [ ] **4.7** Verify: tray icon updates, context menu works, panel shows/hides, launch at login toggles
 
 ---
 
@@ -322,9 +346,9 @@ wails3 dev
 
 - [ ] **5.1** Build `.app` bundle
   ```bash
-  cd cmd/app && wails3 build -platform darwin/universal
+  cd cmd/app && wails3 build -platform darwin/arm64
   ```
-  - Universal binary (arm64 + amd64)
+  - arm64-only (Apple Silicon)
   - Output: `build/bin/lazyagent.app`
 - [ ] **5.2** Code signing
   - Set up `gon` config for Developer ID signing
@@ -397,10 +421,12 @@ Phase 4-5 are polish. Phase 6 is final verification.
 
 ---
 
-## Open Questions (need decisions before starting)
+## Decisions (resolved)
 
-1. **Wails v3 alpha risk**: proceed with alpha, or wait for stable? (Could be months)
-2. **Universal binary**: do we need Intel support or arm64-only?
-3. **App name**: `lazyagent` for both, or `lazyagent` (TUI) + `LazyAgent` (app)?
-4. **Auto-launch**: add "Launch at Login" option?
-5. **Config file**: introduce `~/.config/lazyagent/config.yaml` now, or defer?
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | Wails v3 alpha risk | Proceed with alpha, pin exact version in `go.mod` |
+| 2 | Universal binary | arm64-only |
+| 3 | App name | `lazyagent` for both (single brand) |
+| 4 | Auto-launch | Yes — "Launch at Login" option via config |
+| 5 | Config file | Now — `~/.config/lazyagent/config.yaml` introduced in Phase 0 |
