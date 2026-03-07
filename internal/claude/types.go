@@ -79,4 +79,14 @@ type Session struct {
 	// Counts
 	UserMessages      int
 	AssistantMessages int
+
+	// Activity timeline (for sparkline)
+	EntryTimestamps []time.Time
+
+	// Cost tracking
+	CostUSD             float64 // cumulative cost from JSONL entries
+	InputTokens         int
+	OutputTokens        int
+	CacheCreationTokens int
+	CacheReadTokens     int
 }

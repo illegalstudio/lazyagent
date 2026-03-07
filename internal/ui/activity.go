@@ -50,6 +50,12 @@ var activityColors = map[ActivityKind]lipgloss.Color{
 	ActivitySpawning:   lipgloss.Color("#F472B6"), // pink
 }
 
+// isActiveActivity returns true for any activity that represents ongoing work
+// (i.e. everything except idle and waiting).
+func isActiveActivity(a ActivityKind) bool {
+	return a != ActivityIdle && a != ActivityWaiting && a != ""
+}
+
 // activityEntry holds a session's current sticky activity state.
 type activityEntry struct {
 	kind     ActivityKind

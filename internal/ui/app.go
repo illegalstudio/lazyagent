@@ -3,6 +3,8 @@ package ui
 import (
 	"cmp"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -42,6 +44,7 @@ type Model struct {
 	loading       bool
 	focus         int // 0 = list, 1 = detail
 	windowMinutes int // show sessions modified in last N minutes
+	spinFrame     int // animation frame counter for spinners
 
 	// Sticky activity states, keyed by session ID
 	activities map[string]*activityEntry
@@ -73,6 +76,7 @@ type keyMap struct {
 	Filter key.Binding
 	Search key.Binding
 	Esc     key.Binding
+	Open    key.Binding
 }
 
 var keys = keyMap{
@@ -86,6 +90,7 @@ var keys = keyMap{
 	Filter: key.NewBinding(key.WithKeys("f")),
 	Search: key.NewBinding(key.WithKeys("/")),
 	Esc:     key.NewBinding(key.WithKeys("esc")),
+	Open:    key.NewBinding(key.WithKeys("o")),
 }
 
 func NewModel() Model {
@@ -149,6 +154,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case renderTickMsg:
 		// Re-render only — no I/O, but update in-memory activity states.
+		m.spinFrame++
 		m.updateActivities(time.Now())
 		m.refreshVisible()
 		return m, renderTickCmd()
@@ -287,6 +293,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.listOffset = 0
 			m.refreshVisible()
 
+		case key.Matches(msg, keys.Open):
+			if len(m.visible) > 0 && m.cursor < len(m.visible) {
+				cwd := m.visible[m.cursor].CWD
+				editor := os.Getenv("VISUAL")
+				if editor == "" {
+					editor = os.Getenv("EDITOR")
+				}
+				if editor == "" {
+					editor = "open"
+				}
+				c := exec.Command(editor, cwd)
+				c.Stdin = nil
+				c.Stdout = nil
+				c.Stderr = nil
+				_ = c.Start()
+			}
+
 		case key.Matches(msg, keys.Search):
 			m.searchMode = true
 		}
@@ -297,12 +320,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleMouse processes mouse events for click selection and scroll.
 func (m *Model) handleMouse(msg tea.MouseMsg) {
-	listW, _, _ := m.dims()
-
-	// Measure actual title/help heights so click math stays correct
-	// regardless of whether these bars wrap to multiple lines.
+	// Render title/help once to measure heights and compute layout.
 	titleH := lipgloss.Height(m.renderTitleBar())
 	helpH := lipgloss.Height(m.renderHelp())
+	listW, _, _ := m.layout(titleH, helpH)
 
 	panelTop := titleH               // first row of the panel (top border)
 	panelBot := m.height - helpH - 1 // last row of the panel (bottom border)
@@ -377,6 +398,7 @@ var activityFilterOrder = []ActivityKind{
 	ActivityIdle,
 	ActivityWaiting,
 	ActivityThinking,
+	ActivityCompacting,
 	ActivityReading,
 	ActivityWriting,
 	ActivityRunning,
@@ -433,7 +455,8 @@ func (m *Model) ensureListVisible() {
 
 // ── Layout math ──────────────────────────────────────────────────────────────
 
-func (m Model) dims() (listW, detailW, innerH int) {
+// layout computes panel widths and inner height from pre-measured bar heights.
+func (m Model) layout(titleH, helpH int) (listW, detailW, innerH int) {
 	total := m.width - 4
 	if total < 8 {
 		total = 8
@@ -446,15 +469,17 @@ func (m Model) dims() (listW, detailW, innerH int) {
 	if detailW < 8 {
 		detailW = 8
 	}
-	// Measure actual title and help bar heights so that panels resize
-	// correctly when the terminal is too narrow and bars wrap.
-	titleH := lipgloss.Height(m.renderTitleBar())
-	helpH := lipgloss.Height(m.renderHelp())
 	innerH = m.height - titleH - helpH - 2 // 2 = panel top + bottom border
 	if innerH < 1 {
 		innerH = 1
 	}
 	return
+}
+
+// dims computes layout by rendering the title/help bars to measure their height.
+// Use layout() directly when title/help are already rendered to avoid redundant work.
+func (m Model) dims() (listW, detailW, innerH int) {
+	return m.layout(lipgloss.Height(m.renderTitleBar()), lipgloss.Height(m.renderHelp()))
 }
 
 func (m Model) listVisibleRows() int {
@@ -466,11 +491,6 @@ func (m Model) listVisibleRows() int {
 	return v
 }
 
-func (m Model) detailVisibleLines() int {
-	_, _, innerH := m.dims()
-	return innerH
-}
-
 // ── View ─────────────────────────────────────────────────────────────────────
 
 func (m Model) View() string {
@@ -478,13 +498,13 @@ func (m Model) View() string {
 		return "Initializing..."
 	}
 
-	listW, detailW, _ := m.dims()
-
 	title := m.renderTitleBar()
-	left := m.renderList(listW)
-	right := m.renderDetail(detailW)
-	content := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	help := m.renderHelp()
+	listW, detailW, innerH := m.layout(lipgloss.Height(title), lipgloss.Height(help))
+
+	left := m.renderList(listW, innerH)
+	right := m.renderDetail(detailW, innerH)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	out := lipgloss.JoinVertical(lipgloss.Left, title, content, help)
 
@@ -534,8 +554,7 @@ func (m Model) renderTitleBar() string {
 
 const statusColW = 11 // "processing" = 10 chars + 1 padding
 
-func (m Model) renderList(listW int) string {
-	_, _, innerH := m.dims()
+func (m Model) renderList(listW, innerH int) string {
 	pStyle := panelStyle
 	if m.focus == 0 {
 		pStyle = panelFocusStyle
@@ -554,7 +573,7 @@ func (m Model) renderList(listW int) string {
 		)
 	}
 
-	vis := m.listVisibleRows()
+	vis := innerH - 2 // header + divider
 	if vis < 1 {
 		vis = 1
 	}
@@ -569,7 +588,11 @@ func (m Model) renderList(listW int) string {
 		end = len(sessions)
 	}
 
-	nameW := listW - statusColW
+	sparkW := 0
+	if listW > 44 {
+		sparkW = 12
+	}
+	nameW := listW - statusColW - sparkW
 	if nameW < 4 {
 		nameW = 4
 	}
@@ -584,7 +607,7 @@ func (m Model) renderList(listW int) string {
 			projectLabel += " [" + string(m.activityFilter) + "]"
 		}
 		header = lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).
-			Render(fmt.Sprintf("%-*s %s", nameW, projectLabel, "STATUS"))
+			Render(fmt.Sprintf("%-*s %s", nameW+sparkW, projectLabel, "STATUS"))
 	}
 	divider := lipgloss.NewStyle().Foreground(colorBorder).
 		Render(strings.Repeat("─", listW))
@@ -598,42 +621,51 @@ func (m Model) renderList(listW int) string {
 	}
 
 	for i := off; i < end; i++ {
-		rows = append(rows, m.renderListRow(sessions[i], nameW, i == m.cursor))
+		rows = append(rows, m.renderListRow(sessions[i], nameW, sparkW, i == m.cursor))
 	}
 
 	return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
 }
 
-func (m Model) renderListRow(s *claude.Session, nameW int, selected bool) string {
+func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool) string {
 	activity := m.activityFor(s.SessionID)
 	actColor, ok := activityColors[activity]
 	if !ok {
 		actColor = colorMuted
 	}
+
+	// Activity label with spinner for active states
 	actStr := padRight(string(activity), statusColW)
+	if isActiveActivity(activity) {
+		spin := string(spinnerFrames[m.spinFrame%len(spinnerFrames)])
+		actStr = spin + padRight(string(activity), statusColW-1)
+	}
 
 	name := shortName(s.CWD, nameW)
 	name = padRight(name, nameW)
 
-	if selected {
-		namePart := lipgloss.NewStyle().
-			Background(colorSelBg).Foreground(colorText).Bold(true).
-			Render(name)
-		actPart := lipgloss.NewStyle().
-			Background(colorSelBg).Foreground(actColor).Bold(true).
-			Render(actStr)
-		return namePart + actPart
+	// Sparkline
+	var sparkStr string
+	if sparkW > 0 {
+		spark := renderSparkline(s.EntryTimestamps, time.Duration(m.windowMinutes)*time.Minute, sparkW-2)
+		sparkStr = " " + spark + " "
 	}
 
-	namePart := lipgloss.NewStyle().Foreground(colorSubtext).Render(name)
-	actPart := lipgloss.NewStyle().Foreground(actColor).Render(actStr)
-	return namePart + actPart
+	nameStyle := lipgloss.NewStyle().Foreground(colorSubtext)
+	actStyle := lipgloss.NewStyle().Foreground(actColor)
+	sparkStyle := actStyle
+	if selected {
+		nameStyle = nameStyle.Background(colorSelBg).Foreground(colorText).Bold(true)
+		sparkStyle = sparkStyle.Background(colorSelBg)
+		actStyle = actStyle.Background(colorSelBg).Bold(true)
+	}
+
+	return nameStyle.Render(name) + sparkStyle.Render(sparkStr) + actStyle.Render(actStr)
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
 
-func (m Model) renderDetail(detailW int) string {
-	_, _, innerH := m.dims()
+func (m Model) renderDetail(detailW, innerH int) string {
 	pStyle := panelStyle
 	if m.focus == 1 {
 		pStyle = panelFocusStyle
@@ -652,7 +684,7 @@ func (m Model) renderDetail(detailW int) string {
 
 	lines := m.buildDetailLines(m.visible[m.cursor], detailW)
 
-	vis := m.detailVisibleLines()
+	vis := innerH
 	maxOff := len(lines) - vis
 	if maxOff < 0 {
 		maxOff = 0
@@ -723,6 +755,20 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 
 	add(row("Messages", fmt.Sprintf("%d  (%d user, %d assistant)",
 		s.TotalMessages, s.UserMessages, s.AssistantMessages)))
+
+	// Token usage and cost
+	if s.InputTokens > 0 || s.OutputTokens > 0 {
+		cost := s.CostUSD
+		if cost == 0 {
+			cost = estimateCost(s.Model, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
+		}
+		tokenInfo := formatTokens(s.InputTokens+s.CacheCreationTokens+s.CacheReadTokens) + " in / " + formatTokens(s.OutputTokens) + " out"
+		if cost > 0.001 {
+			tokenInfo += "  " + lipgloss.NewStyle().Foreground(colorAccent).Render(formatCost(cost))
+		}
+		add(row("Tokens", tokenInfo))
+	}
+
 	if len(s.RecentTools) > 0 {
 		last := s.RecentTools[len(s.RecentTools)-1]
 		add(row("Last operation", last.Name+"  "+
@@ -808,32 +854,29 @@ func (m Model) renderHelp() string {
 	}
 
 	if m.focus == 0 {
-		parts = []string{
-			helpKeyStyle.Render("k/↑") + helpStyle.Render(" prev"),
-			helpKeyStyle.Render("j/↓") + helpStyle.Render(" next"),
-			helpKeyStyle.Render("tab") + helpStyle.Render(" detail"),
-			helpKeyStyle.Render("click") + helpStyle.Render(" select"),
-			helpKeyStyle.Render("scroll") + helpStyle.Render(" navigate"),
-			helpKeyStyle.Render("+/-") + helpStyle.Render(" mins"),
-			helpKeyStyle.Render("f") + helpStyle.Render(" filter"),
-			helpKeyStyle.Render("/") + helpStyle.Render(" search"),
-			helpKeyStyle.Render("r") + helpStyle.Render(" refresh"),
-			helpKeyStyle.Render("q") + helpStyle.Render(" quit"),
-		}
+		parts = append(parts,
+			helpKeyStyle.Render("k/↑")+helpStyle.Render(" prev"),
+			helpKeyStyle.Render("j/↓")+helpStyle.Render(" next"),
+			helpKeyStyle.Render("tab")+helpStyle.Render(" detail"),
+			helpKeyStyle.Render("click")+helpStyle.Render(" select"),
+		)
 	} else {
-		parts = []string{
-			helpKeyStyle.Render("k/↑") + helpStyle.Render(" scroll up"),
-			helpKeyStyle.Render("j/↓") + helpStyle.Render(" scroll dn"),
-			helpKeyStyle.Render("tab") + helpStyle.Render(" list"),
-			helpKeyStyle.Render("click") + helpStyle.Render(" focus"),
-			helpKeyStyle.Render("scroll") + helpStyle.Render(" navigate"),
-			helpKeyStyle.Render("+/-") + helpStyle.Render(" mins"),
-			helpKeyStyle.Render("f") + helpStyle.Render(" filter"),
-			helpKeyStyle.Render("/") + helpStyle.Render(" search"),
-			helpKeyStyle.Render("r") + helpStyle.Render(" refresh"),
-			helpKeyStyle.Render("q") + helpStyle.Render(" quit"),
-		}
+		parts = append(parts,
+			helpKeyStyle.Render("k/↑")+helpStyle.Render(" scroll up"),
+			helpKeyStyle.Render("j/↓")+helpStyle.Render(" scroll dn"),
+			helpKeyStyle.Render("tab")+helpStyle.Render(" list"),
+			helpKeyStyle.Render("click")+helpStyle.Render(" focus"),
+		)
 	}
+	parts = append(parts,
+		helpKeyStyle.Render("scroll")+helpStyle.Render(" navigate"),
+		helpKeyStyle.Render("+/-")+helpStyle.Render(" mins"),
+		helpKeyStyle.Render("f")+helpStyle.Render(" filter"),
+		helpKeyStyle.Render("/")+helpStyle.Render(" search"),
+		helpKeyStyle.Render("o")+helpStyle.Render(" open"),
+		helpKeyStyle.Render("r")+helpStyle.Render(" refresh"),
+		helpKeyStyle.Render("q")+helpStyle.Render(" quit"),
+	)
 	return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
 }
 
@@ -892,5 +935,99 @@ func clamp(lo, hi, v int) int {
 		return hi
 	}
 	return v
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+
+var sparkBlocks = []rune{' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+func renderSparkline(timestamps []time.Time, window time.Duration, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if len(timestamps) == 0 {
+		return strings.Repeat(" ", width)
+	}
+
+	now := time.Now()
+	cutoff := now.Add(-window)
+	bucketDur := window / time.Duration(width)
+	if bucketDur <= 0 {
+		return strings.Repeat(" ", width)
+	}
+
+	buckets := make([]int, width)
+	for _, ts := range timestamps {
+		if ts.Before(cutoff) || ts.After(now) {
+			continue
+		}
+		idx := int(ts.Sub(cutoff) / bucketDur)
+		if idx >= width {
+			idx = width - 1
+		}
+		buckets[idx]++
+	}
+
+	maxVal := 0
+	for _, v := range buckets {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	if maxVal == 0 {
+		return strings.Repeat(" ", width)
+	}
+
+	var sb strings.Builder
+	sb.Grow(width * 3)
+	for _, v := range buckets {
+		idx := v * 8 / maxVal
+		if idx > 8 {
+			idx = 8
+		}
+		sb.WriteRune(sparkBlocks[idx])
+	}
+	return sb.String()
+}
+
+// ── Spinner & cost helpers ────────────────────────────────────────────────────
+
+var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+
+func formatTokens(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	if n < 1_000_000 {
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.2fM", float64(n)/1_000_000)
+}
+
+func formatCost(usd float64) string {
+	if usd < 0.01 {
+		return "<$0.01"
+	}
+	return fmt.Sprintf("$%.2f", usd)
+}
+
+func estimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheRead int) float64 {
+	var inputRate, outputRate float64
+	lowerModel := strings.ToLower(model)
+	switch {
+	case strings.Contains(lowerModel, "opus"):
+		inputRate, outputRate = 15.0/1_000_000, 75.0/1_000_000
+	case strings.Contains(lowerModel, "haiku"):
+		inputRate, outputRate = 1.0/1_000_000, 5.0/1_000_000
+	default: // sonnet and others
+		inputRate, outputRate = 3.0/1_000_000, 15.0/1_000_000
+	}
+	cacheWriteRate := inputRate * 1.25
+	cacheReadRate := inputRate * 0.1
+	return float64(inputTokens)*inputRate +
+		float64(cacheCreation)*cacheWriteRate +
+		float64(cacheRead)*cacheReadRate +
+		float64(outputTokens)*outputRate
 }
 

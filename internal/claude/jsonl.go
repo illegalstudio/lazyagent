@@ -21,14 +21,23 @@ type jsonlEntry struct {
 	Message     *jsonlMessage `json:"message"`
 	UUID        string        `json:"uuid"`
 	IsSidechain bool          `json:"isSidechain"`
+	CostUSD     float64       `json:"costUSD"`
 }
 
 type jsonlMessage struct {
-	Role       string          `json:"role"`
-	Model      string          `json:"model"`
-	RawContent json.RawMessage `json:"content"`
-	Content    []jsonlContent  `json:"-"` // parsed from RawContent
-	TextContent string         `json:"-"` // set when content is a plain string
+	Role        string          `json:"role"`
+	Model       string          `json:"model"`
+	RawContent  json.RawMessage `json:"content"`
+	Content     []jsonlContent  `json:"-"` // parsed from RawContent
+	TextContent string          `json:"-"` // set when content is a plain string
+	Usage       *jsonlUsage     `json:"usage"`
+}
+
+type jsonlUsage struct {
+	InputTokens         int `json:"input_tokens"`
+	OutputTokens        int `json:"output_tokens"`
+	CacheCreationTokens int `json:"cache_creation_input_tokens"`
+	CacheReadTokens     int `json:"cache_read_input_tokens"`
 }
 
 func (m *jsonlMessage) parseContent() {
@@ -85,6 +94,7 @@ func ParseJSONL(path string) (*Session, error) {
 	var recentMessages []ConversationMessage
 	var lastMeaningful *jsonlEntry
 	var prevTimestamp time.Time
+	var entryTimestamps []time.Time
 	parsed := false
 
 	for scanner.Scan() {
@@ -113,6 +123,12 @@ func ParseJSONL(path string) (*Session, error) {
 
 		if !ts.IsZero() {
 			prevTimestamp = ts
+			entryTimestamps = append(entryTimestamps, ts)
+			if len(entryTimestamps) > 500 {
+				trimmed := make([]time.Time, 500)
+				copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
+				entryTimestamps = trimmed
+			}
 		}
 
 		// Extract metadata from whichever entry provides it first.
@@ -124,6 +140,16 @@ func ParseJSONL(path string) (*Session, error) {
 		}
 		if session.GitBranch == "" && e.GitBranch != "" {
 			session.GitBranch = e.GitBranch
+		}
+
+		// Accumulate cost and tokens
+		session.CostUSD += e.CostUSD
+		if e.Message != nil && e.Message.Usage != nil {
+			u := e.Message.Usage
+			session.InputTokens += u.InputTokens
+			session.OutputTokens += u.OutputTokens
+			session.CacheCreationTokens += u.CacheCreationTokens
+			session.CacheReadTokens += u.CacheReadTokens
 		}
 
 		switch e.Type {
@@ -178,6 +204,7 @@ func ParseJSONL(path string) (*Session, error) {
 	}
 
 	session.TotalMessages = session.UserMessages + session.AssistantMessages
+	session.EntryTimestamps = entryTimestamps
 
 	if len(recentTools) > 20 {
 		recentTools = recentTools[len(recentTools)-20:]
