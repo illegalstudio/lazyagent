@@ -299,20 +299,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleMouse(msg tea.MouseMsg) {
 	listW, _, _ := m.dims()
 
-	// Content area starts at row 1 (after title bar) and ends before help bar.
-	// Panel borders add 1 row top + 1 row bottom.
-	contentTop := 1    // title bar is row 0
-	contentBot := m.height - 2 // help bar is last row
+	// Measure actual title/help heights so click math stays correct
+	// regardless of whether these bars wrap to multiple lines.
+	titleH := lipgloss.Height(m.renderTitleBar())
+	helpH := lipgloss.Height(m.renderHelp())
+
+	panelTop := titleH               // first row of the panel (top border)
+	panelBot := m.height - helpH - 1 // last row of the panel (bottom border)
 
 	// Determine which panel the mouse is over based on X coordinate.
-	// List panel: x in [0, listW+2) (including border)
-	// Detail panel: x >= listW+2
 	panelBoundary := listW + 2
 
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
 		if msg.X < panelBoundary {
-			// Scroll list up
 			if m.cursor > 0 {
 				m.cursor--
 				m.ensureListVisible()
@@ -322,7 +322,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 				m.detailOffset = 0
 			}
 		} else {
-			// Scroll detail up
 			if m.detailOffset > 0 {
 				m.detailOffset -= 3
 				if m.detailOffset < 0 {
@@ -333,7 +332,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 
 	case tea.MouseButtonWheelDown:
 		if msg.X < panelBoundary {
-			// Scroll list down
 			if m.cursor < len(m.visible)-1 {
 				m.cursor++
 				m.ensureListVisible()
@@ -343,7 +341,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 				m.detailOffset = 0
 			}
 		} else {
-			// Scroll detail down
 			m.detailOffset += 3
 		}
 
@@ -351,20 +348,15 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 		if msg.Action == tea.MouseActionMotion {
 			return
 		}
-		if msg.Y < contentTop || msg.Y > contentBot {
+		if msg.Y < panelTop || msg.Y > panelBot {
 			return
 		}
 
 		if msg.X < panelBoundary {
-			// Click in list panel — switch focus and select session.
 			m.focus = 0
 
-			// Calculate which row was clicked.
-			// Inside the panel: row 0 = header, row 1 = divider,
-			// rows 2+ = session items.
-			rowInPanel := msg.Y - contentTop
-			// Subtract header (1) + divider (1) = 2 rows before items.
-			itemRow := rowInPanel - 2
+			// panelTop+0 = top border, +1 = header, +2 = divider, +3 = first item
+			itemRow := msg.Y - panelTop - 3
 			if itemRow < 0 {
 				return
 			}
@@ -375,7 +367,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 				m.detailOffset = 0
 			}
 		} else {
-			// Click in detail panel — switch focus.
 			m.focus = 1
 		}
 	}
@@ -455,7 +446,11 @@ func (m Model) dims() (listW, detailW, innerH int) {
 	if detailW < 8 {
 		detailW = 8
 	}
-	innerH = m.height - 4
+	// Measure actual title and help bar heights so that panels resize
+	// correctly when the terminal is too narrow and bars wrap.
+	titleH := lipgloss.Height(m.renderTitleBar())
+	helpH := lipgloss.Height(m.renderHelp())
+	innerH = m.height - titleH - helpH - 2 // 2 = panel top + bottom border
 	if innerH < 1 {
 		innerH = 1
 	}
@@ -491,7 +486,18 @@ func (m Model) View() string {
 	content := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	help := m.renderHelp()
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, content, help)
+	out := lipgloss.JoinVertical(lipgloss.Left, title, content, help)
+
+	// Clamp output to terminal height to prevent scrolling on resize.
+	if m.height > 0 {
+		lines := strings.Split(out, "\n")
+		if len(lines) > m.height {
+			lines = lines[:m.height]
+		}
+		out = strings.Join(lines, "\n")
+	}
+
+	return out
 }
 
 func (m Model) renderTitleBar() string {
