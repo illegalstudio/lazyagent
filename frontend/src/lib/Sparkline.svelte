@@ -8,27 +8,23 @@
 
   let { data, color, width = 120, height = 24 }: Props = $props();
 
-  let points = $derived.by(() => {
-    if (!data || data.length === 0) return "";
+  let coords = $derived.by(() => {
+    if (!data || data.length === 0) return [];
     const max = Math.max(...data, 1);
     const stepX = width / (data.length - 1 || 1);
-    const pts = data.map((v, i) => {
-      const x = i * stepX;
-      const y = height - (v / max) * height;
-      return `${x},${y}`;
-    });
-    return pts.join(" ");
+    return data.map((v, i) => ({
+      x: i * stepX,
+      y: height - (v / max) * height,
+    }));
   });
 
+  let points = $derived(coords.map((c) => `${c.x},${c.y}`).join(" "));
+
   let areaPath = $derived.by(() => {
-    if (!data || data.length === 0) return "";
-    const max = Math.max(...data, 1);
-    const stepX = width / (data.length - 1 || 1);
+    if (coords.length === 0) return "";
     let d = `M 0,${height}`;
-    for (let i = 0; i < data.length; i++) {
-      const x = i * stepX;
-      const y = height - (data[i] / max) * height;
-      d += ` L ${x},${y}`;
+    for (const c of coords) {
+      d += ` L ${c.x},${c.y}`;
     }
     d += ` L ${width},${height} Z`;
     return d;
@@ -36,7 +32,7 @@
 </script>
 
 <svg {width} {height} viewBox="0 0 {width} {height}" class="block">
-  {#if data && data.length > 0}
+  {#if coords.length > 0}
     <path d={areaPath} fill={color} opacity="0.15" />
     <polyline
       {points}

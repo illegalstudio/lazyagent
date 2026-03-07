@@ -262,20 +262,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailOffset = 0
 
 		case key.Matches(msg, keys.Plus):
-			wm := m.manager.WindowMinutes()
-			if wm < 480 {
-				m.manager.SetWindowMinutes(wm + 10)
-			}
+			m.manager.SetWindowMinutes(m.manager.WindowMinutes() + 10)
 			m.refreshVisible()
 			if n := len(m.visible); m.cursor >= n && n > 0 {
 				m.cursor = n - 1
 			}
 
 		case key.Matches(msg, keys.Minus):
-			wm := m.manager.WindowMinutes()
-			if wm > 10 {
-				m.manager.SetWindowMinutes(wm - 10)
-			}
+			m.manager.SetWindowMinutes(m.manager.WindowMinutes() - 10)
 			m.refreshVisible()
 			if n := len(m.visible); m.cursor >= n && n > 0 {
 				m.cursor = n - 1
@@ -807,10 +801,7 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 		s.TotalMessages, s.UserMessages, s.AssistantMessages)))
 
 	if s.InputTokens > 0 || s.OutputTokens > 0 {
-		cost := s.CostUSD
-		if cost == 0 {
-			cost = core.EstimateCost(s.Model, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
-		}
+		cost := core.EffectiveCost(s.Model, s.CostUSD, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
 		tokenInfo := core.FormatTokens(s.InputTokens+s.CacheCreationTokens+s.CacheReadTokens) + " in / " + core.FormatTokens(s.OutputTokens) + " out"
 		if cost > 0.001 {
 			tokenInfo += "  " + lipgloss.NewStyle().Foreground(colorAccent).Render(core.FormatCost(cost))

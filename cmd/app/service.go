@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -14,10 +15,12 @@ import (
 type SessionService struct {
 	manager *core.SessionManager
 	app     *application.App
+	ctx     context.Context
 }
 
 // ServiceStartup is called by Wails when the app starts.
 func (s *SessionService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	s.ctx = ctx
 	cfg := core.LoadConfig()
 	s.manager = core.NewSessionManager(cfg.WindowMinutes)
 	if err := s.manager.StartWatcher(); err != nil {
@@ -49,12 +52,15 @@ func (s *SessionService) watchLoop() {
 
 	for {
 		select {
+		case <-s.ctx.Done():
+			return
 		case <-events:
 			_ = s.manager.Reload()
 			s.emitUpdate()
 		case <-ticker.C:
-			s.manager.UpdateActivities()
-			s.emitUpdate()
+			if s.manager.UpdateActivities() {
+				s.emitUpdate()
+			}
 		case <-reloadTicker.C:
 			_ = s.manager.Reload()
 			s.emitUpdate()
@@ -116,6 +122,22 @@ type ConversationItem struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+func buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
+	return SessionItem{
+		SessionID:     sess.SessionID,
+		CWD:           sess.CWD,
+		ShortName:     core.ShortName(sess.CWD, nameLen),
+		Activity:      string(activity),
+		IsActive:      core.IsActiveActivity(activity),
+		Model:         sess.Model,
+		GitBranch:     sess.GitBranch,
+		CostUSD:       core.EffectiveCost(sess.Model, sess.CostUSD, sess.InputTokens, sess.OutputTokens, sess.CacheCreationTokens, sess.CacheReadTokens),
+		LastActivity:  sess.LastActivity,
+		TotalMessages: sess.TotalMessages,
+		SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
+	}
+}
+
 // GetSessions returns all visible sessions for the list view.
 func (s *SessionService) GetSessions() []SessionItem {
 	visible := s.manager.VisibleSessions()
@@ -123,23 +145,7 @@ func (s *SessionService) GetSessions() []SessionItem {
 	wm := s.manager.WindowMinutes()
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		cost := sess.CostUSD
-		if cost == 0 {
-			cost = core.EstimateCost(sess.Model, sess.InputTokens, sess.OutputTokens, sess.CacheCreationTokens, sess.CacheReadTokens)
-		}
-		items = append(items, SessionItem{
-			SessionID:     sess.SessionID,
-			CWD:           sess.CWD,
-			ShortName:     core.ShortName(sess.CWD, 40),
-			Activity:      string(activity),
-			IsActive:      core.IsActiveActivity(activity),
-			Model:         sess.Model,
-			GitBranch:     sess.GitBranch,
-			CostUSD:       cost,
-			LastActivity:  sess.LastActivity,
-			TotalMessages: sess.TotalMessages,
-			SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
-		})
+		items = append(items, buildSessionItem(sess, activity, wm, 40))
 	}
 	return items
 }
@@ -151,11 +157,6 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		return nil
 	}
 	sess := &detail.Session
-	activity := detail.Activity
-	cost := sess.CostUSD
-	if cost == 0 {
-		cost = core.EstimateCost(sess.Model, sess.InputTokens, sess.OutputTokens, sess.CacheCreationTokens, sess.CacheReadTokens)
-	}
 	wm := s.manager.WindowMinutes()
 
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
@@ -177,19 +178,7 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 	}
 
 	return &SessionFull{
-		SessionItem: SessionItem{
-			SessionID:     sess.SessionID,
-			CWD:           sess.CWD,
-			ShortName:     core.ShortName(sess.CWD, 60),
-			Activity:      string(activity),
-			IsActive:      core.IsActiveActivity(activity),
-			Model:         sess.Model,
-			GitBranch:     sess.GitBranch,
-			CostUSD:       cost,
-			LastActivity:  sess.LastActivity,
-			TotalMessages: sess.TotalMessages,
-			SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
-		},
+		SessionItem:         buildSessionItem(sess, detail.Activity, wm, 60),
 		Version:             sess.Version,
 		IsWorktree:          sess.IsWorktree,
 		MainRepo:            sess.MainRepo,
@@ -225,12 +214,6 @@ func (s *SessionService) GetWindowMinutes() int {
 
 // SetWindowMinutes updates the time window.
 func (s *SessionService) SetWindowMinutes(m int) {
-	if m < 10 {
-		m = 10
-	}
-	if m > 480 {
-		m = 480
-	}
 	s.manager.SetWindowMinutes(m)
 	s.emitUpdate()
 }
@@ -249,7 +232,11 @@ func (s *SessionService) SetSearchQuery(q string) {
 
 // OpenInEditor opens a directory in the user's editor.
 func (s *SessionService) OpenInEditor(cwd string) {
-	editor := os.Getenv("VISUAL")
+	cfg := core.LoadConfig()
+	editor := cfg.Editor
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
 	}

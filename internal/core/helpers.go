@@ -66,6 +66,14 @@ func FormatCost(usd float64) string {
 	return fmt.Sprintf("$%.2f", usd)
 }
 
+// EffectiveCost returns CostUSD if non-zero, otherwise estimates from tokens.
+func EffectiveCost(model string, costUSD float64, inputTokens, outputTokens, cacheCreation, cacheRead int) float64 {
+	if costUSD != 0 {
+		return costUSD
+	}
+	return EstimateCost(model, inputTokens, outputTokens, cacheCreation, cacheRead)
+}
+
 // EstimateCost estimates API cost based on model and token counts.
 func EstimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheRead int) float64 {
 	var inputRate, outputRate float64
