@@ -17,14 +17,17 @@ import (
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
 func main() {
-	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app")
+	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app (detaches automatically)")
+	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running Claude Code sessions
 
 Usage:
-  lazyagent            Launch the terminal UI
-  lazyagent --tray     Launch as macOS menu bar app (detaches automatically)
+  lazyagent                Launch the terminal UI
+  lazyagent --tui          Launch the terminal UI (explicit)
+  lazyagent --tray         Launch as macOS menu bar app (detaches automatically)
+  lazyagent --tui --tray   Launch both TUI and tray app
 
 Flags:
 `)
@@ -42,13 +45,17 @@ More info: https://github.com/illegalstudio/lazyagent
 
 	flag.Parse()
 
-	if *trayMode {
+	// Default: TUI if no flags given.
+	runTUI := *tuiMode || !*trayMode
+	runTray := *trayMode
+
+	if runTray {
 		if !tray.Available() {
 			fmt.Fprintln(os.Stderr, "Error: --tray is not available in this build")
 			os.Exit(1)
 		}
 
-		// If not already detached, kill previous instance, re-launch in background and exit.
+		// If not already detached, kill previous instance and re-launch tray in background.
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
 			killPreviousTray()
 
@@ -66,28 +73,33 @@ More info: https://github.com/illegalstudio/lazyagent
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
+			// If also running TUI, fall through; otherwise exit.
+			if !runTUI {
+				return
+			}
+		} else {
+			// Detached tray process: write PID file and run.
+			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
+			defer os.Remove(trayPidFile)
+
+			if err := tray.Run(); err != nil {
+				os.Exit(1)
+			}
 			return
 		}
-
-		// Detached process: write PID file.
-		_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
-		defer os.Remove(trayPidFile)
-
-		if err := tray.Run(); err != nil {
-			os.Exit(1)
-		}
-		return
 	}
 
-	p := tea.NewProgram(
-		ui.NewModel(),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	if runTUI {
+		p := tea.NewProgram(
+			ui.NewModel(),
+			tea.WithAltScreen(),
+			tea.WithMouseCellMotion(),
+		)
 
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		if _, err := p.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
