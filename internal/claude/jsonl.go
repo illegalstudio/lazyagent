@@ -115,17 +115,19 @@ func ParseJSONL(path string) (*Session, error) {
 			prevTimestamp = ts
 		}
 
+		// Extract metadata from whichever entry provides it first.
+		if session.CWD == "" && e.CWD != "" {
+			session.CWD = e.CWD
+		}
+		if session.Version == "" && e.Version != "" {
+			session.Version = e.Version
+		}
+		if session.GitBranch == "" && e.GitBranch != "" {
+			session.GitBranch = e.GitBranch
+		}
+
 		switch e.Type {
 		case "user":
-			if session.CWD == "" && e.CWD != "" {
-				session.CWD = e.CWD
-			}
-			if session.Version == "" && e.Version != "" {
-				session.Version = e.Version
-			}
-			if session.GitBranch == "" && e.GitBranch != "" {
-				session.GitBranch = e.GitBranch
-			}
 			lastMeaningful = &e
 			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
@@ -139,15 +141,6 @@ func ParseJSONL(path string) (*Session, error) {
 				}
 			}
 		case "assistant":
-			if session.CWD == "" && e.CWD != "" {
-				session.CWD = e.CWD
-			}
-			if session.Version == "" && e.Version != "" {
-				session.Version = e.Version
-			}
-			if session.GitBranch == "" && e.GitBranch != "" {
-				session.GitBranch = e.GitBranch
-			}
 			lastMeaningful = &e
 			if e.Message != nil {
 				session.AssistantMessages++
@@ -169,12 +162,9 @@ func ParseJSONL(path string) (*Session, error) {
 							recentTools = recentTools[len(recentTools)-20:]
 						}
 						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
-							var input map[string]any
-							if err := json.Unmarshal(c.Input, &input); err == nil {
-								if fp, ok := input["file_path"].(string); ok && fp != "" {
-									session.LastFileWrite = fp
-									session.LastFileWriteAt = ts
-								}
+							if fp := extractFilePath(c.Input); fp != "" {
+								session.LastFileWrite = fp
+								session.LastFileWriteAt = ts
 							}
 						}
 					}
@@ -234,6 +224,18 @@ func firstText(m *jsonlMessage) string {
 		if c.Type == "text" && c.Text != "" {
 			return c.Text
 		}
+	}
+	return ""
+}
+
+// extractFilePath extracts the "file_path" value from a tool_use input
+// without unmarshaling the entire JSON into a map.
+func extractFilePath(raw json.RawMessage) string {
+	var obj struct {
+		FilePath string `json:"file_path"`
+	}
+	if json.Unmarshal(raw, &obj) == nil {
+		return obj.FilePath
 	}
 	return ""
 }

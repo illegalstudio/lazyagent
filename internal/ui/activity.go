@@ -181,11 +181,3 @@ func (m Model) activityFor(sessionID string) ActivityKind {
 	return ActivityIdle
 }
 
-// renderActivity returns a styled activity label for use in the list row.
-func renderActivity(kind ActivityKind) string {
-	color, ok := activityColors[kind]
-	if !ok {
-		color = colorMuted
-	}
-	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(string(kind))
-}
