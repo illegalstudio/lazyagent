@@ -1,12 +1,33 @@
 version: 2
 
+before:
+  hooks:
+    - npm install --prefix frontend
+    - npm run build --prefix frontend
+    - cp -r frontend/dist internal/assets/dist
+
 builds:
-  - main: .
+  # macOS: full build with tray support (CGo required by Wails)
+  - id: darwin
+    main: .
+    binary: lazyagent
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+  # Linux: TUI only, no tray (Wails excluded via build tag)
+  - id: linux
+    main: .
     binary: lazyagent
     env:
       - CGO_ENABLED=0
+    tags:
+      - notray
     goos:
-      - darwin
       - linux
     goarch:
       - amd64
