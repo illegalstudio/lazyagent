@@ -5,7 +5,9 @@
 
 A terminal UI and macOS menu bar app for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
-![lazyagent](assets/screenshot.jpg)
+![lazyagent TUI](assets/screenshot.png)
+
+![lazyagent macOS tray](assets/tray.png)
 
 ## How it works
 
@@ -37,20 +39,19 @@ It also surfaces:
 | Last 20 tools used | JSONL |
 | Last activity timestamp | JSONL |
 
-## Two interfaces, one core
+## Two interfaces, one binary
 
-lazyagent ships as two binaries built from the same Go module:
+lazyagent ships as a single binary with two interfaces:
 
-| | TUI (`lazyagent`) | macOS App (`lazyagent-app`) |
+| | TUI | macOS Menu Bar |
 |---|---|---|
 | Interface | Terminal (bubbletea) | Native menu bar panel (Wails v3 + Svelte 5) |
-| Launch | `lazyagent` in any terminal | Click tray icon in menu bar |
-| Size | ~5 MB | ~18 MB |
-| Dock icon | N/A | Hidden (LSUIElement) |
+| Launch | `lazyagent` | `lazyagent --tray` |
+| Dock icon | N/A | Hidden (accessory) |
 | Sparkline | Unicode braille characters | SVG area chart |
 | Theme | Terminal colors | Catppuccin Mocha (Tailwind 4) |
 
-Both share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config.
+Both share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config. You can run both simultaneously with `lazyagent --tui --tray`.
 
 ## Install
 
@@ -61,7 +62,7 @@ brew tap illegalstudio/tap
 brew install lazyagent
 ```
 
-### Go (TUI)
+### Go (TUI only)
 
 ```bash
 go install github.com/nahime0/lazyagent@latest
@@ -73,15 +74,13 @@ go install github.com/nahime0/lazyagent@latest
 git clone https://github.com/nahime0/lazyagent
 cd lazyagent
 
-# TUI only
+# TUI only (no Wails/Node.js needed)
 make tui
 
-# macOS menu bar app (requires Node.js for frontend build)
+# Full build with menu bar app (requires Node.js for frontend)
 make install   # npm install (first time only)
-make app
+make build
 ```
-
-Both binaries are output to the project root: `lazyagent` and `lazyagent-app`.
 
 ### macOS note
 
@@ -89,11 +88,15 @@ On first launch, macOS may block the binary. Go to **System Settings → Privacy
 
 ## Usage
 
-### TUI
+```
+lazyagent                Launch the terminal UI
+lazyagent --tui          Launch the terminal UI (explicit)
+lazyagent --tray         Launch as macOS menu bar app (detaches automatically)
+lazyagent --tui --tray   Launch both TUI and tray app
+lazyagent --help         Show help
+```
 
-```
-lazyagent
-```
+### TUI
 
 #### Keybindings
 
@@ -112,10 +115,10 @@ lazyagent
 ### macOS Menu Bar App
 
 ```
-./lazyagent-app
+lazyagent --tray
 ```
 
-The app lives in your menu bar — no Dock icon. Click the tray icon to toggle the panel.
+The tray process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel.
 
 #### Keybindings
 
@@ -180,13 +183,12 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
 
 ```
 lazyagent/
-├── cmd/
-│   ├── tui/                    # TUI entry point (bubbletea)
-│   └── app/                    # macOS menu bar app (Wails v3)
+├── main.go                     # Entry point: dispatches --tui / --tray / both
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
 │   ├── claude/                 # JSONL parsing, types, session discovery
-│   ├── ui/                     # TUI-only rendering (bubbletea + lipgloss)
+│   ├── ui/                     # TUI rendering (bubbletea + lipgloss)
+│   ├── tray/                   # macOS menu bar app (Wails v3, build-tagged)
 │   └── assets/                 # Embedded frontend dist (go:embed)
 ├── frontend/                   # Svelte 5 + Tailwind 4 (menu bar app UI)
 │   ├── src/
@@ -194,8 +196,7 @@ lazyagent/
 │   │   ├── lib/                # SessionList, SessionDetail, Sparkline, ActivityBadge
 │   │   └── bindings/           # Auto-generated Wails TypeScript bindings
 │   └── app.css                 # Tailwind 4 @theme (Catppuccin Mocha)
-├── Makefile
-└── main.go                     # Root alias → cmd/tui (backward compat)
+└── Makefile
 ```
 
 ## Development
@@ -204,14 +205,14 @@ lazyagent/
 # Install frontend deps (first time)
 make install
 
-# Generate Wails bindings + build frontend + build app
-make app
+# Full build (TUI + tray)
+make build
 
-# Quick dev cycle (rebuild + run)
-make dev
-
-# Build TUI only
+# Build TUI only (no Wails/Node.js needed)
 make tui
+
+# Quick dev cycle (rebuild + run tray)
+make dev
 
 # Clean all artifacts
 make clean
