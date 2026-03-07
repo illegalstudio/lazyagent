@@ -7,7 +7,7 @@ before:
     - cp -r frontend/dist internal/assets/dist
 
 builds:
-  # macOS: full build with tray support (CGo required by Wails)
+  # macOS: full build with tray support (runs on macos-latest runner)
   - id: darwin
     main: .
     binary: lazyagent
@@ -19,7 +19,7 @@ builds:
       - amd64
       - arm64
 
-  # Linux: TUI only, no tray (Wails excluded via build tag)
+  # Linux: TUI only, no tray (no CGo needed)
   - id: linux
     main: .
     binary: lazyagent
