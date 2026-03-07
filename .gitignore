@@ -1,5 +1,13 @@
-# Binary
-lazyagent
+# Binaries
+/lazyagent
+/lazyagent-app
+/tui
+/app
+
+# Frontend build
+frontend/node_modules/
+frontend/dist/
+internal/assets/dist/
 
 # Claude Code
 .claude/settings.local.json

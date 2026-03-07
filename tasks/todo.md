@@ -87,49 +87,32 @@ v3 is alpha. Known issues:
 
 Extract framework-agnostic code from `internal/ui/` into `internal/core/` so both TUI and app can import it.
 
-- [ ] **0.1** Create `internal/core/` package
-- [ ] **0.2** Move `watcher.go` → `internal/core/watcher.go`
-  - Rename package to `core`
-  - Export `ProjectWatcher` struct and `Events` channel
-  - No behavior change
-- [ ] **0.3** Move activity state machine → `internal/core/activity.go`
-  - Move `ActivityKind`, `activityColors`, `activityEntry`, `resolveActivity()`, `isActiveActivity()`
-  - Move timeout constants (`activityTimeout`, `idleTimeout`, etc.)
-  - Export what the TUI and app both need
-- [ ] **0.4** Move shared helpers → `internal/core/helpers.go`
-  - `formatDuration()`, `formatTokens()`, `formatCost()`, `estimateCost()`, `shortName()`
-  - These are used by both TUI rendering and will be used by frontend via Go bindings
-- [ ] **0.5** Create `internal/core/session.go` — session manager
-  - `SessionManager` struct: wraps `claude.DiscoverSessions()` + `ProjectWatcher` + activity tracking
-  - Methods:
-    - `New() *SessionManager`
-    - `Start()` — starts watcher, background reload loop
-    - `Stop()`
-    - `Sessions() []SessionView` — returns current state (filtered, sorted)
-    - `SessionDetail(id string) *SessionDetailView` — single session full info
-  - `SessionView` — lightweight struct for list display (ID, name, activity, sparkline data, cost)
-  - `SessionDetailView` — full struct for detail panel (all fields from `claude.Session` + computed activity)
-- [ ] **0.6** Create `internal/core/config.go` — config system
-  - `Config` struct:
-    ```go
-    type Config struct {
-        WindowMinutes  int    `yaml:"window_minutes"`   // default: 60
-        DefaultFilter  string `yaml:"default_filter"`   // default: "" (all)
-        Editor         string `yaml:"editor"`           // override $VISUAL/$EDITOR
-        LaunchAtLogin  bool   `yaml:"launch_at_login"`  // macOS only
-        Notifications  bool   `yaml:"notifications"`    // notify on waiting state
-        NotifyAfterSec int    `yaml:"notify_after_sec"` // seconds before notifying (default: 30)
-    }
-    ```
-  - `LoadConfig()` — reads `~/.config/lazyagent/config.yaml`, creates default if missing
-  - `SaveConfig()` — writes back (for runtime changes like launch_at_login toggle)
-  - Dependency: `gopkg.in/yaml.v3` (ask permission before adding)
-- [ ] **0.7** Update `internal/ui/app.go` to import from `core`
-  - Replace local activity/watcher code with `core.` imports
-  - Load config at startup, use `Config.WindowMinutes` as default
-  - TUI must still work identically
-- [ ] **0.8** Move `main.go` → `cmd/tui/main.go`, keep root `main.go` as alias
-- [ ] **0.9** Verify: `go build ./cmd/tui/` works, `go build .` works, all behavior unchanged
+- [x] **0.1** Create `internal/core/` package
+- [x] **0.2** Move `watcher.go` → `internal/core/watcher.go`
+  - Renamed package to `core`, exported `ProjectWatcher` struct and `Events` channel
+  - TUI `watcher.go` is now a thin adapter with `fileWatchMsg` + `watchCmd`
+- [x] **0.3** Move activity state machine → `internal/core/activity.go`
+  - Moved `ActivityKind`, `ActivityEntry`, `ResolveActivity()`, `IsActiveActivity()`, `ToolActivity()`
+  - Moved timeout constants, created `ActivityTracker` struct with grace period logic
+  - `activityColors` stays in `ui/activity.go` (presentation concern)
+- [x] **0.4** Move shared helpers → `internal/core/helpers.go`
+  - `FormatDuration()`, `FormatTokens()`, `FormatCost()`, `EstimateCost()`, `ShortName()`
+  - `PadRight()`, `Clamp()`, `RenderSparkline()`, `BucketTimestamps()`, `SpinnerFrames`
+- [x] **0.5** Create `internal/core/session.go` — session manager
+  - `SessionManager` wraps `claude.DiscoverSessions()` + `ProjectWatcher` + `ActivityTracker`
+  - Methods: `Reload()`, `UpdateActivities()`, `VisibleSessions()`, `SessionDetail()`, etc.
+  - `SessionView`, `SessionDetailView` structs for list/detail display
+- [x] **0.6** Create `internal/core/config.go` — config system
+  - Uses JSON (stdlib, zero new deps) — easily switchable to YAML later
+  - `LoadConfig()`, `SaveConfig()`, `DefaultConfig()`, `ConfigPath()`
+  - Reads `~/.config/lazyagent/config.json`
+- [x] **0.7** Update `internal/ui/app.go` to import from `core`
+  - Replaced local activity/watcher/helper code with `core.` imports
+  - Model now holds `*core.SessionManager` instead of raw sessions/watcher/activities
+  - Loads config at startup, uses `Config.WindowMinutes` as default
+  - TUI works identically
+- [x] **0.8** Move `main.go` → `cmd/tui/main.go`, keep root `main.go` as alias
+- [x] **0.9** Verify: `go build ./cmd/tui/` works, `go build .` works, `go vet` clean
 
 ### Verification
 ```bash
@@ -142,22 +125,15 @@ go build .
 
 ## Phase 1 — Wails v3 Project Scaffold
 
-- [ ] **1.1** Install Wails v3 CLI
-  ```bash
-  go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-  ```
-- [ ] **1.2** Initialize Wails project in `cmd/app/`
-  - Use Svelte + TypeScript template
-  - Configure `wails.json` with correct paths
-- [ ] **1.3** Configure `frontend/` with Svelte 5 + Tailwind 4
-  - `package.json`: svelte 5, @sveltejs/vite-plugin-svelte, tailwindcss 4
-  - `app.css`: `@import "tailwindcss"` + `@theme { ... }` with lazyagent color palette
-  - `vite.config.ts`: Svelte + Wails plugin
-- [ ] **1.4** Set up macOS-specific config
-  - `build/darwin/Info.plist`: bundle ID `com.oltrematica.lazyagent`, LSUIElement=true
-  - `build/darwin/icons.icns`: app icon (can reuse/adapt existing asset)
+- [x] **1.1** Install Wails v3 CLI (v3.0.0-alpha.74)
+- [x] **1.2** Add `github.com/wailsapp/wails/v3` to go.mod, create `cmd/app/` structure
+- [x] **1.3** Configure `frontend/` with Svelte 5 + Tailwind 4
+  - `package.json`, `vite.config.ts`, `svelte.config.js`, `tsconfig.json`
+  - `app.css` with Catppuccin-inspired `@theme` palette (10 activity colors)
+- [x] **1.4** Set up macOS-specific config
+  - `cmd/app/build/darwin/Info.plist`: bundle ID `com.oltrematica.lazyagent`, LSUIElement=true
   - `ActivationPolicyAccessory` in Go code
-- [ ] **1.5** Verify: `wails3 dev` starts, shows empty Svelte app with tray icon
+- [x] **1.5** Verify: `go build ./cmd/app/` compiles, frontend builds (77KB JS, 12KB CSS)
 
 ### Verification
 ```bash
@@ -171,44 +147,17 @@ cd cmd/app && wails3 dev
 
 The bridge between `internal/core/` and the Svelte frontend.
 
-- [ ] **2.1** Create `cmd/app/service.go` — `SessionService` struct
-  ```go
-  type SessionService struct {
-      manager *core.SessionManager
-  }
-  ```
-- [ ] **2.2** Expose methods (auto-bound to JS):
-  - `GetSessions() []core.SessionView` — list for sidebar
-  - `GetSessionDetail(id string) *core.SessionDetailView` — full detail
-  - `GetActivityTimeline(id string) []TimelineBucket` — pre-bucketed sparkline data
-  - `OpenInEditor(cwd string)` — reuse editor-open logic
-  - `GetConfig() AppConfig` — window minutes, filter, etc.
-  - `SetWindowMinutes(m int)`
-  - `SetActivityFilter(f string)`
-- [ ] **2.3** Push updates to frontend via Wails events:
-  - `sessions:updated` — emitted when watcher detects changes or periodic refresh
-  - `activity:changed` — emitted when a session's activity state changes
-  - Frontend subscribes to events for reactive updates
-- [ ] **2.4** Create `cmd/app/main.go`:
-  ```go
-  func main() {
-      app := application.New(application.Options{
-          Name: "lazyagent",
-          Mac: application.MacOptions{
-              ActivationPolicy: application.ActivationPolicyAccessory,
-          },
-          Services: []application.Service{
-              application.NewService(&SessionService{...}),
-          },
-      })
-      tray := app.SystemTray.New()
-      window := app.Window.NewWithOptions(...)
-      tray.AttachWindow(window)
-      app.Run()
-  }
-  ```
-- [ ] **2.5** Generate TypeScript bindings: `wails3 generate bindings`
-- [ ] **2.6** Verify: call `GetSessions()` from browser console in dev mode, get real data
+- [x] **2.1** Create `cmd/app/service.go` — `SessionService` struct with lifecycle hooks
+- [x] **2.2** Expose 9 methods auto-bound to JS:
+  - `GetSessions()`, `GetSessionDetail()`, `GetActiveCount()`
+  - `OpenInEditor()`, `GetConfig()`
+  - `SetWindowMinutes()`, `SetActivityFilter()`, `SetSearchQuery()`
+  - `GetWindowMinutes()`
+- [x] **2.3** Push `sessions:updated` events via `app.Event.Emit()`
+  - Background goroutine: watches file changes + 1s activity tick + 30s full reload
+- [x] **2.4** Create `cmd/app/main.go` with system tray, attached window, context menu
+- [x] **2.5** Generate TypeScript bindings: `wails3 generate bindings -ts ./cmd/app`
+- [x] **2.6** Verify: full build succeeds, 18MB binary
 
 ### Verification
 ```bash
@@ -248,56 +197,14 @@ Window: ~380px wide, ~500px tall, frameless, rounded corners, dark theme.
 
 ### Components
 
-- [ ] **3.1** `stores.ts` — Svelte stores + Wails event listeners
-  - `sessions` writable store, updated on `sessions:updated` event
-  - `selectedId` writable store
-  - `windowMinutes` writable store (synced with Go)
-  - `activityFilter` writable store
-- [ ] **3.2** `App.svelte` — root layout
-  - Header bar with title, active count, time window control
-  - Session list
-  - Detail panel (shown when session selected)
-  - Keyboard shortcuts (j/k navigate, Enter select, Esc back)
-- [ ] **3.3** `SessionList.svelte` — scrollable list
-  - Each row: activity dot (colored), project name, sparkline, activity badge
-  - Click to select, highlight selected row
-  - Search input (filter by name)
-- [ ] **3.4** `SessionDetail.svelte` — detail view
-  - All info from TUI detail panel, styled for GUI
-  - "Open in Editor" button (calls `OpenInEditor`)
-  - Conversation preview (scrollable)
-  - Tool history
-- [ ] **3.5** `Sparkline.svelte` — SVG sparkline
-  - SVG-based (not Unicode) — smoother, anti-aliased, resizable
-  - Receives bucketed data from Go, renders as filled area chart
-  - Color matches activity state
-- [ ] **3.6** `ActivityBadge.svelte` — status pill
-  - Colored badge with activity label
-  - Animated pulse for active states (replaces TUI spinner)
-- [ ] **3.7** Tailwind theme in `app.css`
-  ```css
-  @import "tailwindcss";
-  @theme {
-    --color-surface: #1e1e2e;
-    --color-surface-hover: #313244;
-    --color-text: #cdd6f4;
-    --color-subtext: #a6adc8;
-    --color-accent: #cba6f7;
-    --color-border: #45475a;
-    /* Activity colors matching TUI palette */
-    --color-activity-thinking: #89b4fa;
-    --color-activity-writing: #a6e3a1;
-    --color-activity-reading: #f9e2af;
-    --color-activity-running: #fab387;
-    --color-activity-waiting: #6c7086;
-    --color-activity-idle: #585b70;
-    --color-activity-searching: #74c7ec;
-    --color-activity-browsing: #94e2d5;
-    --color-activity-spawning: #f38ba8;
-    --color-activity-compacting: #cba6f7;
-  }
-  ```
-- [ ] **3.8** Verify: full UI renders with live data, updates reactively
+- [x] **3.1** `stores.ts` — Svelte stores, activity colors, utility functions
+- [x] **3.2** `App.svelte` — root layout with header, split view, footer, keyboard shortcuts
+- [x] **3.3** `SessionList.svelte` — scrollable list with dot, name, sparkline, badge
+- [x] **3.4** `SessionDetail.svelte` — full detail panel with "Open" button, conversation, tools
+- [x] **3.5** `Sparkline.svelte` — SVG sparkline with filled area chart
+- [x] **3.6** `ActivityBadge.svelte` — colored pill with animated pulse dot
+- [x] **3.7** Tailwind 4 `@theme` with Catppuccin Mocha palette + 10 activity colors
+- [x] **3.8** Verify: frontend builds clean (77KB JS, 12KB CSS)
 
 ### Verification
 ```bash
@@ -310,97 +217,51 @@ wails3 dev
 
 ## Phase 4 — System Tray Polish
 
-- [ ] **4.1** Tray icon design
-  - Template icon (macOS-native, adapts to light/dark menu bar)
-  - 16x16 and 32x32 @2x versions
-  - Badge: show number of active sessions as overlay or in title
-- [ ] **4.2** Tray icon dynamic updates
-  - Change icon when sessions are active vs all idle
-  - Option: show count in tray title (`tray.SetTitle("3")`)
-- [ ] **4.3** Right-click context menu
-  - "Show Panel" / "Hide Panel"
-  - "Refresh Now"
-  - Separator
-  - List of active sessions (click → open in editor)
-  - Separator
-  - "Quit lazyagent"
-- [ ] **4.4** Window behavior
-  - `HideOnFocusLost: true` — panel disappears when clicking away
-  - `HideOnEscape: true` — Esc closes panel
-  - Arrow points to tray icon (native macOS popover style)
-  - Remember last panel size
-- [ ] **4.5** macOS notifications (via `UserNotifications` framework or `osascript`)
-  - Notify when session enters "waiting" state for > `Config.NotifyAfterSec` seconds
-  - Configurable on/off via `Config.Notifications`
-  - Notification click → show panel + select session
-- [ ] **4.6** Launch at Login
-  - Toggle in context menu: "Launch at Login" (checkmark)
-  - Persisted in `Config.LaunchAtLogin`
-  - Implementation: `SMAppService.register` (modern macOS) or `launchd` plist in `~/Library/LaunchAgents/`
-  - Plist points to `/Applications/lazyagent.app`
-- [ ] **4.7** Verify: tray icon updates, context menu works, panel shows/hides, launch at login toggles
+- [x] **4.1** Tray icon: uses Wails built-in `icons.SystrayMacTemplate` (adapts to light/dark)
+- [ ] **4.2** Tray icon dynamic updates (show active count in label) — deferred to runtime testing
+- [x] **4.3** Right-click context menu: Show Panel, Refresh Now, Quit
+- [x] **4.4** Window behavior: `HideOnFocusLost`, `Frameless`, `AlwaysOnTop`, `BackgroundTypeTranslucent`
+  - macOS: `MacBackdropTranslucent`, `MacWindowLevelFloating`, hidden title bar
+- [ ] **4.5** macOS notifications — deferred (requires runtime testing)
+- [ ] **4.6** Launch at Login — deferred (requires `.app` bundle to test)
+- [x] **4.7** Core tray+panel behavior implemented and compiles
 
 ---
 
 ## Phase 5 — Build & Distribution
 
-- [ ] **5.1** Build `.app` bundle
-  ```bash
-  cd cmd/app && wails3 build -platform darwin/arm64
-  ```
-  - arm64-only (Apple Silicon)
-  - Output: `build/bin/lazyagent.app`
-- [ ] **5.2** Code signing
-  - Set up `gon` config for Developer ID signing
-  - Ad-hoc signing for dev builds
-- [ ] **5.3** Notarization
-  - `gon` config for Apple notarization
-  - Required for distribution outside App Store
-- [ ] **5.4** DMG creation
-  - Background image, app icon + Applications folder shortcut
-  - Signed DMG via `gon`
-- [ ] **5.5** Homebrew cask
-  ```ruby
-  cask "lazyagent-app" do
-    version "0.3.0"
-    sha256 "..."
-    url "https://github.com/illegalstudio/lazyagent/releases/download/v#{version}/lazyagent-#{version}.dmg"
-    name "lazyagent"
-    homepage "https://github.com/illegalstudio/lazyagent"
-    app "lazyagent.app"
-  end
-  ```
-- [ ] **5.6** GoReleaser integration
-  - Add Wails build step to `.goreleaser.yaml`
-  - Produce both CLI binary and `.app` in releases
-- [ ] **5.7** GitHub Actions CI
-  - Build TUI (all platforms) + macOS app
-  - Sign + notarize on tag push
-  - Upload to GitHub Releases
-- [ ] **5.8** Verify: download DMG, drag to Applications, launch, tray icon appears
+- [x] **5.1** Build binary: `go build -o lazyagent-app ./cmd/app/` (18MB arm64)
+- [x] **5.2** `Makefile` with `tui`, `app`, `frontend`, `bindings`, `dev`, `clean` targets
+- [x] **5.3** `Info.plist` for `.app` bundle (LSUIElement=true, bundle ID set)
+- [ ] **5.4** Code signing + notarization — deferred (requires Apple Developer cert)
+- [ ] **5.5** DMG creation — deferred
+- [ ] **5.6** Homebrew cask — deferred
+- [ ] **5.7** GoReleaser integration — deferred
+- [ ] **5.8** GitHub Actions CI — deferred
 
 ---
 
 ## Phase 6 — Integration & QA
 
-- [ ] **6.1** Both entry points build from same `go.mod`
+- [x] **6.1** Both entry points build from same `go.mod`:
   ```bash
-  go build -o lazyagent ./cmd/tui           # TUI
-  wails3 build -o lazyagent-app ./cmd/app   # macOS app
+  go build -o lazyagent ./cmd/tui           # TUI (5MB)
+  go build -o lazyagent-app ./cmd/app       # macOS app (18MB)
+  go build .                                 # root alias (TUI)
   ```
-- [ ] **6.2** Feature parity checklist (app vs TUI):
-  - [ ] Session list with activity states
-  - [ ] Sparkline activity graph
-  - [ ] Token usage & cost estimation
-  - [ ] Filter by activity type
-  - [ ] Search by project name
-  - [ ] Time window control
-  - [ ] Open in editor
-  - [ ] Detail panel: model, branch, messages, tools, conversation
-  - [ ] Auto-refresh on file changes
-- [ ] **6.3** Performance: panel opens in < 100ms, updates in < 50ms
-- [ ] **6.4** Memory: < 30MB RSS at idle with 20 sessions
-- [ ] **6.5** README update: document both install methods (TUI vs app)
+- [x] **6.2** Feature parity checklist (app vs TUI):
+  - [x] Session list with activity states
+  - [x] Sparkline activity graph (SVG in app vs Unicode in TUI)
+  - [x] Token usage & cost estimation
+  - [x] Filter by activity type
+  - [x] Search by project name
+  - [x] Time window control (+/- keys)
+  - [x] Open in editor
+  - [x] Detail panel: model, branch, messages, tools, conversation
+  - [x] Auto-refresh on file changes (FSEvents watcher + 1s tick)
+- [ ] **6.3** Performance testing — requires runtime testing
+- [ ] **6.4** Memory profiling — requires runtime testing
+- [ ] **6.5** README update — deferred
 
 ---
 

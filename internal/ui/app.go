@@ -1,12 +1,9 @@
 package ui
 
 import (
-	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/core"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -33,8 +31,8 @@ type editorFinishedMsg struct{ err error }
 
 // Model is the main bubbletea model.
 type Model struct {
-	sessions     []*claude.Session
-	cursor       int
+	manager  *core.SessionManager
+	cursor   int
 	selectedID   string // session ID of the currently selected item
 	listOffset   int
 	detailOffset int
@@ -46,23 +44,11 @@ type Model struct {
 	lastRefresh   time.Time
 	loading       bool
 	focus         int // 0 = list, 1 = detail
-	windowMinutes int // show sessions modified in last N minutes
 	spinFrame     int // animation frame counter for spinners
 
-	// Sticky activity states, keyed by session ID
-	activities map[string]*activityEntry
-
-	// FSEvents-based watcher for ~/.claude/projects
-	watcher *projectWatcher
-
-	// waitingSince tracks when each session first entered StatusWaitingForUser.
-	// Used to apply a grace period before displaying ActivityWaiting.
-	waitingSince map[string]time.Time
-
 	// Filter / search
-	activityFilter ActivityKind // "" = show all
-	searchMode     bool
-	searchQuery    string
+	searchMode  bool
+	searchQuery string
 
 	// Cached visible sessions, recomputed via refreshVisible().
 	visible []*claude.Session
@@ -105,19 +91,19 @@ var keys = keyMap{
 }
 
 func NewModel() Model {
-	w, _ := newProjectWatcher()
+	cfg := core.LoadConfig()
+	mgr := core.NewSessionManager(cfg.WindowMinutes)
+	_ = mgr.StartWatcher()
 	return Model{
-		loading:       true,
-		activities:    make(map[string]*activityEntry),
-		windowMinutes: 30,
-		watcher:       w,
+		loading: true,
+		manager: mgr,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{makeLoadCmd(), tickCmd(), renderTickCmd()}
-	if m.watcher != nil {
-		cmds = append(cmds, watchCmd(m.watcher.Events))
+	cmds := []tea.Cmd{makeLoadCmd(m.manager), tickCmd(), renderTickCmd()}
+	if events := m.manager.WatcherEvents(); events != nil {
+		cmds = append(cmds, watchCmd(events))
 	}
 	return tea.Batch(cmds...)
 }
@@ -136,21 +122,15 @@ func renderTickCmd() tea.Cmd {
 	})
 }
 
-// makeLoadCmd loads all JSONL sessions from ~/.claude/projects.
-func makeLoadCmd() tea.Cmd {
+// makeLoadCmd loads all JSONL sessions via the SessionManager.
+func makeLoadCmd(mgr *core.SessionManager) tea.Cmd {
 	return func() tea.Msg {
-		sessions, err := claude.DiscoverSessions()
+		err := mgr.Reload()
 		if err != nil {
 			return sessionsMsg{err: err}
 		}
-		return sessionsMsg{sessions: sessions}
+		return sessionsMsg{sessions: mgr.Sessions()}
 	}
-}
-
-func sortSessions(sessions []*claude.Session) {
-	slices.SortFunc(sessions, func(a, b *claude.Session) int {
-		return cmp.Compare(b.LastActivity.UnixNano(), a.LastActivity.UnixNano())
-	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -164,28 +144,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case fileWatchMsg:
 		// A JSONL file changed — reload immediately and re-arm the watcher.
-		return m, tea.Batch(makeLoadCmd(), watchCmd(m.watcher.Events))
+		return m, tea.Batch(makeLoadCmd(m.manager), watchCmd(m.manager.WatcherEvents()))
 
 	case renderTickMsg:
 		// Re-render only — no I/O, but update in-memory activity states.
 		m.spinFrame++
-		m.updateActivities(time.Now())
+		m.manager.UpdateActivities()
 		m.refreshVisible()
 		return m, renderTickCmd()
 
 	case tickMsg:
-		return m, tea.Batch(makeLoadCmd(), tickCmd())
+		return m, tea.Batch(makeLoadCmd(m.manager), tickCmd())
 
 	case sessionsMsg:
 		m.loading = false
-		now := time.Now()
-		m.lastRefresh = now
+		m.lastRefresh = time.Now()
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			m.sessions = msg.sessions
-			m.updateActivities(now)
-			sortSessions(m.sessions)
 			m.refreshVisible()
 			// Try to restore selection by session ID.
 			found := false
@@ -199,7 +175,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if !found {
-				// Clamp cursor and update selectedID.
 				if n := len(m.visible); m.cursor >= n && n > 0 {
 					m.cursor = n - 1
 				}
@@ -287,8 +262,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailOffset = 0
 
 		case key.Matches(msg, keys.Plus):
-			if m.windowMinutes < 480 {
-				m.windowMinutes += 10
+			wm := m.manager.WindowMinutes()
+			if wm < 480 {
+				m.manager.SetWindowMinutes(wm + 10)
 			}
 			m.refreshVisible()
 			if n := len(m.visible); m.cursor >= n && n > 0 {
@@ -296,8 +272,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, keys.Minus):
-			if m.windowMinutes > 10 {
-				m.windowMinutes -= 10
+			wm := m.manager.WindowMinutes()
+			if wm > 10 {
+				m.manager.SetWindowMinutes(wm - 10)
 			}
 			m.refreshVisible()
 			if n := len(m.visible); m.cursor >= n && n > 0 {
@@ -306,7 +283,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Refresh):
 			m.loading = true
-			return m, makeLoadCmd()
+			return m, makeLoadCmd(m.manager)
 
 		case key.Matches(msg, keys.Up):
 			if m.focus == 0 {
@@ -339,7 +316,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, keys.Filter):
-			m.activityFilter = nextActivityFilter(m.activityFilter)
+			m.manager.SetActivityFilter(core.NextActivityFilter(m.manager.ActivityFilter()))
 			m.cursor = 0
 			m.listOffset = 0
 			m.refreshVisible()
@@ -455,48 +432,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 	}
 }
 
-var activityFilterOrder = []ActivityKind{
-	"",
-	ActivityIdle,
-	ActivityWaiting,
-	ActivityThinking,
-	ActivityCompacting,
-	ActivityReading,
-	ActivityWriting,
-	ActivityRunning,
-	ActivitySearching,
-	ActivityBrowsing,
-	ActivitySpawning,
-}
-
-func nextActivityFilter(current ActivityKind) ActivityKind {
-	for i, k := range activityFilterOrder {
-		if k == current {
-			return activityFilterOrder[(i+1)%len(activityFilterOrder)]
-		}
-	}
-	return ""
-}
-
-// refreshVisible recomputes the cached visible sessions list.
-// Must be called whenever sessions, filters, search, or time window change.
+// refreshVisible recomputes the cached visible sessions list via the SessionManager.
 func (m *Model) refreshVisible() {
-	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
-	lowerQuery := strings.ToLower(m.searchQuery)
-	m.visible = m.visible[:0]
-	for _, s := range m.sessions {
-		if s.IsSidechain || !s.LastActivity.After(cutoff) {
-			continue
-		}
-		if m.activityFilter != "" && m.activityFor(s.SessionID) != m.activityFilter {
-			continue
-		}
-		if lowerQuery != "" &&
-			!strings.Contains(strings.ToLower(s.CWD), lowerQuery) {
-			continue
-		}
-		m.visible = append(m.visible, s)
-	}
+	m.manager.SetSearchQuery(m.searchQuery)
+	m.visible = m.manager.VisibleSessions()
 }
 
 func (m *Model) ensureListVisible() {
@@ -640,22 +579,22 @@ func (m Model) renderTitleBar() string {
 	count := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorSubtext).
 		Padding(0, 1).
-		Render(fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.windowMinutes))
+		Render(fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.manager.WindowMinutes()))
 
 	parts := []string{left, count}
 
-	if m.activityFilter != "" {
+	if af := m.manager.ActivityFilter(); af != "" {
 		filterBadge := lipgloss.NewStyle().
 			Background(colorPrimary).Foreground(colorWarning).Bold(true).
 			Padding(0, 1).
-			Render("▸ " + string(m.activityFilter))
+			Render("▸ " + string(af))
 		parts = append(parts, filterBadge)
 	}
 
 	refresh := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorMuted).
 		Padding(0, 1).
-		Render("updated " + formatDuration(time.Since(m.lastRefresh)))
+		Render("updated " + core.FormatDuration(time.Since(m.lastRefresh)))
 	parts = append(parts, refresh)
 
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
@@ -697,7 +636,7 @@ func (m Model) renderList(listW, innerH int) string {
 	if maxOff < 0 {
 		maxOff = 0
 	}
-	off := clamp(0, maxOff, m.listOffset)
+	off := core.Clamp(0, maxOff, m.listOffset)
 	end := off + vis
 	if end > len(sessions) {
 		end = len(sessions)
@@ -718,8 +657,8 @@ func (m Model) renderList(listW, innerH int) string {
 			Render("/ " + m.searchQuery + "█")
 	} else {
 		projectLabel := "PROJECT"
-		if m.activityFilter != "" {
-			projectLabel += " [" + string(m.activityFilter) + "]"
+		if af := m.manager.ActivityFilter(); af != "" {
+			projectLabel += " [" + string(af) + "]"
 		}
 		header = lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).
 			Render(fmt.Sprintf("%-*s %s", nameW+sparkW, projectLabel, "STATUS"))
@@ -743,26 +682,24 @@ func (m Model) renderList(listW, innerH int) string {
 }
 
 func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool) string {
-	activity := m.activityFor(s.SessionID)
+	activity := m.manager.ActivityFor(s.SessionID)
 	actColor, ok := activityColors[activity]
 	if !ok {
 		actColor = colorMuted
 	}
 
-	// Activity label with spinner for active states
-	actStr := padRight(string(activity), statusColW)
-	if isActiveActivity(activity) {
-		spin := string(spinnerFrames[m.spinFrame%len(spinnerFrames)])
-		actStr = spin + padRight(string(activity), statusColW-1)
+	actStr := core.PadRight(string(activity), statusColW)
+	if core.IsActiveActivity(activity) {
+		spin := string(core.SpinnerFrames[m.spinFrame%len(core.SpinnerFrames)])
+		actStr = spin + core.PadRight(string(activity), statusColW-1)
 	}
 
-	name := shortName(s.CWD, nameW)
-	name = padRight(name, nameW)
+	name := core.ShortName(s.CWD, nameW)
+	name = core.PadRight(name, nameW)
 
-	// Sparkline
 	var sparkStr string
 	if sparkW > 0 {
-		spark := renderSparkline(s.EntryTimestamps, time.Duration(m.windowMinutes)*time.Minute, sparkW-2)
+		spark := core.RenderSparkline(s.EntryTimestamps, time.Duration(m.manager.WindowMinutes())*time.Minute, sparkW-2)
 		sparkStr = " " + spark + " "
 	}
 
@@ -804,7 +741,7 @@ func (m Model) renderDetail(detailW, innerH int) string {
 	if maxOff < 0 {
 		maxOff = 0
 	}
-	off := clamp(0, maxOff, m.detailOffset)
+	off := core.Clamp(0, maxOff, m.detailOffset)
 	end := off + vis
 	if end > len(lines) {
 		end = len(lines)
@@ -819,12 +756,10 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	var lines []string
 	add := func(line string) { lines = append(lines, line) }
 
-	// CWD
 	add(lipgloss.NewStyle().Foreground(colorText).Bold(true).
-		Render(shortName(s.CWD, width-2)))
+		Render(core.ShortName(s.CWD, width-2)))
 
-	// Activity + current tool
-	activity := m.activityFor(s.SessionID)
+	activity := m.manager.ActivityFor(s.SessionID)
 	actColor := activityColors[activity]
 	statusLine := lipgloss.NewStyle().Foreground(actColor).Bold(true).Render("● ") +
 		lipgloss.NewStyle().Foreground(actColor).Bold(true).Render(string(activity))
@@ -863,7 +798,7 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 		wtStr = lipgloss.NewStyle().Foreground(colorAccent).Render("yes")
 		if s.MainRepo != "" {
 			wtStr += lipgloss.NewStyle().Foreground(colorSubtext).
-				Render(" (" + shortName(s.MainRepo, 28) + ")")
+				Render(" (" + core.ShortName(s.MainRepo, 28) + ")")
 		}
 	}
 	add(row("Worktree", wtStr))
@@ -871,15 +806,14 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	add(row("Messages", fmt.Sprintf("%d  (%d user, %d assistant)",
 		s.TotalMessages, s.UserMessages, s.AssistantMessages)))
 
-	// Token usage and cost
 	if s.InputTokens > 0 || s.OutputTokens > 0 {
 		cost := s.CostUSD
 		if cost == 0 {
-			cost = estimateCost(s.Model, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
+			cost = core.EstimateCost(s.Model, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
 		}
-		tokenInfo := formatTokens(s.InputTokens+s.CacheCreationTokens+s.CacheReadTokens) + " in / " + formatTokens(s.OutputTokens) + " out"
+		tokenInfo := core.FormatTokens(s.InputTokens+s.CacheCreationTokens+s.CacheReadTokens) + " in / " + core.FormatTokens(s.OutputTokens) + " out"
 		if cost > 0.001 {
-			tokenInfo += "  " + lipgloss.NewStyle().Foreground(colorAccent).Render(formatCost(cost))
+			tokenInfo += "  " + lipgloss.NewStyle().Foreground(colorAccent).Render(core.FormatCost(cost))
 		}
 		add(row("Tokens", tokenInfo))
 	}
@@ -887,19 +821,18 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	if len(s.RecentTools) > 0 {
 		last := s.RecentTools[len(s.RecentTools)-1]
 		add(row("Last operation", last.Name+"  "+
-			lipgloss.NewStyle().Foreground(colorMuted).Render("("+formatDuration(time.Since(last.Timestamp))+")")))
+			lipgloss.NewStyle().Foreground(colorMuted).Render("("+core.FormatDuration(time.Since(last.Timestamp))+")")))
 	} else {
-		add(row("Last operation", formatDuration(time.Since(s.LastActivity))))
+		add(row("Last operation", core.FormatDuration(time.Since(s.LastActivity))))
 	}
 
 	if s.LastFileWrite != "" {
-		agePart := " (" + formatDuration(time.Since(s.LastFileWriteAt)) + ")"
-		// width-2 for panel borders, -22 for label, -len(agePart) for the age suffix
+		agePart := " (" + core.FormatDuration(time.Since(s.LastFileWriteAt)) + ")"
 		maxFile := width - 2 - 22 - len(agePart)
 		if maxFile < 4 {
 			maxFile = 4
 		}
-		filePart := shortName(s.LastFileWrite, maxFile)
+		filePart := core.ShortName(s.LastFileWrite, maxFile)
 		add(row("Last file", filePart+lipgloss.NewStyle().Foreground(colorMuted).Render(agePart)))
 	}
 
@@ -924,7 +857,7 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 			} else if roleLabel == "user" {
 				roleLabel = "User"
 			}
-			role := padRight(roleLabel, 4)
+			role := core.PadRight(roleLabel, 4)
 			text := msg.Text
 			// Collapse newlines for single-line display
 			text = strings.ReplaceAll(text, "\n", " ")
@@ -947,7 +880,7 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 		}
 		for i := len(tools) - 1; i >= 0; i-- {
 			tc := tools[i]
-			ago := formatDuration(time.Since(tc.Timestamp))
+			ago := core.FormatDuration(time.Since(tc.Timestamp))
 			add(lipgloss.NewStyle().Foreground(colorPrimary).Render("  "+tc.Name) +
 				lipgloss.NewStyle().Foreground(colorMuted).Render("  "+ago))
 		}
@@ -995,154 +928,4 @@ func (m Model) renderHelp() string {
 	return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-func shortName(path string, maxLen int) string {
-	if maxLen <= 2 {
-		return ""
-	}
-	if len(path) <= maxLen {
-		return path
-	}
-	base := filepath.Base(path)
-	parent := filepath.Base(filepath.Dir(path))
-	short := parent + "/" + base
-	if len(short)+2 <= maxLen {
-		return "…/" + short
-	}
-	if len(base)+2 <= maxLen {
-		return "…/" + base
-	}
-	if maxLen > 3 {
-		return "…" + base[len(base)-(maxLen-1):]
-	}
-	return base[:maxLen]
-}
-
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s[:n]
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func formatDuration(d time.Duration) string {
-	if d < 0 {
-		d = 0
-	}
-	if d < time.Minute {
-		return fmt.Sprintf("%ds ago", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
-	}
-	if d < 24*time.Hour {
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
-}
-
-func clamp(lo, hi, v int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-var sparkBlocks = []rune{' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-
-func renderSparkline(timestamps []time.Time, window time.Duration, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(timestamps) == 0 {
-		return strings.Repeat(" ", width)
-	}
-
-	now := time.Now()
-	cutoff := now.Add(-window)
-	bucketDur := window / time.Duration(width)
-	if bucketDur <= 0 {
-		return strings.Repeat(" ", width)
-	}
-
-	buckets := make([]int, width)
-	for _, ts := range timestamps {
-		if ts.Before(cutoff) || ts.After(now) {
-			continue
-		}
-		idx := int(ts.Sub(cutoff) / bucketDur)
-		if idx >= width {
-			idx = width - 1
-		}
-		buckets[idx]++
-	}
-
-	maxVal := 0
-	for _, v := range buckets {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-
-	if maxVal == 0 {
-		return strings.Repeat(" ", width)
-	}
-
-	var sb strings.Builder
-	sb.Grow(width * 3)
-	for _, v := range buckets {
-		idx := v * 8 / maxVal
-		if idx > 8 {
-			idx = 8
-		}
-		sb.WriteRune(sparkBlocks[idx])
-	}
-	return sb.String()
-}
-
-// ── Spinner & cost helpers ────────────────────────────────────────────────────
-
-var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
-
-func formatTokens(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	if n < 1_000_000 {
-		return fmt.Sprintf("%.1fk", float64(n)/1000)
-	}
-	return fmt.Sprintf("%.2fM", float64(n)/1_000_000)
-}
-
-func formatCost(usd float64) string {
-	if usd < 0.01 {
-		return "<$0.01"
-	}
-	return fmt.Sprintf("$%.2f", usd)
-}
-
-func estimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheRead int) float64 {
-	var inputRate, outputRate float64
-	lowerModel := strings.ToLower(model)
-	switch {
-	case strings.Contains(lowerModel, "opus"):
-		inputRate, outputRate = 15.0/1_000_000, 75.0/1_000_000
-	case strings.Contains(lowerModel, "haiku"):
-		inputRate, outputRate = 1.0/1_000_000, 5.0/1_000_000
-	default: // sonnet and others
-		inputRate, outputRate = 3.0/1_000_000, 15.0/1_000_000
-	}
-	cacheWriteRate := inputRate * 1.25
-	cacheReadRate := inputRate * 0.1
-	return float64(inputTokens)*inputRate +
-		float64(cacheCreation)*cacheWriteRate +
-		float64(cacheRead)*cacheReadRate +
-		float64(outputTokens)*outputRate
-}
 
