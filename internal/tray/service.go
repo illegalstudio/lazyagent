@@ -4,8 +4,10 @@ package tray
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
+"strings"
 	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
@@ -233,23 +235,56 @@ func (s *SessionService) SetSearchQuery(q string) {
 }
 
 // OpenInEditor opens a directory in the user's editor.
+// It follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
+// $EDITOR is a terminal editor (opened inside a Terminal.app window).
+// The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
 func (s *SessionService) OpenInEditor(cwd string) {
 	cfg := core.LoadConfig()
-	editor := cfg.Editor
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
+
+	// Config editor and VISUAL: launch directly (GUI editor).
+	if editor := cfg.Editor; editor != "" {
+		launchGUI(editor, cwd)
 		return
 	}
+	if editor := os.Getenv("VISUAL"); editor != "" {
+		launchGUI(editor, cwd)
+		return
+	}
+
+	// EDITOR: open inside a terminal window.
+	if editor := os.Getenv("EDITOR"); editor != "" {
+		launchInTerminal(editor, cwd)
+		return
+	}
+}
+
+// launchGUI starts a GUI editor directly.
+func launchGUI(editor, cwd string) {
 	c := exec.Command(editor, cwd)
 	c.Stdin = nil
 	c.Stdout = nil
 	c.Stderr = nil
 	_ = c.Start()
+}
+
+// launchInTerminal opens a terminal editor inside a new macOS Terminal.app window.
+func launchInTerminal(editor, cwd string) {
+	script := fmt.Sprintf(`tell application "Terminal"
+	activate
+	do script "cd %s && %s"
+end tell`, shellQuote(cwd), shellQuote(editor))
+	c := exec.Command("osascript", "-e", script)
+	c.Stdin = nil
+	c.Stdout = nil
+	c.Stderr = nil
+	_ = c.Start()
+}
+
+// shellQuote returns a single-quoted string safe for embedding in AppleScript shell commands.
+func shellQuote(s string) string {
+	// Replace single quotes with '\'' (end quote, escaped quote, start quote).
+	quoted := "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return quoted
 }
 
 // GetConfig returns the current config.
