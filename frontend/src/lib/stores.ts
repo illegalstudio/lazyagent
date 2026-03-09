@@ -4,6 +4,7 @@ export interface SessionItem {
   sessionId: string;
   cwd: string;
   shortName: string;
+  customName: string;
   activity: string;
   isActive: boolean;
   model: string;

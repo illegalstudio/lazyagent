@@ -2,12 +2,48 @@
   import { sessions, selectedId, activityColor } from "./stores";
   import Sparkline from "./Sparkline.svelte";
   import ActivityBadge from "./ActivityBadge.svelte";
+  import * as SessionService from "../bindings/github.com/nahime0/lazyagent/internal/tray/sessionservice";
+
+  let renamingId = $state<string | null>(null);
+  let renameValue = $state("");
+  let renameInput = $state<HTMLInputElement | null>(null);
 
   function select(id: string) {
     $selectedId = id;
   }
 
+  function startRename(session: { sessionId: string; customName: string; shortName: string }) {
+    renamingId = session.sessionId;
+    renameValue = session.customName || "";
+    // Focus the input after it renders
+    requestAnimationFrame(() => renameInput?.focus());
+  }
+
+  function confirmRename() {
+    if (renamingId) {
+      SessionService.SetSessionName(renamingId, renameValue.trim()).catch(() => {});
+      renamingId = null;
+      renameValue = "";
+    }
+  }
+
+  function cancelRename() {
+    renamingId = null;
+    renameValue = "";
+  }
+
+  function handleRenameKey(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmRename();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelRename();
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    if (renamingId) return; // Don't navigate while renaming
     const list = $sessions;
     if (!list.length) return;
 
@@ -21,6 +57,10 @@
       e.preventDefault();
       const prev = Math.max(idx - 1, 0);
       $selectedId = list[prev].sessionId;
+    } else if (e.key === "r") {
+      e.preventDefault();
+      const session = list.find((s) => s.sessionId === $selectedId);
+      if (session) startRename(session);
     }
   }
 </script>
@@ -36,6 +76,7 @@
           ? 'bg-surface-hover border-accent'
           : 'border-transparent hover:bg-surface-hover/50'}"
       onclick={() => select(session.sessionId)}
+      ondblclick={() => startRename(session)}
     >
       <!-- Activity dot -->
       <span
@@ -46,9 +87,20 @@
 
       <!-- Name + sparkline -->
       <div class="flex-1 min-w-0">
-        <div class="truncate text-[13px] font-medium text-text">
-          {session.shortName}
-        </div>
+        {#if renamingId === session.sessionId}
+          <input
+            bind:this={renameInput}
+            bind:value={renameValue}
+            onkeydown={handleRenameKey}
+            onblur={confirmRename}
+            class="w-full bg-surface text-text text-[13px] font-medium px-1 py-0 rounded border border-accent outline-none"
+            placeholder={session.shortName}
+          />
+        {:else}
+          <div class="truncate text-[13px] font-medium text-text">
+            {session.customName || session.shortName}
+          </div>
+        {/if}
         <div class="mt-0.5">
           <Sparkline data={session.sparklineData} {color} width={100} height={16} />
         </div>

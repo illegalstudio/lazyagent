@@ -91,6 +91,7 @@ type SessionItem struct {
 	SessionID     string    `json:"sessionId"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"shortName"`
+	CustomName    string    `json:"customName"`
 	Activity      string    `json:"activity"`
 	IsActive      bool      `json:"isActive"`
 	Model         string    `json:"model"`
@@ -134,11 +135,12 @@ type ConversationItem struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
+func (s *SessionService) buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, nameLen),
+		CustomName:    s.manager.SessionName(sess.SessionID),
 		Activity:      string(activity),
 		IsActive:      core.IsActiveActivity(activity),
 		Model:         sess.Model,
@@ -157,7 +159,7 @@ func (s *SessionService) GetSessions() []SessionItem {
 	wm := s.manager.WindowMinutes()
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		items = append(items, buildSessionItem(sess, activity, wm, 40))
+		items = append(items, s.buildSessionItem(sess, activity, wm, 40))
 	}
 	return items
 }
@@ -190,7 +192,7 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 	}
 
 	return &SessionFull{
-		SessionItem:         buildSessionItem(sess, detail.Activity, wm, 60),
+		SessionItem:         s.buildSessionItem(sess, detail.Activity, wm, 60),
 		Version:             sess.Version,
 		IsWorktree:          sess.IsWorktree,
 		MainRepo:            sess.MainRepo,
@@ -293,6 +295,20 @@ func shellQuote(s string) string {
 	// Replace single quotes with '\'' (end quote, escaped quote, start quote).
 	quoted := "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 	return quoted
+}
+
+// GetSessionName returns the custom name for a session.
+func (s *SessionService) GetSessionName(sessionID string) string {
+	return s.manager.SessionName(sessionID)
+}
+
+// SetSessionName stores a custom name for a session. Empty name resets it.
+func (s *SessionService) SetSessionName(sessionID, name string) error {
+	err := s.manager.SetSessionName(sessionID, name)
+	if err == nil {
+		s.emitUpdate()
+	}
+	return err
 }
 
 // GetConfig returns the current config.

@@ -12,11 +12,41 @@
 
   let detail = $derived($selectedDetail);
   let color = $derived(detail ? activityColor(detail.activity) : "var(--color-activity-idle)");
+  let displayName = $derived(detail ? (detail.customName || detail.shortName) : "");
+
+  let renaming = $state(false);
+  let renameValue = $state("");
+  let renameInput = $state<HTMLInputElement | null>(null);
 
   function openEditor() {
     if (detail) {
       SessionService.OpenInEditor(detail.cwd).catch(() => {});
     }
+  }
+
+  function startRename() {
+    if (!detail) return;
+    renaming = true;
+    renameValue = detail.customName || "";
+    requestAnimationFrame(() => renameInput?.focus());
+  }
+
+  function confirmRename() {
+    if (detail && renaming) {
+      SessionService.SetSessionName(detail.sessionId, renameValue.trim()).catch(() => {});
+    }
+    renaming = false;
+    renameValue = "";
+  }
+
+  function cancelRename() {
+    renaming = false;
+    renameValue = "";
+  }
+
+  function handleRenameKey(e: KeyboardEvent) {
+    if (e.key === "Enter") { e.preventDefault(); confirmRename(); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
   }
 </script>
 
@@ -25,14 +55,38 @@
     <!-- Header -->
     <div>
       <div class="flex items-center justify-between gap-2">
-        <h2 class="text-[15px] font-semibold text-text truncate">{detail.shortName}</h2>
-        <button
-          class="shrink-0 rounded px-2 py-1 text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors no-drag"
-          onclick={openEditor}
-          title="Open in editor"
-        >
-          Open
-        </button>
+        {#if renaming}
+          <input
+            bind:this={renameInput}
+            bind:value={renameValue}
+            onkeydown={handleRenameKey}
+            onblur={confirmRename}
+            class="flex-1 min-w-0 bg-surface text-text text-[15px] font-semibold px-1 py-0 rounded border border-accent outline-none"
+            placeholder={detail.shortName}
+          />
+        {:else}
+          <h2
+            class="text-[15px] font-semibold text-text truncate cursor-pointer hover:text-accent transition-colors"
+            ondblclick={startRename}
+            title="Double-click to rename"
+          >{displayName}</h2>
+        {/if}
+        <div class="flex gap-1 shrink-0">
+          <button
+            class="rounded px-2 py-1 text-[11px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
+            onclick={startRename}
+            title="Rename session"
+          >
+            Rename
+          </button>
+          <button
+            class="rounded px-2 py-1 text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors no-drag"
+            onclick={openEditor}
+            title="Open in editor"
+          >
+            Open
+          </button>
+        </div>
       </div>
       <div class="flex items-center gap-2 mt-1">
         <ActivityBadge activity={detail.activity} isActive={detail.isActive} />
