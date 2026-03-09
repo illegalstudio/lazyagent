@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/nahime0/lazyagent/internal/api"
 	"github.com/nahime0/lazyagent/internal/tray"
 	"github.com/nahime0/lazyagent/internal/ui"
 )
@@ -17,19 +20,24 @@ import (
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
 func main() {
-	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app (detaches automatically)")
+	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app")
 	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
+	apiMode := flag.Bool("api", false, "Start the API server")
+	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
 	demoMode := flag.Bool("demo", false, "Use generated fake data instead of real Claude sessions")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running Claude Code sessions
 
 Usage:
-  lazyagent                Launch the terminal UI
-  lazyagent --tui          Launch the terminal UI (explicit)
-  lazyagent --tray         Launch as macOS menu bar app (detaches automatically)
-  lazyagent --tui --tray   Launch both TUI and tray app
-  lazyagent --demo         Launch with fake data (for screenshots)
+  lazyagent                     Launch the terminal UI (default)
+  lazyagent --api               Start the API server (http://127.0.0.1:7421)
+  lazyagent --api --host :7421  Start the API server on custom address
+  lazyagent --tui --api         Launch TUI + API server
+  lazyagent --tray              Launch as macOS menu bar app (detaches)
+  lazyagent --tray --api        Launch tray + API server (foreground)
+  lazyagent --tui --tray --api  Launch everything
+  lazyagent --demo              Launch with fake data (for screenshots)
 
 Flags:
 `)
@@ -47,9 +55,10 @@ More info: https://github.com/illegalstudio/lazyagent
 
 	flag.Parse()
 
-	// Default: TUI if no flags given.
-	runTUI := *tuiMode || !*trayMode
+	runAPI := *apiMode
 	runTray := *trayMode
+	// Default: TUI if no other mode explicitly requested.
+	runTUI := *tuiMode || (!runTray && !runAPI)
 
 	if runTray {
 		if !tray.Available() {
@@ -57,38 +66,50 @@ More info: https://github.com/illegalstudio/lazyagent
 			os.Exit(1)
 		}
 
-		// If not already detached, kill previous instance and re-launch tray in background.
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
-			killPreviousTray()
-
-			exe, err := os.Executable()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			trayArgs := []string{"--tray"}
-			if *demoMode {
-				trayArgs = append(trayArgs, "--demo")
-			}
-			cmd := exec.Command(exe, trayArgs...)
-			cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
-			cmd.Stdin = nil
-			cmd.Stdout = nil
-			cmd.Stderr = nil
-			if err := cmd.Start(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			// If also running TUI, fall through; otherwise exit.
-			if !runTUI {
+			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
+			forkTray(*demoMode)
+			if !runTUI && !runAPI {
 				return
 			}
 		} else {
-			// Detached tray process: write PID file and run.
+			// Detached tray process.
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
 			if err := tray.Run(*demoMode); err != nil {
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
+	// Set up signal handling for graceful shutdown.
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	var apiDone chan struct{}
+
+	if runAPI {
+		srv, err := api.New(*apiHost, *demoMode)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if runTUI {
+			// API in background, TUI in foreground.
+			apiDone = make(chan struct{})
+			go func() {
+				defer close(apiDone)
+				if err := srv.Run(ctx); err != nil {
+					fmt.Fprintf(os.Stderr, "API error: %v\n", err)
+				}
+			}()
+		} else {
+			// API only (no tray, no TUI): block until signal.
+			if err := srv.Run(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			return
@@ -106,6 +127,36 @@ More info: https://github.com/illegalstudio/lazyagent
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+		// TUI exited: cancel ctx to stop API server, then wait for graceful shutdown.
+		cancel()
+		if apiDone != nil {
+			<-apiDone
+		}
+	}
+}
+
+// forkTray launches the tray as a detached background process with its own main thread.
+func forkTray(demoMode bool) {
+	killPreviousTray()
+
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	trayArgs := []string{"--tray"}
+	if demoMode {
+		trayArgs = append(trayArgs, "--demo")
+	}
+	cmd := exec.Command(exe, trayArgs...)
+	cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 

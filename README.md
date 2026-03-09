@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI and macOS menu bar app for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
 ### Terminal UI
 ![lazyagent TUI](assets/screenshot.png)
@@ -42,19 +42,19 @@ It also surfaces:
 | Last 20 tools used | JSONL |
 | Last activity timestamp | JSONL |
 
-## Two interfaces, one binary
+## Three interfaces, one binary
 
-lazyagent ships as a single binary with two interfaces:
+lazyagent ships as a single binary with three interfaces:
 
-| | TUI | macOS Menu Bar |
-|---|---|---|
-| Interface | Terminal (bubbletea) | Native menu bar panel (Wails v3 + Svelte 5) |
-| Launch | `lazyagent` | `lazyagent --tray` |
-| Dock icon | N/A | Hidden (accessory) |
-| Sparkline | Unicode braille characters | SVG area chart |
-| Theme | Terminal colors | Catppuccin Mocha (Tailwind 4) |
+| | TUI | macOS Menu Bar | HTTP API |
+|---|---|---|---|
+| Interface | Terminal (bubbletea) | Native menu bar panel (Wails v3 + Svelte 5) | REST + SSE |
+| Launch | `lazyagent` | `lazyagent --tray` | `lazyagent --api` |
+| Dock icon | N/A | Hidden (accessory) | N/A |
+| Sparkline | Unicode braille characters | SVG area chart | JSON data |
+| Theme | Terminal colors | Catppuccin Mocha (Tailwind 4) | N/A |
 
-Both share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config. You can run both simultaneously with `lazyagent --tui --tray`.
+All three share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config. You can combine them freely: `lazyagent --tui --tray --api`.
 
 ## Install
 
@@ -92,11 +92,14 @@ On first launch, macOS may block the binary. Go to **System Settings → Privacy
 ## Usage
 
 ```
-lazyagent                Launch the terminal UI
-lazyagent --tui          Launch the terminal UI (explicit)
-lazyagent --tray         Launch as macOS menu bar app (detaches automatically)
-lazyagent --tui --tray   Launch both TUI and tray app
-lazyagent --help         Show help
+lazyagent                        Launch the terminal UI (default)
+lazyagent --api                  Start the HTTP API (http://127.0.0.1:7421)
+lazyagent --api --host :8080     Start the HTTP API on a custom address
+lazyagent --tui --api            Launch TUI + API server
+lazyagent --tray                 Launch as macOS menu bar app (detaches)
+lazyagent --tray --api           Launch tray + API server (foreground)
+lazyagent --tui --tray --api     Launch everything
+lazyagent --help                 Show help
 ```
 
 ### TUI
@@ -140,6 +143,31 @@ The tray process detaches automatically — your terminal returns immediately. T
 - **Show Panel** — open the session panel
 - **Refresh Now** — force reload all sessions
 - **Quit** — exit the app
+
+### HTTP API
+
+```
+lazyagent --api
+```
+
+Starts a read-only HTTP API server on `http://127.0.0.1:7421` (default port, with automatic fallback if busy).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api` | Interactive playground (open in browser) |
+| `GET /api/sessions` | List visible sessions (`?search=`, `?filter=`) |
+| `GET /api/sessions/{id}` | Full session detail |
+| `GET /api/stats` | Summary stats (total, active, window) |
+| `GET /api/config` | Current configuration |
+| `GET /api/events` | SSE stream for real-time updates |
+
+To expose on the network (e.g. for a mobile app):
+
+```bash
+lazyagent --api --host 0.0.0.0:7421
+```
+
+Full API documentation: [docs/API.md](docs/API.md)
 
 ### Editor support
 
@@ -186,10 +214,11 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
 
 ```
 lazyagent/
-├── main.go                     # Entry point: dispatches --tui / --tray / both
+├── main.go                     # Entry point: dispatches --tui / --tray / --api
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
 │   ├── claude/                 # JSONL parsing, types, session discovery
+│   ├── api/                    # HTTP API server (REST + SSE)
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss)
 │   ├── tray/                   # macOS menu bar app (Wails v3, build-tagged)
 │   └── assets/                 # Embedded frontend dist (go:embed)
@@ -199,6 +228,8 @@ lazyagent/
 │   │   ├── lib/                # SessionList, SessionDetail, Sparkline, ActivityBadge
 │   │   └── bindings/           # Auto-generated Wails TypeScript bindings
 │   └── app.css                 # Tailwind 4 @theme (Catppuccin Mocha)
+├── docs/                       # Documentation
+│   └── API.md                  # Full HTTP API reference
 └── Makefile
 ```
 
@@ -267,8 +298,16 @@ make clean
 - [ ] DMG distribution
 - [ ] Homebrew cask
 
+### v0.4 — HTTP API
+- [x] REST API server (`--api` flag)
+- [x] Session list, detail, stats, config endpoints
+- [x] Server-Sent Events (SSE) for real-time push updates
+- [x] Interactive API playground (`/api` in browser)
+- [x] Default port with automatic fallback (7421–7431)
+- [x] Custom bind address (`--host`)
+- [x] Combinable with TUI and tray (`--tui --tray --api`)
+
 ### Future ideas
-- [ ] HTTP API with SSE streaming
 - [ ] Outbound webhooks on status changes
 - [ ] Multi-machine support via shared config / remote API
 - [ ] TUI actions: kill session, attach terminal
