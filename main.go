@@ -60,60 +60,24 @@ More info: https://github.com/illegalstudio/lazyagent
 	// Default: TUI if no other mode explicitly requested.
 	runTUI := *tuiMode || (!runTray && !runAPI)
 
-	// When --api is active, the process stays in foreground (no detach).
-	foreground := runAPI || runTUI
-
 	if runTray {
 		if !tray.Available() {
 			fmt.Fprintln(os.Stderr, "Error: --tray is not available in this build")
 			os.Exit(1)
 		}
 
-		if !foreground {
-			// Tray-only: detach to background.
-			if os.Getenv("LAZYAGENT_DETACHED") == "" {
-				forkTray(*demoMode)
+		if os.Getenv("LAZYAGENT_DETACHED") == "" {
+			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
+			forkTray(*demoMode)
+			if !runTUI && !runAPI {
 				return
 			}
-
+		} else {
 			// Detached tray process.
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
 			if err := tray.Run(*demoMode); err != nil {
-				os.Exit(1)
-			}
-			return
-		}
-
-		if runTUI {
-			// --tui --tray [--api]: tray needs its own main thread (macOS Cocoa),
-			// so fork it as a separate detached process.
-			forkTray(*demoMode)
-		} else {
-			// --tray --api (no TUI): tray on main thread, API in goroutine.
-			killPreviousTray()
-			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
-
-			if runAPI {
-				ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-				defer cancel()
-
-				srv, err := api.New(*apiHost, *demoMode)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
-				}
-				go func() {
-					if err := srv.Run(ctx); err != nil {
-						fmt.Fprintf(os.Stderr, "API error: %v\n", err)
-					}
-				}()
-			}
-
-			defer os.Remove(trayPidFile)
-			if err := tray.Run(*demoMode); err != nil {
-				fmt.Fprintf(os.Stderr, "Tray error: %v\n", err)
 				os.Exit(1)
 			}
 			return
