@@ -264,6 +264,48 @@ func TestParsePiJSONL_AgentField(t *testing.T) {
 	}
 }
 
+func TestDiscoverSessions_RealData(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home directory")
+	}
+	sessionsDir := filepath.Join(home, ".pi", "agent", "sessions")
+	if _, err := os.Stat(sessionsDir); os.IsNotExist(err) {
+		t.Skip("no pi sessions directory found")
+	}
+
+	sessions, err := DiscoverSessions()
+	if err != nil {
+		t.Fatalf("DiscoverSessions failed: %v", err)
+	}
+
+	t.Logf("Found %d pi sessions", len(sessions))
+	for i, s := range sessions {
+		if i >= 5 {
+			t.Logf("  ... and %d more", len(sessions)-5)
+			break
+		}
+		sid := s.SessionID
+		if len(sid) > 16 {
+			sid = sid[:16]
+		}
+		t.Logf("  Session: %s | CWD: %s | Model: %s | Status: %s | Msgs: %d | Cost: $%.4f | Agent: %s",
+			sid, s.CWD, s.Model, s.Status, s.TotalMessages, s.CostUSD, s.Agent)
+	}
+
+	if len(sessions) == 0 {
+		t.Log("Warning: no sessions found, but discovery succeeded")
+		return
+	}
+
+	// Verify all sessions have Agent = "pi"
+	for _, s := range sessions {
+		if s.Agent != "pi" {
+			t.Errorf("session %s has Agent = %q, want 'pi'", s.SessionID, s.Agent)
+		}
+	}
+}
+
 func TestParsePiJSONL_CostAndTokens(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl",
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
