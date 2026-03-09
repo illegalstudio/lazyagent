@@ -12,6 +12,7 @@ import (
 
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/nahime0/lazyagent/internal/demo"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -35,9 +36,15 @@ type Server struct {
 // New creates a new API server.
 // If host is non-empty it binds to that address (e.g. ":7421" or "0.0.0.0:7421").
 // If host is empty it binds to 127.0.0.1 on DefaultPort with fallback.
-func New(host string) (*Server, error) {
+func New(host string, demoMode bool) (*Server, error) {
 	cfg := core.LoadConfig()
-	manager := core.NewSessionManager(cfg.WindowMinutes, core.LiveProvider{})
+	var provider core.SessionProvider
+	if demoMode {
+		provider = demo.Provider{}
+	} else {
+		provider = core.LiveProvider{}
+	}
+	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 
 	s := &Server{
 		manager: manager,

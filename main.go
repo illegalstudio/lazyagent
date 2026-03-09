@@ -120,7 +120,7 @@ More info: https://github.com/illegalstudio/lazyagent
 	defer cancel()
 
 	if runAPI {
-		srv, err := api.New(*apiHost)
+		srv, err := api.New(*apiHost, *demoMode)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)

@@ -13,7 +13,7 @@ import (
 
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
-	srv, err := New(":0")
+	srv, err := New(":0", false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
