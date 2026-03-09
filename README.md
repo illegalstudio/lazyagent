@@ -7,10 +7,13 @@
 A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
 ### Terminal UI
-![lazyagent TUI](assets/screenshot.png)
+![lazyagent TUI](assets/tui.png)
 
 ### macOS Menu Bar App
 ![lazyagent macOS tray](assets/tray.png)
+
+### HTTP API
+![lazyagent API playground](assets/api.png)
 
 ## How it works
 
