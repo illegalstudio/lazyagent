@@ -41,6 +41,7 @@ It also surfaces:
 | Recent conversation (last 5 messages) | JSONL |
 | Last 20 tools used | JSONL |
 | Last activity timestamp | JSONL |
+| Custom session name | `~/.config/lazyagent/session-names.json` |
 
 ## Three interfaces, one binary
 
@@ -115,7 +116,7 @@ lazyagent --help                 Show help
 | `f` | Cycle activity filter |
 | `/` | Search sessions by project path |
 | `o` | Open session CWD in editor (see below) |
-| `r` | Force refresh |
+| `r` | Rename session (empty name resets) |
 | `q` / `ctrl+c` | Quit |
 
 ### macOS Menu Bar App
@@ -135,7 +136,7 @@ The tray process detaches automatically — your terminal returns immediately. T
 | `+` / `-` | Adjust time window (±10 minutes) |
 | `f` | Cycle activity filter |
 | `/` | Search sessions |
-| `r` | Force refresh |
+| `r` | Rename session (empty name resets) |
 | `esc` | Close detail / dismiss search |
 
 #### Right-click menu
@@ -157,6 +158,8 @@ Starts a read-only HTTP API server on `http://127.0.0.1:7421` (default port, wit
 | `GET /api` | Interactive playground (open in browser) |
 | `GET /api/sessions` | List visible sessions (`?search=`, `?filter=`) |
 | `GET /api/sessions/{id}` | Full session detail |
+| `PUT /api/sessions/{id}/name` | Rename session (`{"name": "..."}`, empty resets) |
+| `DELETE /api/sessions/{id}/name` | Remove custom name |
 | `GET /api/stats` | Summary stats (total, active, window) |
 | `GET /api/config` | Current configuration |
 | `GET /api/events` | SSE stream for real-time updates |
@@ -280,6 +283,7 @@ make clean
 - [x] Token usage and cost estimation in detail panel
 - [x] Animated braille spinner for active sessions
 - [x] `o` key to open session CWD in editor
+- [x] Rename sessions with persistent custom names (`r` key)
 - [ ] Display file diff for last written file
 
 ### v0.3 — macOS menu bar app
@@ -306,6 +310,7 @@ make clean
 - [x] Default port with automatic fallback (7421–7431)
 - [x] Custom bind address (`--host`)
 - [x] Combinable with TUI and tray (`--tui --tray --api`)
+- [x] Session rename endpoints (`PUT`/`DELETE /api/sessions/{id}/name`)
 
 ### Future ideas
 - [ ] Outbound webhooks on status changes
