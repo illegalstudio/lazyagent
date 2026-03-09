@@ -207,6 +207,37 @@ func (m *SessionManager) VisibleSessions() []*claude.Session {
 	return visible
 }
 
+// QuerySessions returns sessions filtered by time window, activity, and search query
+// without mutating any shared state. Safe for concurrent use from API handlers.
+func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*claude.Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
+	lowerQuery := strings.ToLower(search)
+	var visible []*claude.Session
+	for _, s := range m.sessions {
+		if s.IsSidechain || !s.LastActivity.After(cutoff) {
+			continue
+		}
+		af := filter
+		if af == "" {
+			af = m.activityFilter
+		}
+		if af != "" && m.tracker.Get(s.SessionID) != af {
+			continue
+		}
+		sq := lowerQuery
+		if sq == "" {
+			sq = strings.ToLower(m.searchQuery)
+		}
+		if sq != "" && !strings.Contains(strings.ToLower(s.CWD), sq) {
+			continue
+		}
+		visible = append(visible, s)
+	}
+	return visible
+}
+
 // SessionDetail returns the full detail view for a session.
 func (m *SessionManager) SessionDetail(id string) *SessionDetailView {
 	m.mu.RLock()

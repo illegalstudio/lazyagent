@@ -186,24 +186,13 @@ func (s *Server) routes() {
 
 func (s *Server) handleGetSessions(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
-	filter := r.URL.Query().Get("filter")
+	filter := core.ActivityKind(r.URL.Query().Get("filter"))
 
-	if search != "" {
-		s.manager.SetSearchQuery(search)
-		defer s.manager.SetSearchQuery("")
-	}
-	if filter != "" {
-		old := s.manager.ActivityFilter()
-		s.manager.SetActivityFilter(core.ActivityKind(filter))
-		defer s.manager.SetActivityFilter(old)
-	}
-
-	visible := s.manager.VisibleSessions()
-	wm := s.manager.WindowMinutes()
+	visible := s.manager.QuerySessions(search, filter)
 	items := make([]SessionItem, 0, len(visible))
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		items = append(items, buildSessionItem(sess, activity, wm))
+		items = append(items, buildSessionItem(sess, activity))
 	}
 	writeJSON(w, http.StatusOK, items)
 }
@@ -215,8 +204,7 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
 		return
 	}
-	wm := s.manager.WindowMinutes()
-	writeJSON(w, http.StatusOK, buildSessionFull(detail, wm))
+	writeJSON(w, http.StatusOK, buildSessionFull(detail))
 }
 
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -268,13 +256,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 	visible := s.manager.VisibleSessions()
-	wm := s.manager.WindowMinutes()
 
 	items := make([]SessionItem, 0, len(visible))
 	activeCount := 0
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		items = append(items, buildSessionItem(sess, activity, wm))
+		items = append(items, buildSessionItem(sess, activity))
 		if core.IsActiveActivity(activity) {
 			activeCount++
 		}
@@ -285,7 +272,7 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 		Stats: StatsResponse{
 			TotalSessions:  len(visible),
 			ActiveSessions: activeCount,
-			WindowMinutes:  wm,
+			WindowMinutes:  s.manager.WindowMinutes(),
 		},
 	}
 
@@ -357,7 +344,7 @@ type SSEPayload struct {
 
 // --- Builders ---
 
-func buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int) SessionItem {
+func buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		CWD:           sess.CWD,
@@ -372,7 +359,7 @@ func buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int) 
 	}
 }
 
-func buildSessionFull(detail *core.SessionDetailView, wm int) SessionFull {
+func buildSessionFull(detail *core.SessionDetailView) SessionFull {
 	sess := &detail.Session
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
 	for _, t := range sess.RecentTools {
@@ -390,7 +377,7 @@ func buildSessionFull(detail *core.SessionDetailView, wm int) SessionFull {
 		})
 	}
 	return SessionFull{
-		SessionItem:         buildSessionItem(sess, detail.Activity, wm),
+		SessionItem:         buildSessionItem(sess, detail.Activity),
 		Version:             sess.Version,
 		IsWorktree:          sess.IsWorktree,
 		MainRepo:            sess.MainRepo,
