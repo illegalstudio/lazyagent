@@ -81,14 +81,26 @@ func EffectiveCost(model string, costUSD float64, inputTokens, outputTokens, cac
 }
 
 // EstimateCost estimates API cost based on model and token counts.
+// Supports Anthropic (Claude), Google (Gemini), and OpenAI (GPT) model families.
 func EstimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheRead int) float64 {
 	var inputRate, outputRate float64
 	lowerModel := strings.ToLower(model)
 	switch {
+	// Anthropic
 	case strings.Contains(lowerModel, "opus"):
 		inputRate, outputRate = 15.0/1_000_000, 75.0/1_000_000
 	case strings.Contains(lowerModel, "haiku"):
 		inputRate, outputRate = 1.0/1_000_000, 5.0/1_000_000
+	// Google Gemini
+	case strings.Contains(lowerModel, "gemini"):
+		inputRate, outputRate = 2.0/1_000_000, 10.0/1_000_000
+	// OpenAI
+	case strings.Contains(lowerModel, "gpt-4o"):
+		inputRate, outputRate = 2.5/1_000_000, 10.0/1_000_000
+	case strings.Contains(lowerModel, "gpt-4"):
+		inputRate, outputRate = 10.0/1_000_000, 30.0/1_000_000
+	case strings.Contains(lowerModel, "gpt-5"):
+		inputRate, outputRate = 2.5/1_000_000, 10.0/1_000_000
 	default: // sonnet and others
 		inputRate, outputRate = 3.0/1_000_000, 15.0/1_000_000
 	}
