@@ -213,7 +213,7 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
-	visible := s.manager.VisibleSessions()
+	visible := s.manager.QuerySessions("", "")
 	activeCount := 0
 	for _, sess := range visible {
 		if core.IsActiveActivity(s.manager.ActivityFor(sess.SessionID)) {
@@ -260,7 +260,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
-	visible := s.manager.VisibleSessions()
+	visible := s.manager.QuerySessions("", "")
 
 	items := make([]SessionItem, 0, len(visible))
 	activeCount := 0

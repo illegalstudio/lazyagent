@@ -185,34 +185,26 @@ func (m *SessionManager) Sessions() []*claude.Session {
 	return m.sessions
 }
 
-// VisibleSessions returns sessions filtered by time window, activity, and search query.
+// VisibleSessions returns sessions filtered by the manager's internal state
+// (time window, activity filter, search query). Used by TUI and tray.
 func (m *SessionManager) VisibleSessions() []*claude.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
-	lowerQuery := strings.ToLower(m.searchQuery)
-	var visible []*claude.Session
-	for _, s := range m.sessions {
-		if s.IsSidechain || !s.LastActivity.After(cutoff) {
-			continue
-		}
-		if m.activityFilter != "" && m.tracker.Get(s.SessionID) != m.activityFilter {
-			continue
-		}
-		if lowerQuery != "" && !strings.Contains(strings.ToLower(s.CWD), lowerQuery) {
-			continue
-		}
-		visible = append(visible, s)
-	}
-	return visible
+	return m.filterSessionsLocked(m.searchQuery, m.activityFilter)
 }
 
-// QuerySessions returns sessions filtered by time window, activity, and search query
-// without mutating any shared state. Safe for concurrent use from API handlers.
-// Empty search/filter means no filtering (does NOT fall back to manager's internal state).
+// QuerySessions returns sessions filtered by explicit parameters without using
+// the manager's internal filter/search state. Safe for concurrent API use.
+// Empty search/filter means no filtering.
 func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*claude.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.filterSessionsLocked(search, filter)
+}
+
+// filterSessionsLocked applies time window, activity, and search filters.
+// Must be called with m.mu held (at least RLock).
+func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind) []*claude.Session {
 	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
 	lowerQuery := strings.ToLower(search)
 	var visible []*claude.Session
