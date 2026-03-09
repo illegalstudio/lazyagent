@@ -54,7 +54,7 @@ func New(host string, demoMode bool) (*Server, error) {
 	s.mux = http.NewServeMux()
 	s.routes()
 	s.srv = &http.Server{
-		Handler:           s.mux,
+		Handler:           corsMiddleware(s.mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB
@@ -175,6 +175,21 @@ func (s *Server) notifySSE() {
 		default:
 		}
 	}
+}
+
+// --- CORS ---
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // --- Routes ---
