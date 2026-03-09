@@ -25,6 +25,8 @@ type SessionProvider interface {
 	// RefreshInterval returns how often UpdateActivities should re-discover sessions,
 	// or 0 to never re-discover (only on explicit Reload or watcher events).
 	RefreshInterval() time.Duration
+	// WatchDirs returns directories to watch for file system changes.
+	WatchDirs() []string
 }
 
 // SessionDetailView is the full struct for a detail panel.

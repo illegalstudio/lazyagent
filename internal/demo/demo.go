@@ -17,6 +17,7 @@ func (Provider) DiscoverSessions() ([]*claude.Session, error) {
 
 func (Provider) UseWatcher() bool               { return false }
 func (Provider) RefreshInterval() time.Duration { return 30 * time.Second }
+func (Provider) WatchDirs() []string            { return nil }
 
 // project templates for realistic-looking demo sessions.
 var projects = []struct {
