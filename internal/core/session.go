@@ -106,6 +106,13 @@ func (m *SessionManager) Reload() error {
 	}
 	m.mu.Lock()
 	m.sessions = sessions
+	// Auto-populate session names from embedded names (e.g., pi session_info)
+	// without overwriting user-set names.
+	for _, s := range sessions {
+		if s.Name != "" && m.names.Get(s.SessionID) == "" {
+			_ = m.names.Set(s.SessionID, s.Name)
+		}
+	}
 	m.tracker.Update(sessions, time.Now())
 	SortSessions(m.sessions)
 	m.lastDiscover = time.Now()

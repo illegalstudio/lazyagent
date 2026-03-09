@@ -251,6 +251,36 @@ func TestParsePiJSONL_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestParsePiJSONL_SessionInfoName(t *testing.T) {
+	path := writeTempJSONL(t, "test.jsonl",
+		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
+{"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1741514401000}}
+{"type":"session_info","id":"si1","parentId":"m1","timestamp":"2026-03-09T10:00:05.000Z","name":"Refactor auth module"}
+`)
+	session, err := ParsePiJSONL(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if session.Name != "Refactor auth module" {
+		t.Errorf("Name = %q, want 'Refactor auth module'", session.Name)
+	}
+}
+
+func TestParsePiJSONL_SessionInfoName_UsesLatest(t *testing.T) {
+	path := writeTempJSONL(t, "test.jsonl",
+		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
+{"type":"session_info","id":"si1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","name":"First name"}
+{"type":"session_info","id":"si2","parentId":"si1","timestamp":"2026-03-09T10:00:05.000Z","name":"Updated name"}
+`)
+	session, err := ParsePiJSONL(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if session.Name != "Updated name" {
+		t.Errorf("Name = %q, want 'Updated name'", session.Name)
+	}
+}
+
 func TestParsePiJSONL_AgentField(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl",
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}

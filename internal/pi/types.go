@@ -26,6 +26,9 @@ type piEntry struct {
 
 	// thinking_level_change fields
 	ThinkingLevel string `json:"thinkingLevel"`
+
+	// session_info fields
+	Name string `json:"name"`
 }
 
 // piMessage represents a message within a pi entry.

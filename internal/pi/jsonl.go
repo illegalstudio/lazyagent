@@ -67,6 +67,11 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 				session.LastSummaryAt = ts
 			}
 
+		case "session_info":
+			if e.Name != "" {
+				session.Name = e.Name
+			}
+
 		case "message":
 			if e.Message == nil {
 				continue

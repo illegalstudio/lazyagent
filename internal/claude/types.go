@@ -92,4 +92,5 @@ type Session struct {
 
 	// Agent identity
 	Agent string // "claude" or "pi" — which coding agent produced this session
+	Name  string // session display name (from pi session_info or custom)
 }
