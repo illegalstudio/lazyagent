@@ -16,6 +16,17 @@ const (
 	MaxWindowMinutes = 480
 )
 
+// SessionProvider abstracts how sessions are discovered.
+type SessionProvider interface {
+	// DiscoverSessions returns all available sessions.
+	DiscoverSessions() ([]*claude.Session, error)
+	// UseWatcher returns whether a file system watcher should be started.
+	UseWatcher() bool
+	// RefreshInterval returns how often UpdateActivities should re-discover sessions,
+	// or 0 to never re-discover (only on explicit Reload or watcher events).
+	RefreshInterval() time.Duration
+}
+
 // SessionDetailView is the full struct for a detail panel.
 type SessionDetailView struct {
 	claude.Session
@@ -28,22 +39,28 @@ type SessionManager struct {
 	sessions []*claude.Session
 	tracker  *ActivityTracker
 	watcher  *ProjectWatcher
+	provider SessionProvider
 
 	windowMinutes  int
 	activityFilter ActivityKind
 	searchQuery    string
+	lastDiscover   time.Time
 }
 
-// NewSessionManager creates a new SessionManager.
-func NewSessionManager(windowMinutes int) *SessionManager {
+// NewSessionManager creates a new SessionManager with the given provider.
+func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionManager {
 	return &SessionManager{
 		tracker:       NewActivityTracker(),
 		windowMinutes: windowMinutes,
+		provider:      provider,
 	}
 }
 
-// StartWatcher starts the file system watcher. Returns nil if the directory doesn't exist.
+// StartWatcher starts the file system watcher if the provider supports it.
 func (m *SessionManager) StartWatcher() error {
+	if !m.provider.UseWatcher() {
+		return nil
+	}
 	w, err := NewProjectWatcher()
 	if err != nil {
 		return err
@@ -67,9 +84,9 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 	return nil
 }
 
-// Reload discovers sessions from disk and updates activity states.
+// Reload discovers sessions via the provider and updates activity states.
 func (m *SessionManager) Reload() error {
-	sessions, err := claude.DiscoverSessions()
+	sessions, err := m.provider.DiscoverSessions()
 	if err != nil {
 		return err
 	}
@@ -77,13 +94,33 @@ func (m *SessionManager) Reload() error {
 	m.sessions = sessions
 	m.tracker.Update(sessions, time.Now())
 	SortSessions(m.sessions)
+	m.lastDiscover = time.Now()
 	m.mu.Unlock()
 	return nil
 }
 
 // UpdateActivities refreshes activity states without reloading from disk.
 // Returns true if any activity state changed.
+// If the provider specifies a RefreshInterval, sessions are re-discovered periodically.
 func (m *SessionManager) UpdateActivities() bool {
+	if interval := m.provider.RefreshInterval(); interval > 0 {
+		now := time.Now()
+		m.mu.RLock()
+		needsRefresh := len(m.sessions) == 0 || now.Sub(m.lastDiscover) > interval
+		m.mu.RUnlock()
+		if needsRefresh {
+			sessions, err := m.provider.DiscoverSessions()
+			if err == nil {
+				m.mu.Lock()
+				m.sessions = sessions
+				m.tracker.Update(sessions, now)
+				SortSessions(m.sessions)
+				m.lastDiscover = now
+				m.mu.Unlock()
+				return true
+			}
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	old := make(map[string]ActivityKind, len(m.sessions))
