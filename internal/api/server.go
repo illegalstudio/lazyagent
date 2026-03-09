@@ -52,7 +52,12 @@ func New(host string, demoMode bool) (*Server, error) {
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
-	s.srv = &http.Server{Handler: s.mux}
+	s.srv = &http.Server{
+		Handler:           s.mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
+	}
 
 	ln, err := listen(host)
 	if err != nil {
