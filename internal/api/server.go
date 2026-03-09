@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -223,12 +224,13 @@ func (s *Server) handleSetSessionName(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	if err := s.manager.SetSessionName(id, body.Name); err != nil {
+	name := strings.TrimSpace(body.Name)
+	if err := s.manager.SetSessionName(id, name); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	s.notifySSE()
-	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": body.Name})
+	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": name})
 }
 
 func (s *Server) handleDeleteSessionName(w http.ResponseWriter, r *http.Request) {
