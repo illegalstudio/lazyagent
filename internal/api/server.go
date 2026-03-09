@@ -281,7 +281,11 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 		},
 	}
 
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("SSE: marshal error: %v", err)
+		return
+	}
 	fmt.Fprintf(w, "event: update\ndata: %s\n\n", data)
 	flusher.Flush()
 }
