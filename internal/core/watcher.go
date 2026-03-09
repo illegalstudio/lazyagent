@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/nahime0/lazyagent/internal/claude"
 )
 
 // ProjectWatcher watches ~/.claude/projects for JSONL changes using FSEvents.
@@ -18,36 +17,40 @@ type ProjectWatcher struct {
 	done   chan struct{}
 }
 
-// NewProjectWatcher starts an FSEvents watcher on ~/.claude/projects.
-// Returns nil (no error) if the directory doesn't exist yet.
-func NewProjectWatcher() (*ProjectWatcher, error) {
+// NewProjectWatcher starts an FSEvents watcher on the given directories.
+// Returns nil (no error) if none of the directories exist.
+func NewProjectWatcher(dirs ...string) (*ProjectWatcher, error) {
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
 
-	projectsDir := claude.ClaudeProjectsDir()
-	if projectsDir == "" {
+	added := false
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		if err := fw.Add(dir); err != nil {
+			continue // directory might not exist
+		}
+		added = true
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if e.IsDir() {
+				_ = fw.Add(filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+
+	if !added {
 		fw.Close()
 		return nil, nil
-	}
-
-	if err := fw.Add(projectsDir); err != nil {
-		fw.Close()
-		return nil, err
-	}
-
-	entries, _ := os.ReadDir(projectsDir)
-	for _, e := range entries {
-		if e.IsDir() {
-			_ = fw.Add(filepath.Join(projectsDir, e.Name()))
-		}
 	}
 
 	ch := make(chan struct{}, 1)
 	done := make(chan struct{})
 	w := &ProjectWatcher{fw: fw, Events: ch, done: done}
-	go w.run(projectsDir, ch)
+	go w.run(ch)
 	return w, nil
 }
 
@@ -60,7 +63,7 @@ func (w *ProjectWatcher) Close() {
 	}
 }
 
-func (w *ProjectWatcher) run(projectsDir string, out chan<- struct{}) {
+func (w *ProjectWatcher) run(out chan<- struct{}) {
 	defer w.fw.Close()
 
 	var timer *time.Timer

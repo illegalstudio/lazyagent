@@ -75,7 +75,7 @@ func (m *SessionManager) StartWatcher() error {
 	if !m.provider.UseWatcher() {
 		return nil
 	}
-	w, err := NewProjectWatcher()
+	w, err := NewProjectWatcher(m.provider.WatchDirs()...)
 	if err != nil {
 		return err
 	}
