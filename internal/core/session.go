@@ -113,9 +113,9 @@ func (m *SessionManager) UpdateActivities() bool {
 			if err == nil {
 				m.mu.Lock()
 				m.sessions = sessions
-				m.tracker.Update(sessions, now)
+				m.tracker.Update(sessions, time.Now())
 				SortSessions(m.sessions)
-				m.lastDiscover = now
+				m.lastDiscover = time.Now()
 				m.mu.Unlock()
 				return true
 			}

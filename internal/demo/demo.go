@@ -15,7 +15,7 @@ func (Provider) DiscoverSessions() ([]*claude.Session, error) {
 	return GenerateSessions(), nil
 }
 
-func (Provider) UseWatcher() bool              { return false }
+func (Provider) UseWatcher() bool               { return false }
 func (Provider) RefreshInterval() time.Duration { return 30 * time.Second }
 
 // project templates for realistic-looking demo sessions.

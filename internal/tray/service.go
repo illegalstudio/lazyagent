@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-"strings"
+	"strings"
 	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
@@ -104,20 +104,20 @@ type SessionItem struct {
 // SessionFull is the detailed session representation.
 type SessionFull struct {
 	SessionItem
-	Version             string              `json:"version"`
-	IsWorktree          bool                `json:"isWorktree"`
-	MainRepo            string              `json:"mainRepo"`
-	InputTokens         int                 `json:"inputTokens"`
-	OutputTokens        int                 `json:"outputTokens"`
-	CacheCreationTokens int                 `json:"cacheCreationTokens"`
-	CacheReadTokens     int                 `json:"cacheReadTokens"`
-	UserMessages        int                 `json:"userMessages"`
-	AssistantMessages   int                 `json:"assistantMessages"`
-	CurrentTool         string              `json:"currentTool"`
-	LastFileWrite       string              `json:"lastFileWrite"`
-	LastFileWriteAt     time.Time           `json:"lastFileWriteAt"`
-	RecentTools         []ToolItem          `json:"recentTools"`
-	RecentMessages      []ConversationItem  `json:"recentMessages"`
+	Version             string             `json:"version"`
+	IsWorktree          bool               `json:"isWorktree"`
+	MainRepo            string             `json:"mainRepo"`
+	InputTokens         int                `json:"inputTokens"`
+	OutputTokens        int                `json:"outputTokens"`
+	CacheCreationTokens int                `json:"cacheCreationTokens"`
+	CacheReadTokens     int                `json:"cacheReadTokens"`
+	UserMessages        int                `json:"userMessages"`
+	AssistantMessages   int                `json:"assistantMessages"`
+	CurrentTool         string             `json:"currentTool"`
+	LastFileWrite       string             `json:"lastFileWrite"`
+	LastFileWriteAt     time.Time          `json:"lastFileWriteAt"`
+	RecentTools         []ToolItem         `json:"recentTools"`
+	RecentMessages      []ConversationItem `json:"recentMessages"`
 }
 
 // ToolItem is a tool call for the detail view.

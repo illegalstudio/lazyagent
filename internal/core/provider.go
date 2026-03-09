@@ -13,5 +13,5 @@ func (LiveProvider) DiscoverSessions() ([]*claude.Session, error) {
 	return claude.DiscoverSessions()
 }
 
-func (LiveProvider) UseWatcher() bool            { return true }
+func (LiveProvider) UseWatcher() bool               { return true }
 func (LiveProvider) RefreshInterval() time.Duration { return 0 }

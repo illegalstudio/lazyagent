@@ -15,13 +15,12 @@ import (
 func Available() bool { return true }
 
 // Run starts the macOS menu bar app with system tray.
-func Run(demoMode ...bool) error {
+func Run(demoMode bool) error {
 	if !assets.HasFrontend() {
 		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
 	}
 
-	demo := len(demoMode) > 0 && demoMode[0]
-	svc := &SessionService{demoMode: demo}
+	svc := &SessionService{demoMode: demoMode}
 
 	app := application.New(application.Options{
 		Name:        "lazyagent",
