@@ -319,6 +319,7 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 // SessionItem is a lightweight session for list views.
 type SessionItem struct {
 	SessionID     string    `json:"session_id"`
+	Agent         string    `json:"agent"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"short_name"`
 	CustomName    string    `json:"custom_name,omitempty"`
@@ -381,6 +382,7 @@ type SSEPayload struct {
 func (s *Server) buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
+		Agent:         sess.Agent,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, 60),
 		CustomName:    s.manager.SessionName(sess.SessionID),

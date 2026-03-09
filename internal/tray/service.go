@@ -92,6 +92,7 @@ func (s *SessionService) emitUpdate() {
 // SessionItem is a lightweight session representation for the list view.
 type SessionItem struct {
 	SessionID     string    `json:"sessionId"`
+	Agent         string    `json:"agent"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"shortName"`
 	CustomName    string    `json:"customName"`
@@ -141,6 +142,7 @@ type ConversationItem struct {
 func (s *SessionService) buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
+		Agent:         sess.Agent,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, nameLen),
 		CustomName:    s.manager.SessionName(sess.SessionID),
