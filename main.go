@@ -105,10 +105,39 @@ More info: https://github.com/illegalstudio/lazyagent
 			return
 		}
 
-		// Foreground tray (with --api or --tui): launch tray in background goroutine.
+		// Foreground tray (with --api or --tui): tray needs the main thread (macOS Cocoa).
 		// Kill previous tray instance and write PID file so future launches can find us.
 		killPreviousTray()
 		_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
+
+		if !runTUI {
+			// --tray --api (no TUI): API in goroutine, tray on main thread.
+			if runAPI {
+				ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+				defer cancel()
+
+				srv, err := api.New(*apiHost, *demoMode)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+				go func() {
+					if err := srv.Run(ctx); err != nil {
+						fmt.Fprintf(os.Stderr, "API error: %v\n", err)
+					}
+				}()
+			}
+
+			defer os.Remove(trayPidFile)
+			if err := tray.Run(*demoMode); err != nil {
+				fmt.Fprintf(os.Stderr, "Tray error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		// --tui --tray [--api]: tray in goroutine (TUI takes main thread).
+		// Note: on macOS, tray may have limited functionality when not on the main thread.
 		go func() {
 			defer os.Remove(trayPidFile)
 			if err := tray.Run(*demoMode); err != nil {
@@ -140,7 +169,7 @@ More info: https://github.com/illegalstudio/lazyagent
 				}
 			}()
 		} else {
-			// API only: block until signal.
+			// API only (no tray, no TUI): block until signal.
 			if err := srv.Run(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
