@@ -182,6 +182,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api", s.handlePlayground)
 	s.mux.HandleFunc("GET /api/sessions", s.handleGetSessions)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
+	s.mux.HandleFunc("PUT /api/sessions/{id}/name", s.handleSetSessionName)
+	s.mux.HandleFunc("DELETE /api/sessions/{id}/name", s.handleDeleteSessionName)
 	s.mux.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("GET /api/events", s.handleSSE)
@@ -210,6 +212,33 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.buildSessionFull(detail))
+}
+
+func (s *Server) handleSetSessionName(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if err := s.manager.SetSessionName(id, body.Name); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.notifySSE()
+	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": body.Name})
+}
+
+func (s *Server) handleDeleteSessionName(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.manager.SetSessionName(id, ""); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.notifySSE()
+	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": ""})
 }
 
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,8 @@ const playgroundHTML = `<!DOCTYPE html>
   .method { display: inline-block; font-weight: 700; font-size: .8rem; padding: 2px 8px;
             border-radius: 4px; margin-right: .75rem; }
   .get { background: #a6e3a1; color: #1e1e2e; }
+  .put { background: #89b4fa; color: #1e1e2e; }
+  .delete { background: #f38ba8; color: #1e1e2e; }
   .path { color: #f5e0dc; font-family: monospace; }
   .desc { color: #a6adc8; font-size: .85rem; margin-top: .25rem; }
   #output { margin-top: 2rem; }
@@ -51,6 +53,18 @@ const playgroundHTML = `<!DOCTYPE html>
   <span class="method get">GET</span>
   <span class="path">/api/sessions/{id}</span>
   <div class="desc">Get full session detail (tokens, tools, conversation)</div>
+</div>
+
+<div class="endpoint" onclick="renameSession()">
+  <span class="method put">PUT</span>
+  <span class="path">/api/sessions/{id}/name</span>
+  <div class="desc">Rename a session (JSON body: {"name": "..."}). Empty name resets.</div>
+</div>
+
+<div class="endpoint" onclick="deleteSessionName()">
+  <span class="method delete">DELETE</span>
+  <span class="path">/api/sessions/{id}/name</span>
+  <div class="desc">Remove custom name from a session (reset to path)</div>
 </div>
 
 <div class="endpoint" onclick="fetchEndpoint('/api/stats')">
@@ -136,6 +150,38 @@ function toggleSSE() {
     document.getElementById('sse-status').textContent = 'disconnected';
     document.getElementById('sse-status').className = 'disconnected';
   };
+}
+
+async function getFirstSessionId() {
+  const res = await fetch('/api/sessions');
+  const sessions = await res.json();
+  if (sessions.length === 0) return null;
+  return sessions[0].session_id;
+}
+
+async function renameSession() {
+  stopSSE();
+  try {
+    const id = await getFirstSessionId();
+    if (!id) { showResult('PUT /api/sessions/{id}/name', {error: 'No sessions available.'}); return; }
+    var name = prompt('Enter custom name (empty to reset):');
+    if (name === null) return;
+    const res = await fetch('/api/sessions/' + id + '/name', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name})
+    });
+    showResult('PUT /api/sessions/' + id + '/name', await res.json());
+  } catch(e) { showResult('PUT /api/sessions/{id}/name', {error: e.message}); }
+}
+
+async function deleteSessionName() {
+  stopSSE();
+  try {
+    const id = await getFirstSessionId();
+    if (!id) { showResult('DELETE /api/sessions/{id}/name', {error: 'No sessions available.'}); return; }
+    const res = await fetch('/api/sessions/' + id + '/name', {method: 'DELETE'});
+    showResult('DELETE /api/sessions/' + id + '/name', await res.json());
+  } catch(e) { showResult('DELETE /api/sessions/{id}/name', {error: e.message}); }
 }
 
 function stopSSE() {
