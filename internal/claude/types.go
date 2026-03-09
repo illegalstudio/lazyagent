@@ -89,4 +89,7 @@ type Session struct {
 	OutputTokens        int
 	CacheCreationTokens int
 	CacheReadTokens     int
+
+	// Agent identity
+	Agent string // "claude" or "pi" — which coding agent produced this session
 }

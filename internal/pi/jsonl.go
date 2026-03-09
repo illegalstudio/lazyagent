@@ -28,6 +28,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 		JSONLPath:    path,
 		SessionID:    strings.TrimSuffix(filepath.Base(path), ".jsonl"),
 		LastActivity: info.ModTime(),
+		Agent:        "pi",
 	}
 
 	scanner := bufio.NewScanner(f)

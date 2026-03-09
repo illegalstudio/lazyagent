@@ -748,16 +748,21 @@ func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool
 	}
 
 	customName := m.manager.SessionName(s.SessionID)
+	// Agent badge: prefix pi sessions with "π " for visual distinction.
+	agentPrefix := ""
+	if s.Agent == "pi" {
+		agentPrefix = "π "
+	}
 	var name string
 	if customName != "" {
-		runes := []rune(customName)
+		runes := []rune(agentPrefix + customName)
 		if len(runes) > nameW {
 			name = string(runes[:nameW-1]) + "…"
 		} else {
-			name = customName
+			name = agentPrefix + customName
 		}
 	} else {
-		name = core.ShortName(s.CWD, nameW)
+		name = agentPrefix + core.ShortName(s.CWD, nameW-len([]rune(agentPrefix)))
 	}
 	name = core.PadRight(name, nameW)
 
@@ -855,6 +860,9 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	}
 	if s.Model != "" {
 		add(row("Model", s.Model))
+	}
+	if s.Agent != "" {
+		add(row("Agent", s.Agent))
 	}
 	if s.GitBranch != "" && s.GitBranch != "HEAD" {
 		add(row("Git Branch", s.GitBranch))

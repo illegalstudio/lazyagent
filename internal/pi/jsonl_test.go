@@ -251,6 +251,19 @@ func TestParsePiJSONL_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestParsePiJSONL_AgentField(t *testing.T) {
+	path := writeTempJSONL(t, "test.jsonl",
+		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
+`)
+	session, err := ParsePiJSONL(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if session.Agent != "pi" {
+		t.Errorf("Agent = %q, want pi", session.Agent)
+	}
+}
+
 func TestParsePiJSONL_CostAndTokens(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl",
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}

@@ -82,6 +82,7 @@ func ParseJSONL(path string) (*Session, error) {
 		JSONLPath:    path,
 		SessionID:    filenameID,
 		LastActivity: info.ModTime(),
+		Agent:        "claude",
 	}
 
 	scanner := bufio.NewScanner(f)
