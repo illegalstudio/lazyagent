@@ -104,9 +104,11 @@ func ResolveActivity(s *claude.Session, now time.Time) ActivityKind {
 	return ActivityIdle
 }
 
-// ToolActivity maps a Claude tool name to an activity kind.
+// ToolActivity maps a tool name to an activity kind.
+// Supports both Claude Code (PascalCase) and pi (snake_case) tool names.
 func ToolActivity(tool string) ActivityKind {
 	switch tool {
+	// Claude Code (PascalCase)
 	case "Read":
 		return ActivityReading
 	case "Write", "Edit", "NotebookEdit":
@@ -118,6 +120,19 @@ func ToolActivity(tool string) ActivityKind {
 	case "WebFetch", "WebSearch":
 		return ActivityBrowsing
 	case "Agent":
+		return ActivitySpawning
+	// pi coding agent (snake_case) — safety net for unnormalized names
+	case "read":
+		return ActivityReading
+	case "write", "edit":
+		return ActivityWriting
+	case "bash", "process":
+		return ActivityRunning
+	case "find", "lsp":
+		return ActivitySearching
+	case "web_search":
+		return ActivityBrowsing
+	case "subagent":
 		return ActivitySpawning
 	default:
 		if tool != "" {
