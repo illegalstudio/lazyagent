@@ -37,7 +37,7 @@ type Server struct {
 // If host is empty it binds to 127.0.0.1 on DefaultPort with fallback.
 func New(host string) (*Server, error) {
 	cfg := core.LoadConfig()
-	manager := core.NewSessionManager(cfg.WindowMinutes)
+	manager := core.NewSessionManager(cfg.WindowMinutes, core.LiveProvider{})
 
 	s := &Server{
 		manager: manager,

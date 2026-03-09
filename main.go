@@ -24,6 +24,7 @@ func main() {
 	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
 	apiMode := flag.Bool("api", false, "Start the API server")
 	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
+	demoMode := flag.Bool("demo", false, "Use generated fake data instead of real Claude sessions")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running Claude Code sessions
@@ -36,6 +37,7 @@ Usage:
   lazyagent --tray              Launch as macOS menu bar app (detaches)
   lazyagent --tray --api        Launch tray + API server (foreground)
   lazyagent --tui --tray --api  Launch everything
+  lazyagent --demo              Launch with fake data (for screenshots)
 
 Flags:
 `)
@@ -77,7 +79,11 @@ More info: https://github.com/illegalstudio/lazyagent
 					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 					os.Exit(1)
 				}
-				cmd := exec.Command(exe, "--tray")
+				trayArgs := []string{"--tray"}
+				if *demoMode {
+					trayArgs = append(trayArgs, "--demo")
+				}
+				cmd := exec.Command(exe, trayArgs...)
 				cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
 				cmd.Stdin = nil
 				cmd.Stdout = nil
@@ -93,7 +99,7 @@ More info: https://github.com/illegalstudio/lazyagent
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
-			if err := tray.Run(); err != nil {
+			if err := tray.Run(*demoMode); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -103,7 +109,7 @@ More info: https://github.com/illegalstudio/lazyagent
 		// Kill previous detached tray first.
 		killPreviousTray()
 		go func() {
-			if err := tray.Run(); err != nil {
+			if err := tray.Run(*demoMode); err != nil {
 				fmt.Fprintf(os.Stderr, "Tray error: %v\n", err)
 			}
 		}()
@@ -139,7 +145,7 @@ More info: https://github.com/illegalstudio/lazyagent
 
 	if runTUI {
 		p := tea.NewProgram(
-			ui.NewModel(),
+			ui.NewModel(*demoMode),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)
