@@ -12,21 +12,29 @@ import (
 
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/nahime0/lazyagent/internal/demo"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // SessionService is the Go service exposed to the Svelte frontend via Wails bindings.
 type SessionService struct {
-	manager *core.SessionManager
-	app     *application.App
-	ctx     context.Context
+	manager  *core.SessionManager
+	app      *application.App
+	ctx      context.Context
+	demoMode bool
 }
 
 // ServiceStartup is called by Wails when the app starts.
 func (s *SessionService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	s.ctx = ctx
 	cfg := core.LoadConfig()
-	s.manager = core.NewSessionManager(cfg.WindowMinutes)
+	var provider core.SessionProvider
+	if s.demoMode {
+		provider = demo.Provider{}
+	} else {
+		provider = core.LiveProvider{}
+	}
+	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	if err := s.manager.StartWatcher(); err != nil {
 		return err
 	}
