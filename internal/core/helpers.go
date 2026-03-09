@@ -28,15 +28,12 @@ func ShortName(path string, maxLen int) string {
 	if len(baseRunes)+2 <= maxLen {
 		return "…/" + base
 	}
-	if maxLen > 2 {
-		// "…" = 1 rune, take last (maxLen-1) runes of base
-		tail := maxLen - 1
-		if tail > len(baseRunes) {
-			tail = len(baseRunes)
-		}
-		return "…" + string(baseRunes[len(baseRunes)-tail:])
+	// "…" = 1 rune, take last (maxLen-1) runes of base
+	tail := maxLen - 1
+	if tail > len(baseRunes) {
+		tail = len(baseRunes)
 	}
-	return string(baseRunes[:maxLen])
+	return "…" + string(baseRunes[len(baseRunes)-tail:])
 }
 
 // FormatDuration converts a duration to a human-readable "Xs ago" string.

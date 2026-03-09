@@ -249,7 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renameSessionID = ""
 			case "enter":
 				if m.renameSessionID != "" {
-					_ = m.manager.SetSessionName(m.renameSessionID, m.renameInput)
+					_ = m.manager.SetSessionName(m.renameSessionID, strings.TrimSpace(m.renameInput))
 				}
 				m.renameMode = false
 				m.renameInput = ""
