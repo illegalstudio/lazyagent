@@ -8,19 +8,37 @@ import (
 	"os"
 
 	"github.com/nahime0/lazyagent/internal/assets"
+	"github.com/nahime0/lazyagent/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// buildProvider returns the session provider for the given agent mode.
+func buildProvider(agentMode string) core.SessionProvider {
+	switch agentMode {
+	case "claude":
+		return core.LiveProvider{}
+	case "pi":
+		return core.PiProvider{}
+	default:
+		return core.MultiProvider{
+			Providers: []core.SessionProvider{
+				core.LiveProvider{},
+				core.PiProvider{},
+			},
+		}
+	}
+}
 
 // Available reports whether tray support was compiled in.
 func Available() bool { return true }
 
 // Run starts the macOS menu bar app with system tray.
-func Run(demoMode bool) error {
+func Run(demoMode bool, agentMode string) error {
 	if !assets.HasFrontend() {
 		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
 	}
 
-	svc := &SessionService{demoMode: demoMode}
+	svc := &SessionService{demoMode: demoMode, provider: buildProvider(agentMode)}
 
 	app := application.New(application.Options{
 		Name:        "lazyagent",

@@ -97,7 +97,7 @@ More info: https://github.com/illegalstudio/lazyagent
 
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
 			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
-			forkTray(*demoMode)
+			forkTray(*demoMode, *agentMode)
 			if !runTUI && !runAPI {
 				return
 			}
@@ -106,7 +106,7 @@ More info: https://github.com/illegalstudio/lazyagent
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
-			if err := tray.Run(*demoMode); err != nil {
+			if err := tray.Run(*demoMode, *agentMode); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -165,7 +165,7 @@ More info: https://github.com/illegalstudio/lazyagent
 }
 
 // forkTray launches the tray as a detached background process with its own main thread.
-func forkTray(demoMode bool) {
+func forkTray(demoMode bool, agentMode string) {
 	killPreviousTray()
 
 	exe, err := os.Executable()
@@ -176,6 +176,9 @@ func forkTray(demoMode bool) {
 	trayArgs := []string{"--tray"}
 	if demoMode {
 		trayArgs = append(trayArgs, "--demo")
+	}
+	if agentMode != "all" {
+		trayArgs = append(trayArgs, "--agent", agentMode)
 	}
 	cmd := exec.Command(exe, trayArgs...)
 	cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
