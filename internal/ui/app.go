@@ -61,34 +61,38 @@ type Model struct {
 	editorPicker       bool
 	editorPickerCursor int // 0 = VISUAL (GUI), 1 = EDITOR (TUI)
 	editorPickerCWD    string
+
+	// Rename mode
+	renameMode  bool
+	renameInput string
 }
 
 type keyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Tab     key.Binding
-	Quit    key.Binding
-	Refresh key.Binding
-	Plus    key.Binding
-	Minus   key.Binding
+	Up     key.Binding
+	Down   key.Binding
+	Tab    key.Binding
+	Quit   key.Binding
+	Rename key.Binding
+	Plus   key.Binding
+	Minus  key.Binding
 	Filter key.Binding
 	Search key.Binding
-	Esc     key.Binding
-	Open    key.Binding
+	Esc    key.Binding
+	Open   key.Binding
 }
 
 var keys = keyMap{
-	Up:      key.NewBinding(key.WithKeys("up", "k")),
-	Down:    key.NewBinding(key.WithKeys("down", "j")),
-	Tab:     key.NewBinding(key.WithKeys("tab")),
-	Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Refresh: key.NewBinding(key.WithKeys("r")),
-	Plus:    key.NewBinding(key.WithKeys("+", "=")),
-	Minus:   key.NewBinding(key.WithKeys("-")),
+	Up:     key.NewBinding(key.WithKeys("up", "k")),
+	Down:   key.NewBinding(key.WithKeys("down", "j")),
+	Tab:    key.NewBinding(key.WithKeys("tab")),
+	Quit:   key.NewBinding(key.WithKeys("q", "ctrl+c")),
+	Rename: key.NewBinding(key.WithKeys("r")),
+	Plus:   key.NewBinding(key.WithKeys("+", "=")),
+	Minus:  key.NewBinding(key.WithKeys("-")),
 	Filter: key.NewBinding(key.WithKeys("f")),
 	Search: key.NewBinding(key.WithKeys("/")),
-	Esc:     key.NewBinding(key.WithKeys("esc")),
-	Open:    key.NewBinding(key.WithKeys("o")),
+	Esc:    key.NewBinding(key.WithKeys("esc")),
+	Open:   key.NewBinding(key.WithKeys("o")),
 }
 
 func NewModel(demoMode bool) Model {
@@ -235,6 +239,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Rename mode intercepts all keys except esc/enter.
+		if m.renameMode {
+			switch msg.String() {
+			case "esc":
+				m.renameMode = false
+				m.renameInput = ""
+			case "enter":
+				if len(m.visible) > 0 && m.cursor < len(m.visible) {
+					sess := m.visible[m.cursor]
+					_ = m.manager.SetSessionName(sess.SessionID, m.renameInput)
+				}
+				m.renameMode = false
+				m.renameInput = ""
+			case "backspace":
+				if len(m.renameInput) > 0 {
+					m.renameInput = m.renameInput[:len(m.renameInput)-1]
+				}
+			default:
+				if len(msg.Runes) == 1 {
+					m.renameInput += string(msg.Runes)
+				}
+			}
+			return m, nil
+		}
+
 		// Search mode intercepts all keys except esc.
 		if m.searchMode {
 			switch msg.String() {
@@ -282,9 +311,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = n - 1
 			}
 
-		case key.Matches(msg, keys.Refresh):
-			m.loading = true
-			return m, makeLoadCmd(m.manager)
+		case key.Matches(msg, keys.Rename):
+			if len(m.visible) > 0 && m.cursor < len(m.visible) {
+				sess := m.visible[m.cursor]
+				m.renameMode = true
+				m.renameInput = m.manager.SessionName(sess.SessionID)
+			}
 
 		case key.Matches(msg, keys.Up):
 			if m.focus == 0 {
@@ -553,6 +585,29 @@ func (m Model) View() string {
 		)
 	}
 
+	// Overlay rename input.
+	if m.renameMode {
+		title := lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Rename session:")
+		input := lipgloss.NewStyle().Foreground(colorAccent).Render(m.renameInput + "█")
+		hint := lipgloss.NewStyle().Foreground(colorMuted).Render("enter confirm  esc cancel  empty = reset")
+		body := title + "\n\n" + input + "\n\n" + hint
+
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorderFocus).
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(colorText).
+			Padding(1, 3).
+			Width(40).
+			Render(body)
+
+		out = lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			box,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+		)
+	}
+
 	// Overlay flash message centered over the existing UI.
 	if m.flashMsg != "" {
 		dismiss := lipgloss.NewStyle().Foreground(colorMuted).Render("Press any key to continue")
@@ -695,7 +750,18 @@ func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool
 		actStr = spin + core.PadRight(string(activity), statusColW-1)
 	}
 
-	name := core.ShortName(s.CWD, nameW)
+	customName := m.manager.SessionName(s.SessionID)
+	var name string
+	if customName != "" {
+		runes := []rune(customName)
+		if len(runes) > nameW {
+			name = string(runes[:nameW-1]) + "…"
+		} else {
+			name = customName
+		}
+	} else {
+		name = core.ShortName(s.CWD, nameW)
+	}
 	name = core.PadRight(name, nameW)
 
 	var sparkStr string
@@ -757,8 +823,11 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	var lines []string
 	add := func(line string) { lines = append(lines, line) }
 
-	add(lipgloss.NewStyle().Foreground(colorText).Bold(true).
-		Render(core.ShortName(s.CWD, width-2)))
+	detailTitle := m.manager.SessionName(s.SessionID)
+	if detailTitle == "" {
+		detailTitle = core.ShortName(s.CWD, width-2)
+	}
+	add(lipgloss.NewStyle().Foreground(colorText).Bold(true).Render(detailTitle))
 
 	activity := m.manager.ActivityFor(s.SessionID)
 	actColor := activityColors[activity]
@@ -920,7 +989,7 @@ func (m Model) renderHelp() string {
 		helpKeyStyle.Render("f")+helpStyle.Render(" filter"),
 		helpKeyStyle.Render("/")+helpStyle.Render(" search"),
 		helpKeyStyle.Render("o")+helpStyle.Render(" open"),
-		helpKeyStyle.Render("r")+helpStyle.Render(" refresh"),
+		helpKeyStyle.Render("r")+helpStyle.Render(" rename"),
 		helpKeyStyle.Render("q")+helpStyle.Render(" quit"),
 	)
 	return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
