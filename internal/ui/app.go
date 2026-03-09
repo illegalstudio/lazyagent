@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
 )
 
@@ -22,7 +22,7 @@ type renderTickMsg time.Time
 
 // sessionsMsg carries newly loaded sessions.
 type sessionsMsg struct {
-	sessions []*claude.Session
+	sessions []*model.Session
 	err      error
 }
 
@@ -51,7 +51,7 @@ type Model struct {
 	searchQuery string
 
 	// Cached visible sessions, recomputed via refreshVisible().
-	visible []*claude.Session
+	visible []*model.Session
 
 	// Flash message (modal popup, dismissed by any key)
 	flashMsg string
@@ -734,7 +734,7 @@ func (m Model) renderList(listW, innerH int) string {
 	return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
 }
 
-func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool) string {
+func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool) string {
 	activity := m.manager.ActivityFor(s.SessionID)
 	actColor, ok := activityColors[activity]
 	if !ok {
@@ -821,7 +821,7 @@ func (m Model) renderDetail(detailW, innerH int) string {
 	)
 }
 
-func (m Model) buildDetailLines(s *claude.Session, width int) []string {
+func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	var lines []string
 	add := func(line string) { lines = append(lines, line) }
 

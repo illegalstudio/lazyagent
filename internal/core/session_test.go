@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 func TestReload_AutoPopulatesNamesFromSession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	provider := fakeProvider{
-		sessions: []*claude.Session{
+		sessions: []*model.Session{
 			{SessionID: "s1", CWD: "/project1", Name: "My cool session", LastActivity: time.Now()},
 			{SessionID: "s2", CWD: "/project2", LastActivity: time.Now()},
 		},
@@ -37,7 +37,7 @@ func TestReload_DoesNotOverwriteUserSetNames(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	provider := fakeProvider{
-		sessions: []*claude.Session{
+		sessions: []*model.Session{
 			{SessionID: "s1", CWD: "/project1", Name: "From pi", LastActivity: time.Now()},
 		},
 	}

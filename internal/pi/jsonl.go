@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // ParsePiJSONL reads a pi session JSONL file and returns a populated Session.
-func ParsePiJSONL(path string) (*claude.Session, error) {
+func ParsePiJSONL(path string) (*model.Session, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 		return nil, err
 	}
 
-	session := &claude.Session{
+	session := &model.Session{
 		JSONLPath:    path,
 		SessionID:    strings.TrimSuffix(filepath.Base(path), ".jsonl"),
 		LastActivity: info.ModTime(),
@@ -35,8 +35,8 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 4*1024*1024)
 
-	var recentTools []claude.ToolCall
-	var recentMessages []claude.ConversationMessage
+	var recentTools []model.ToolCall
+	var recentMessages []model.ConversationMessage
 	var lastMessageEntry *piEntry
 	var entryTimestamps []time.Time
 	parsed := false
@@ -91,7 +91,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 				session.UserMessages++
 				lastMessageEntry = copyEntry(&e)
 				if text := firstPiText(e.Message); text != "" {
-					recentMessages = append(recentMessages, claude.ConversationMessage{
+					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "user", Text: truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
@@ -118,7 +118,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 				blocks := parsePiContent(e.Message.Content)
 				for _, b := range blocks {
 					if b.Type == "toolCall" {
-						recentTools = append(recentTools, claude.ToolCall{
+						recentTools = append(recentTools, model.ToolCall{
 							Name: normalizePiToolName(b.Name), Timestamp: ts,
 						})
 						if len(recentTools) > 40 {
@@ -133,7 +133,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 					}
 				}
 				if text := firstPiTextFromBlocks(blocks); text != "" {
-					recentMessages = append(recentMessages, claude.ConversationMessage{
+					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
@@ -171,7 +171,7 @@ func ParsePiJSONL(path string) (*claude.Session, error) {
 		if !entryTs.IsZero() {
 			session.LastActivity = entryTs
 		}
-		if session.Status == claude.StatusExecutingTool && lastMessageEntry.Message != nil {
+		if session.Status == model.StatusExecutingTool && lastMessageEntry.Message != nil {
 			blocks := parsePiContent(lastMessageEntry.Message.Content)
 			for _, b := range blocks {
 				if b.Type == "toolCall" {
@@ -274,25 +274,25 @@ func extractPiFilePath(raw json.RawMessage) string {
 }
 
 // determinePiStatus infers session status from the last message entry.
-func determinePiStatus(e *piEntry) claude.SessionStatus {
+func determinePiStatus(e *piEntry) model.SessionStatus {
 	if e == nil || e.Message == nil {
-		return claude.StatusUnknown
+		return model.StatusUnknown
 	}
 	switch e.Message.Role {
 	case "assistant":
 		blocks := parsePiContent(e.Message.Content)
 		for _, b := range blocks {
 			if b.Type == "toolCall" {
-				return claude.StatusExecutingTool
+				return model.StatusExecutingTool
 			}
 		}
-		return claude.StatusWaitingForUser
+		return model.StatusWaitingForUser
 	case "user":
-		return claude.StatusThinking
+		return model.StatusThinking
 	case "toolResult":
-		return claude.StatusProcessingResult
+		return model.StatusProcessingResult
 	}
-	return claude.StatusUnknown
+	return model.StatusUnknown
 }
 
 func truncate(s string, n int) string {

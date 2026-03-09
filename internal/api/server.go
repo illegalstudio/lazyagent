@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
 )
 
@@ -379,7 +379,7 @@ type SSEPayload struct {
 
 // --- Builders ---
 
-func (s *Server) buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
+func (s *Server) buildSessionItem(sess *model.Session, activity core.ActivityKind) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		Agent:         sess.Agent,

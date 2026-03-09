@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/pi"
 )
 
 // LiveProvider discovers real Claude Code sessions from disk.
 type LiveProvider struct{}
 
-func (LiveProvider) DiscoverSessions() ([]*claude.Session, error) {
+func (LiveProvider) DiscoverSessions() ([]*model.Session, error) {
 	return claude.DiscoverSessions()
 }
 
@@ -21,7 +22,7 @@ func (LiveProvider) WatchDirs() []string            { return []string{claude.Cla
 // PiProvider discovers pi coding agent sessions from disk.
 type PiProvider struct{}
 
-func (PiProvider) DiscoverSessions() ([]*claude.Session, error) {
+func (PiProvider) DiscoverSessions() ([]*model.Session, error) {
 	return pi.DiscoverSessions()
 }
 
@@ -34,8 +35,8 @@ type MultiProvider struct {
 	Providers []SessionProvider
 }
 
-func (m MultiProvider) DiscoverSessions() ([]*claude.Session, error) {
-	var all []*claude.Session
+func (m MultiProvider) DiscoverSessions() ([]*model.Session, error) {
+	var all []*model.Session
 	for _, p := range m.Providers {
 		sessions, err := p.DiscoverSessions()
 		if err != nil {

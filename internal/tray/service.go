@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
 	"github.com/nahime0/lazyagent/internal/demo"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -139,7 +139,7 @@ type ConversationItem struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func (s *SessionService) buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
+func (s *SessionService) buildSessionItem(sess *model.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		Agent:         sess.Agent,

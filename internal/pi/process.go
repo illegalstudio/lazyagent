@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // PiSessionsDir returns the path to ~/.pi/agent/sessions.
@@ -19,13 +20,13 @@ func PiSessionsDir() string {
 }
 
 // DiscoverSessions scans ~/.pi/agent/sessions for JSONL session files.
-func DiscoverSessions() ([]*claude.Session, error) {
+func DiscoverSessions() ([]*model.Session, error) {
 	return discoverSessionsFromDir(PiSessionsDir())
 }
 
 // discoverSessionsFromDir scans a directory for pi session JSONL files.
 // Exported for testing with synthetic directories.
-func discoverSessionsFromDir(sessionsDir string) ([]*claude.Session, error) {
+func discoverSessionsFromDir(sessionsDir string) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
@@ -44,7 +45,7 @@ func discoverSessionsFromDir(sessionsDir string) ([]*claude.Session, error) {
 	}
 	wtCache := make(map[string]wtInfo)
 
-	var sessions []*claude.Session
+	var sessions []*model.Session
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
 			continue

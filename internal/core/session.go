@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // Window minutes bounds.
@@ -19,7 +19,7 @@ const (
 // SessionProvider abstracts how sessions are discovered.
 type SessionProvider interface {
 	// DiscoverSessions returns all available sessions.
-	DiscoverSessions() ([]*claude.Session, error)
+	DiscoverSessions() ([]*model.Session, error)
 	// UseWatcher returns whether a file system watcher should be started.
 	UseWatcher() bool
 	// RefreshInterval returns how often UpdateActivities should re-discover sessions,
@@ -31,14 +31,14 @@ type SessionProvider interface {
 
 // SessionDetailView is the full struct for a detail panel.
 type SessionDetailView struct {
-	claude.Session
+	model.Session
 	Activity ActivityKind
 }
 
 // SessionManager manages session discovery, file watching, and activity tracking.
 type SessionManager struct {
 	mu       sync.RWMutex
-	sessions []*claude.Session
+	sessions []*model.Session
 	tracker  *ActivityTracker
 	watcher  *ProjectWatcher
 	provider SessionProvider
@@ -202,7 +202,7 @@ func (m *SessionManager) ActivityFor(sessionID string) ActivityKind {
 }
 
 // Sessions returns all raw sessions (unfiltered).
-func (m *SessionManager) Sessions() []*claude.Session {
+func (m *SessionManager) Sessions() []*model.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.sessions
@@ -210,7 +210,7 @@ func (m *SessionManager) Sessions() []*claude.Session {
 
 // VisibleSessions returns sessions filtered by the manager's internal state
 // (time window, activity filter, search query). Used by TUI and tray.
-func (m *SessionManager) VisibleSessions() []*claude.Session {
+func (m *SessionManager) VisibleSessions() []*model.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.filterSessionsLocked(m.searchQuery, m.activityFilter)
@@ -219,7 +219,7 @@ func (m *SessionManager) VisibleSessions() []*claude.Session {
 // QuerySessions returns sessions filtered by explicit parameters without using
 // the manager's internal filter/search state. Safe for concurrent API use.
 // Empty search/filter means no filtering.
-func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*claude.Session {
+func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*model.Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.filterSessionsLocked(search, filter)
@@ -227,10 +227,10 @@ func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*cl
 
 // filterSessionsLocked applies time window, activity, and search filters.
 // Must be called with m.mu held (at least RLock).
-func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind) []*claude.Session {
+func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind) []*model.Session {
 	cutoff := time.Now().Add(-time.Duration(m.windowMinutes) * time.Minute)
 	lowerQuery := strings.ToLower(search)
-	var visible []*claude.Session
+	var visible []*model.Session
 	for _, s := range m.sessions {
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
 			continue
@@ -266,8 +266,8 @@ func (m *SessionManager) SessionDetail(id string) *SessionDetailView {
 }
 
 // SortSessions sorts sessions by last activity (most recent first).
-func SortSessions(sessions []*claude.Session) {
-	slices.SortFunc(sessions, func(a, b *claude.Session) int {
+func SortSessions(sessions []*model.Session) {
+	slices.SortFunc(sessions, func(a, b *model.Session) int {
 		return cmp.Compare(b.LastActivity.UnixNano(), a.LastActivity.UnixNano())
 	})
 }

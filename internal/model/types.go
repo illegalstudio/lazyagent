@@ -1,16 +1,16 @@
-package claude
+package model
 
 import "time"
 
-// SessionStatus represents the current activity of a Claude Code session.
+// SessionStatus represents the current activity of a coding agent session.
 type SessionStatus int
 
 const (
 	StatusUnknown          SessionStatus = iota
-	StatusWaitingForUser                 // Claude responded, awaiting human input
-	StatusThinking                       // Claude is generating a response
-	StatusExecutingTool                  // Claude invoked a tool, waiting for result
-	StatusProcessingResult               // Tool result received, Claude is thinking
+	StatusWaitingForUser                 // Agent responded, awaiting human input
+	StatusThinking                       // Agent is generating a response
+	StatusExecutingTool                  // Agent invoked a tool, waiting for result
+	StatusProcessingResult               // Tool result received, agent is thinking
 	StatusIdle                           // Session file exists but process not running
 )
 
@@ -44,7 +44,7 @@ type ConversationMessage struct {
 	Timestamp time.Time
 }
 
-// Session holds all observable information about a Claude Code instance.
+// Session holds all observable information about a coding agent instance.
 type Session struct {
 	// Identity
 	SessionID string
@@ -52,7 +52,7 @@ type Session struct {
 
 	// Runtime
 	CWD         string // working directory
-	Version     string // claude version
+	Version     string // agent version
 	Model       string // model being used
 	GitBranch   string
 	IsSidechain bool // true = sub-agent spawned by another session

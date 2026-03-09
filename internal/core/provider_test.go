@@ -4,19 +4,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // fakeProvider is a test helper that returns pre-configured sessions.
 type fakeProvider struct {
-	sessions []*claude.Session
+	sessions []*model.Session
 	err      error
 	watcher  bool
 	interval time.Duration
 	dirs     []string
 }
 
-func (f fakeProvider) DiscoverSessions() ([]*claude.Session, error) {
+func (f fakeProvider) DiscoverSessions() ([]*model.Session, error) {
 	return f.sessions, f.err
 }
 func (f fakeProvider) UseWatcher() bool               { return f.watcher }
@@ -24,10 +24,10 @@ func (f fakeProvider) RefreshInterval() time.Duration { return f.interval }
 func (f fakeProvider) WatchDirs() []string            { return f.dirs }
 
 func TestMultiProvider_MergesSessions(t *testing.T) {
-	p1 := fakeProvider{sessions: []*claude.Session{
+	p1 := fakeProvider{sessions: []*model.Session{
 		{SessionID: "s1", CWD: "/project1"},
 	}}
-	p2 := fakeProvider{sessions: []*claude.Session{
+	p2 := fakeProvider{sessions: []*model.Session{
 		{SessionID: "s2", CWD: "/project2"},
 		{SessionID: "s3", CWD: "/project3"},
 	}}
@@ -44,7 +44,7 @@ func TestMultiProvider_MergesSessions(t *testing.T) {
 
 func TestMultiProvider_SkipsFailingProvider(t *testing.T) {
 	failing := fakeProvider{err: errTest}
-	working := fakeProvider{sessions: []*claude.Session{
+	working := fakeProvider{sessions: []*model.Session{
 		{SessionID: "s1"},
 	}}
 

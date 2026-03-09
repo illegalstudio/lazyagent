@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // testProvider is a no-op provider for API tests.
 type testProvider struct{}
 
-func (testProvider) DiscoverSessions() ([]*claude.Session, error) { return nil, nil }
+func (testProvider) DiscoverSessions() ([]*model.Session, error) { return nil, nil }
 func (testProvider) UseWatcher() bool                             { return false }
 func (testProvider) RefreshInterval() time.Duration               { return 0 }
 func (testProvider) WatchDirs() []string                          { return nil }

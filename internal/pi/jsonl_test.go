@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 func writeTempJSONL(t *testing.T, name, content string) string {
@@ -81,7 +81,7 @@ func TestParsePiJSONL_ToolCall_StatusExecutingTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if session.Status != claude.StatusExecutingTool {
+	if session.Status != model.StatusExecutingTool {
 		t.Errorf("Status = %v, want StatusExecutingTool", session.Status)
 	}
 	if session.CurrentTool != "Read" {
@@ -105,7 +105,7 @@ func TestParsePiJSONL_StatusWaitingForUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if session.Status != claude.StatusWaitingForUser {
+	if session.Status != model.StatusWaitingForUser {
 		t.Errorf("Status = %v, want StatusWaitingForUser", session.Status)
 	}
 }
@@ -119,7 +119,7 @@ func TestParsePiJSONL_StatusThinking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if session.Status != claude.StatusThinking {
+	if session.Status != model.StatusThinking {
 		t.Errorf("Status = %v, want StatusThinking", session.Status)
 	}
 }
@@ -135,7 +135,7 @@ func TestParsePiJSONL_StatusProcessingResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if session.Status != claude.StatusProcessingResult {
+	if session.Status != model.StatusProcessingResult {
 		t.Errorf("Status = %v, want StatusProcessingResult", session.Status)
 	}
 }
