@@ -63,8 +63,9 @@ type Model struct {
 	editorPickerCWD    string
 
 	// Rename mode
-	renameMode  bool
-	renameInput string
+	renameMode      bool
+	renameInput     string
+	renameSessionID string
 }
 
 type keyMap struct {
@@ -245,16 +246,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.renameMode = false
 				m.renameInput = ""
+				m.renameSessionID = ""
 			case "enter":
-				if len(m.visible) > 0 && m.cursor < len(m.visible) {
-					sess := m.visible[m.cursor]
-					_ = m.manager.SetSessionName(sess.SessionID, m.renameInput)
+				if m.renameSessionID != "" {
+					_ = m.manager.SetSessionName(m.renameSessionID, m.renameInput)
 				}
 				m.renameMode = false
 				m.renameInput = ""
+				m.renameSessionID = ""
 			case "backspace":
-				if len(m.renameInput) > 0 {
-					m.renameInput = m.renameInput[:len(m.renameInput)-1]
+				runes := []rune(m.renameInput)
+				if len(runes) > 0 {
+					m.renameInput = string(runes[:len(runes)-1])
 				}
 			default:
 				if len(msg.Runes) == 1 {
@@ -315,6 +318,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
 				sess := m.visible[m.cursor]
 				m.renameMode = true
+				m.renameSessionID = sess.SessionID
 				m.renameInput = m.manager.SessionName(sess.SessionID)
 			}
 

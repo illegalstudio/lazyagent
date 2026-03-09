@@ -49,28 +49,6 @@ func (sn *SessionNames) loadLocked() {
 	_ = json.Unmarshal(data, &sn.names)
 }
 
-// refreshIfChanged re-reads the file only if it was modified since last load.
-func (sn *SessionNames) refreshIfChanged() {
-	path := sessionNamesPath()
-	if path == "" {
-		return
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	if !info.ModTime().After(sn.modTime) {
-		return
-	}
-	sn.modTime = info.ModTime()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	sn.names = make(map[string]string)
-	_ = json.Unmarshal(data, &sn.names)
-}
-
 func (sn *SessionNames) save() error {
 	path := sessionNamesPath()
 	if path == "" {

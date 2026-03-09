@@ -21,7 +21,7 @@ func ShortName(path string, maxLen int) string {
 	parent := filepath.Base(filepath.Dir(path))
 	short := parent + "/" + base
 	// "…/" prefix = 2 runes
-	if len([]rune(short))+1 <= maxLen {
+	if len([]rune(short))+2 <= maxLen {
 		return "…/" + short
 	}
 	baseRunes := []rune(base)
