@@ -8,26 +8,35 @@ import (
 )
 
 // ShortName truncates a file path intelligently, showing "…/parent/child" when needed.
+// maxLen is measured in runes (visual width for monospace display).
 func ShortName(path string, maxLen int) string {
 	if maxLen <= 2 {
 		return ""
 	}
-	if len(path) <= maxLen {
+	runes := []rune(path)
+	if len(runes) <= maxLen {
 		return path
 	}
 	base := filepath.Base(path)
 	parent := filepath.Base(filepath.Dir(path))
 	short := parent + "/" + base
-	if len(short)+2 <= maxLen {
+	// "…/" prefix = 2 runes
+	if len([]rune(short))+1 <= maxLen {
 		return "…/" + short
 	}
-	if len(base)+2 <= maxLen {
+	baseRunes := []rune(base)
+	if len(baseRunes)+2 <= maxLen {
 		return "…/" + base
 	}
-	if maxLen > 3 {
-		return "…" + base[len(base)-(maxLen-1):]
+	if maxLen > 2 {
+		// "…" = 1 rune, take last (maxLen-1) runes of base
+		tail := maxLen - 1
+		if tail > len(baseRunes) {
+			tail = len(baseRunes)
+		}
+		return "…" + string(baseRunes[len(baseRunes)-tail:])
 	}
-	return base[:maxLen]
+	return string(baseRunes[:maxLen])
 }
 
 // FormatDuration converts a duration to a human-readable "Xs ago" string.
@@ -94,12 +103,13 @@ func EstimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheR
 		float64(outputTokens)*outputRate
 }
 
-// PadRight pads a string with spaces to reach width n, or truncates if longer.
+// PadRight pads a string with spaces to reach visual width n (rune count), or truncates if longer.
 func PadRight(s string, n int) string {
-	if len(s) >= n {
-		return s[:n]
+	runes := []rune(s)
+	if len(runes) >= n {
+		return string(runes[:n])
 	}
-	return s + strings.Repeat(" ", n-len(s))
+	return s + strings.Repeat(" ", n-len(runes))
 }
 
 // Clamp bounds an integer to [lo, hi].
