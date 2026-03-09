@@ -195,8 +195,7 @@ es.close();
 
 **Notes:**
 - The connection auto-reconnects (standard SSE behavior)
-- Events are only sent when data actually changes (not on a fixed interval)
-- A 30-second safety reload ensures data freshness even if the file watcher misses events
+- Events are sent when data changes (file watcher, activity state transitions) and on the 30-second safety reload tick (even if nothing changed)
 
 ## Data freshness
 
