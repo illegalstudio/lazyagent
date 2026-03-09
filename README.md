@@ -306,7 +306,6 @@ make clean
 - [x] Default port with automatic fallback (7421–7431)
 - [x] Custom bind address (`--host`)
 - [x] Combinable with TUI and tray (`--tui --tray --api`)
-- [ ] React Native mobile app
 
 ### Future ideas
 - [ ] Outbound webhooks on status changes
