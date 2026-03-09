@@ -33,6 +33,7 @@
   }
 
   function handleRenameKey(e: KeyboardEvent) {
+    e.stopPropagation(); // Prevent App.svelte from intercepting rename input keys
     if (e.key === "Enter") {
       e.preventDefault();
       confirmRename();
@@ -44,6 +45,9 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (renamingId) return; // Don't navigate while renaming
+    // Don't intercept keys when an input/textarea is focused (e.g. search box)
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
     const list = $sessions;
     if (!list.length) return;
 

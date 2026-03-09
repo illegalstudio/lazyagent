@@ -45,6 +45,7 @@
   }
 
   function handleRenameKey(e: KeyboardEvent) {
+    e.stopPropagation(); // Prevent App.svelte from intercepting rename input keys
     if (e.key === "Enter") { e.preventDefault(); confirmRename(); }
     else if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
   }
