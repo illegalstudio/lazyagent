@@ -7,26 +7,34 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-"strings"
+	"strings"
 	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/nahime0/lazyagent/internal/demo"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // SessionService is the Go service exposed to the Svelte frontend via Wails bindings.
 type SessionService struct {
-	manager *core.SessionManager
-	app     *application.App
-	ctx     context.Context
+	manager  *core.SessionManager
+	app      *application.App
+	ctx      context.Context
+	demoMode bool
 }
 
 // ServiceStartup is called by Wails when the app starts.
 func (s *SessionService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	s.ctx = ctx
 	cfg := core.LoadConfig()
-	s.manager = core.NewSessionManager(cfg.WindowMinutes)
+	var provider core.SessionProvider
+	if s.demoMode {
+		provider = demo.Provider{}
+	} else {
+		provider = core.LiveProvider{}
+	}
+	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	if err := s.manager.StartWatcher(); err != nil {
 		return err
 	}
@@ -96,20 +104,20 @@ type SessionItem struct {
 // SessionFull is the detailed session representation.
 type SessionFull struct {
 	SessionItem
-	Version             string              `json:"version"`
-	IsWorktree          bool                `json:"isWorktree"`
-	MainRepo            string              `json:"mainRepo"`
-	InputTokens         int                 `json:"inputTokens"`
-	OutputTokens        int                 `json:"outputTokens"`
-	CacheCreationTokens int                 `json:"cacheCreationTokens"`
-	CacheReadTokens     int                 `json:"cacheReadTokens"`
-	UserMessages        int                 `json:"userMessages"`
-	AssistantMessages   int                 `json:"assistantMessages"`
-	CurrentTool         string              `json:"currentTool"`
-	LastFileWrite       string              `json:"lastFileWrite"`
-	LastFileWriteAt     time.Time           `json:"lastFileWriteAt"`
-	RecentTools         []ToolItem          `json:"recentTools"`
-	RecentMessages      []ConversationItem  `json:"recentMessages"`
+	Version             string             `json:"version"`
+	IsWorktree          bool               `json:"isWorktree"`
+	MainRepo            string             `json:"mainRepo"`
+	InputTokens         int                `json:"inputTokens"`
+	OutputTokens        int                `json:"outputTokens"`
+	CacheCreationTokens int                `json:"cacheCreationTokens"`
+	CacheReadTokens     int                `json:"cacheReadTokens"`
+	UserMessages        int                `json:"userMessages"`
+	AssistantMessages   int                `json:"assistantMessages"`
+	CurrentTool         string             `json:"currentTool"`
+	LastFileWrite       string             `json:"lastFileWrite"`
+	LastFileWriteAt     time.Time          `json:"lastFileWriteAt"`
+	RecentTools         []ToolItem         `json:"recentTools"`
+	RecentMessages      []ConversationItem `json:"recentMessages"`
 }
 
 // ToolItem is a tool call for the detail view.

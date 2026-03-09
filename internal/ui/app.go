@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/nahime0/lazyagent/internal/demo"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -90,9 +91,15 @@ var keys = keyMap{
 	Open:    key.NewBinding(key.WithKeys("o")),
 }
 
-func NewModel() Model {
+func NewModel(demoMode bool) Model {
 	cfg := core.LoadConfig()
-	mgr := core.NewSessionManager(cfg.WindowMinutes)
+	var provider core.SessionProvider
+	if demoMode {
+		provider = demo.Provider{}
+	} else {
+		provider = core.LiveProvider{}
+	}
+	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
 	_ = mgr.StartWatcher()
 	return Model{
 		loading: true,
