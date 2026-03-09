@@ -49,7 +49,19 @@
     if (e.key === "Enter") { e.preventDefault(); confirmRename(); }
     else if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (renaming) return; // Already renaming, let handleRenameKey deal with it
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (e.key === "r" && detail) {
+      e.preventDefault();
+      startRename();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#if detail}
   <div class="flex flex-col h-full overflow-y-auto px-4 py-3 gap-3">

@@ -62,6 +62,8 @@
       const prev = Math.max(idx - 1, 0);
       $selectedId = list[prev].sessionId;
     } else if (e.key === "r") {
+      // When detail panel is open, let SessionDetail handle 'r' for rename
+      if ($selectedId) return;
       e.preventDefault();
       const session = list.find((s) => s.sessionId === $selectedId);
       if (session) startRename(session);
