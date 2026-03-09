@@ -105,8 +105,14 @@ async function fetchEndpoint(path) {
 }
 
 function showResult(path, data) {
-  document.getElementById('output').innerHTML =
-    '<h2>' + path + '</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+  var out = document.getElementById('output');
+  out.textContent = '';
+  var h = document.createElement('h2');
+  h.textContent = path;
+  var pre = document.createElement('pre');
+  pre.textContent = JSON.stringify(data, null, 2);
+  out.appendChild(h);
+  out.appendChild(pre);
 }
 
 function toggleSSE() {
