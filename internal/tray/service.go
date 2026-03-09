@@ -22,17 +22,20 @@ type SessionService struct {
 	app      *application.App
 	ctx      context.Context
 	demoMode bool
+	provider core.SessionProvider // if set, used instead of demoMode logic
 }
 
 // ServiceStartup is called by Wails when the app starts.
 func (s *SessionService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	s.ctx = ctx
 	cfg := core.LoadConfig()
-	var provider core.SessionProvider
-	if s.demoMode {
-		provider = demo.Provider{}
-	} else {
-		provider = core.LiveProvider{}
+	provider := s.provider
+	if provider == nil {
+		if s.demoMode {
+			provider = demo.Provider{}
+		} else {
+			provider = core.LiveProvider{}
+		}
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	if err := s.manager.StartWatcher(); err != nil {
