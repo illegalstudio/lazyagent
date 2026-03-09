@@ -70,28 +70,9 @@ More info: https://github.com/illegalstudio/lazyagent
 		}
 
 		if !foreground {
-			// Tray-only: detach to background (existing behavior).
+			// Tray-only: detach to background.
 			if os.Getenv("LAZYAGENT_DETACHED") == "" {
-				killPreviousTray()
-
-				exe, err := os.Executable()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
-				}
-				trayArgs := []string{"--tray"}
-				if *demoMode {
-					trayArgs = append(trayArgs, "--demo")
-				}
-				cmd := exec.Command(exe, trayArgs...)
-				cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
-				cmd.Stdin = nil
-				cmd.Stdout = nil
-				cmd.Stderr = nil
-				if err := cmd.Start(); err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
-				}
+				forkTray(*demoMode)
 				return
 			}
 
@@ -105,13 +86,15 @@ More info: https://github.com/illegalstudio/lazyagent
 			return
 		}
 
-		// Foreground tray (with --api or --tui): tray needs the main thread (macOS Cocoa).
-		// Kill previous tray instance and write PID file so future launches can find us.
-		killPreviousTray()
-		_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
+		if runTUI {
+			// --tui --tray [--api]: tray needs its own main thread (macOS Cocoa),
+			// so fork it as a separate detached process.
+			forkTray(*demoMode)
+		} else {
+			// --tray --api (no TUI): tray on main thread, API in goroutine.
+			killPreviousTray()
+			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 
-		if !runTUI {
-			// --tray --api (no TUI): API in goroutine, tray on main thread.
 			if runAPI {
 				ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 				defer cancel()
@@ -135,15 +118,6 @@ More info: https://github.com/illegalstudio/lazyagent
 			}
 			return
 		}
-
-		// --tui --tray [--api]: tray in goroutine (TUI takes main thread).
-		// Note: on macOS, tray may have limited functionality when not on the main thread.
-		go func() {
-			defer os.Remove(trayPidFile)
-			if err := tray.Run(*demoMode); err != nil {
-				fmt.Fprintf(os.Stderr, "Tray error: %v\n", err)
-			}
-		}()
 	}
 
 	// Set up signal handling for graceful shutdown.
@@ -194,6 +168,30 @@ More info: https://github.com/illegalstudio/lazyagent
 		if apiDone != nil {
 			<-apiDone
 		}
+	}
+}
+
+// forkTray launches the tray as a detached background process with its own main thread.
+func forkTray(demoMode bool) {
+	killPreviousTray()
+
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	trayArgs := []string{"--tray"}
+	if demoMode {
+		trayArgs = append(trayArgs, "--demo")
+	}
+	cmd := exec.Command(exe, trayArgs...)
+	cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
