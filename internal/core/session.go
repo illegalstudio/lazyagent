@@ -40,6 +40,7 @@ type SessionManager struct {
 	tracker  *ActivityTracker
 	watcher  *ProjectWatcher
 	provider SessionProvider
+	names    *SessionNames
 
 	windowMinutes  int
 	activityFilter ActivityKind
@@ -53,7 +54,18 @@ func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionMana
 		tracker:       NewActivityTracker(),
 		windowMinutes: windowMinutes,
 		provider:      provider,
+		names:         NewSessionNames(),
 	}
+}
+
+// SessionName returns the custom name for a session, or empty string.
+func (m *SessionManager) SessionName(sessionID string) string {
+	return m.names.Get(sessionID)
+}
+
+// SetSessionName stores a custom name for a session.
+func (m *SessionManager) SetSessionName(sessionID, name string) error {
+	return m.names.Set(sessionID, name)
 }
 
 // StartWatcher starts the file system watcher if the provider supports it.
@@ -102,7 +114,9 @@ func (m *SessionManager) Reload() error {
 // UpdateActivities refreshes activity states without reloading from disk.
 // Returns true if any activity state changed.
 // If the provider specifies a RefreshInterval, sessions are re-discovered periodically.
+// Also refreshes session names from disk if modified externally.
 func (m *SessionManager) UpdateActivities() bool {
+	namesChanged := m.names.Refresh()
 	if interval := m.provider.RefreshInterval(); interval > 0 {
 		now := time.Now()
 		m.mu.RLock()
@@ -133,7 +147,7 @@ func (m *SessionManager) UpdateActivities() bool {
 			return true
 		}
 	}
-	return false
+	return namesChanged
 }
 
 // SetWindowMinutes sets the time window filter, clamped to [MinWindowMinutes, MaxWindowMinutes].
@@ -215,8 +229,12 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 		if filter != "" && m.tracker.Get(s.SessionID) != filter {
 			continue
 		}
-		if lowerQuery != "" && !strings.Contains(strings.ToLower(s.CWD), lowerQuery) {
-			continue
+		if lowerQuery != "" {
+			matchCWD := strings.Contains(strings.ToLower(s.CWD), lowerQuery)
+			matchName := strings.Contains(strings.ToLower(m.names.Get(s.SessionID)), lowerQuery)
+			if !matchCWD && !matchName {
+				continue
+			}
 		}
 		visible = append(visible, s)
 	}

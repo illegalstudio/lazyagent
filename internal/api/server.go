@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -182,6 +183,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api", s.handlePlayground)
 	s.mux.HandleFunc("GET /api/sessions", s.handleGetSessions)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
+	s.mux.HandleFunc("PUT /api/sessions/{id}/name", s.handleSetSessionName)
+	s.mux.HandleFunc("DELETE /api/sessions/{id}/name", s.handleDeleteSessionName)
 	s.mux.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("GET /api/events", s.handleSSE)
@@ -197,7 +200,7 @@ func (s *Server) handleGetSessions(w http.ResponseWriter, r *http.Request) {
 	items := make([]SessionItem, 0, len(visible))
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		items = append(items, buildSessionItem(sess, activity))
+		items = append(items, s.buildSessionItem(sess, activity))
 	}
 	writeJSON(w, http.StatusOK, items)
 }
@@ -209,7 +212,35 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, buildSessionFull(detail))
+	writeJSON(w, http.StatusOK, s.buildSessionFull(detail))
+}
+
+func (s *Server) handleSetSessionName(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if err := s.manager.SetSessionName(id, name); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.notifySSE()
+	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": name})
+}
+
+func (s *Server) handleDeleteSessionName(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.manager.SetSessionName(id, ""); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.notifySSE()
+	writeJSON(w, http.StatusOK, map[string]string{"session_id": id, "custom_name": ""})
 }
 
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +297,7 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 	activeCount := 0
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
-		items = append(items, buildSessionItem(sess, activity))
+		items = append(items, s.buildSessionItem(sess, activity))
 		if core.IsActiveActivity(activity) {
 			activeCount++
 		}
@@ -297,6 +328,7 @@ type SessionItem struct {
 	SessionID     string    `json:"session_id"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"short_name"`
+	CustomName    string    `json:"custom_name,omitempty"`
 	Activity      string    `json:"activity"`
 	IsActive      bool      `json:"is_active"`
 	Model         string    `json:"model"`
@@ -353,11 +385,12 @@ type SSEPayload struct {
 
 // --- Builders ---
 
-func buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
+func (s *Server) buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, 60),
+		CustomName:    s.manager.SessionName(sess.SessionID),
 		Activity:      string(activity),
 		IsActive:      core.IsActiveActivity(activity),
 		Model:         sess.Model,
@@ -368,7 +401,7 @@ func buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionI
 	}
 }
 
-func buildSessionFull(detail *core.SessionDetailView) SessionFull {
+func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 	sess := &detail.Session
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
 	for _, t := range sess.RecentTools {
@@ -386,7 +419,7 @@ func buildSessionFull(detail *core.SessionDetailView) SessionFull {
 		})
 	}
 	return SessionFull{
-		SessionItem:         buildSessionItem(sess, detail.Activity),
+		SessionItem:         s.buildSessionItem(sess, detail.Activity),
 		Version:             sess.Version,
 		IsWorktree:          sess.IsWorktree,
 		MainRepo:            sess.MainRepo,

@@ -73,9 +73,6 @@
     } else if (e.key === "-") {
       e.preventDefault();
       adjustWindow(-10);
-    } else if (e.key === "r") {
-      e.preventDefault();
-      loadSessions();
     }
   }
 
@@ -185,7 +182,7 @@
     <span><kbd class="text-text/60">/</kbd> search</span>
     <span><kbd class="text-text/60">f</kbd> filter</span>
     <span><kbd class="text-text/60">+/−</kbd> window</span>
-    <span><kbd class="text-text/60">r</kbd> refresh</span>
+    <span><kbd class="text-text/60">r</kbd> rename</span>
     <span><kbd class="text-text/60">esc</kbd> back</span>
   </footer>
 </div>

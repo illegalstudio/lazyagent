@@ -44,6 +44,13 @@ export function GetSessionDetail(id: string): $CancellablePromise<$models.Sessio
 }
 
 /**
+ * GetSessionName returns the custom name for a session.
+ */
+export function GetSessionName(sessionID: string): $CancellablePromise<string> {
+    return $Call.ByID(3799911173, sessionID);
+}
+
+/**
  * GetSessions returns all visible sessions for the list view.
  */
 export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
@@ -61,6 +68,9 @@ export function GetWindowMinutes(): $CancellablePromise<number> {
 
 /**
  * OpenInEditor opens a directory in the user's editor.
+ * It follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
+ * $EDITOR is a terminal editor (opened inside a Terminal.app window).
+ * The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
  */
 export function OpenInEditor(cwd: string): $CancellablePromise<void> {
     return $Call.ByID(1983870972, cwd);
@@ -78,6 +88,13 @@ export function SetActivityFilter(f: string): $CancellablePromise<void> {
  */
 export function SetSearchQuery(q: string): $CancellablePromise<void> {
     return $Call.ByID(2439661330, q);
+}
+
+/**
+ * SetSessionName stores a custom name for a session. Empty name resets it.
+ */
+export function SetSessionName(sessionID: string, name: string): $CancellablePromise<void> {
+    return $Call.ByID(602820185, sessionID, name);
 }
 
 /**

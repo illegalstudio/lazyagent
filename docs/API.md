@@ -1,6 +1,6 @@
 # lazyagent API
 
-lazyagent exposes an HTTP API for monitoring Claude Code sessions. The API is read-only and designed for building external clients (mobile apps, dashboards, integrations).
+lazyagent exposes an HTTP API for monitoring and managing Claude Code sessions, designed for building external clients (mobile apps, dashboards, integrations).
 
 ## Starting the API server
 
@@ -47,6 +47,7 @@ List all visible sessions within the configured time window.
     "session_id": "abc123",
     "cwd": "/Users/me/projects/myapp",
     "short_name": "…/projects/myapp",
+    "custom_name": "my-api-project",
     "activity": "thinking",
     "is_active": true,
     "model": "claude-sonnet-4-20250514",
@@ -73,6 +74,7 @@ Get full details for a specific session.
   "session_id": "abc123",
   "cwd": "/Users/me/projects/myapp",
   "short_name": "…/projects/myapp",
+  "custom_name": "my-api-project",
   "activity": "writing",
   "is_active": true,
   "model": "claude-sonnet-4-20250514",
@@ -104,6 +106,50 @@ Get full details for a specific session.
 ```
 
 **Response:** `404 Not Found` if session doesn't exist.
+
+---
+
+### PUT /api/sessions/{id}/name
+
+Set a custom name for a session. Names are persisted in `~/.config/lazyagent/session-names.json` and synced across TUI, tray, and API in real-time.
+
+**Request body:**
+
+```json
+{
+  "name": "my-api-project"
+}
+```
+
+An empty `"name"` resets the session to its default path-based name.
+
+**Response:** `200 OK`
+
+```json
+{
+  "session_id": "abc123",
+  "custom_name": "my-api-project"
+}
+```
+
+Triggers an SSE `update` event to all connected clients.
+
+---
+
+### DELETE /api/sessions/{id}/name
+
+Remove the custom name from a session (reset to default path-based name).
+
+**Response:** `200 OK`
+
+```json
+{
+  "session_id": "abc123",
+  "custom_name": ""
+}
+```
+
+Triggers an SSE `update` event to all connected clients.
 
 ---
 
