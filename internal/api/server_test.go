@@ -148,6 +148,24 @@ func TestSSE(t *testing.T) {
 		t.Fatal("never received SSE update event")
 	}
 
-	// Trigger a notification and verify we'd get another frame.
+	// Trigger a notification and verify a second frame arrives.
 	srv.notifySSE()
+
+	gotSecond := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: update") {
+			gotSecond = true
+		}
+		if strings.HasPrefix(line, "data: ") && gotSecond {
+			var payload SSEPayload
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &payload); err != nil {
+				t.Fatalf("decode second SSE data: %v", err)
+			}
+			break
+		}
+	}
+	if !gotSecond {
+		t.Fatal("never received second SSE update event after notifySSE")
+	}
 }
