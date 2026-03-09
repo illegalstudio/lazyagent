@@ -119,6 +119,8 @@ More info: https://github.com/illegalstudio/lazyagent
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	var apiDone chan struct{}
+
 	if runAPI {
 		srv, err := api.New(*apiHost, *demoMode)
 		if err != nil {
@@ -128,7 +130,9 @@ More info: https://github.com/illegalstudio/lazyagent
 
 		if runTUI {
 			// API in background, TUI in foreground.
+			apiDone = make(chan struct{})
 			go func() {
+				defer close(apiDone)
 				if err := srv.Run(ctx); err != nil {
 					fmt.Fprintf(os.Stderr, "API error: %v\n", err)
 				}
@@ -154,8 +158,11 @@ More info: https://github.com/illegalstudio/lazyagent
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		// TUI exited: cancel ctx to stop API server.
+		// TUI exited: cancel ctx to stop API server, then wait for graceful shutdown.
 		cancel()
+		if apiDone != nil {
+			<-apiDone
+		}
 	}
 }
 
