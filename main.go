@@ -106,9 +106,11 @@ More info: https://github.com/illegalstudio/lazyagent
 		}
 
 		// Foreground tray (with --api or --tui): launch tray in background goroutine.
-		// Kill previous detached tray first.
+		// Kill previous tray instance and write PID file so future launches can find us.
 		killPreviousTray()
+		_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 		go func() {
+			defer os.Remove(trayPidFile)
 			if err := tray.Run(*demoMode); err != nil {
 				fmt.Fprintf(os.Stderr, "Tray error: %v\n", err)
 			}
