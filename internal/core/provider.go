@@ -9,15 +9,26 @@ import (
 )
 
 // LiveProvider discovers real Claude Code sessions from disk.
-type LiveProvider struct{}
-
-func (LiveProvider) DiscoverSessions() ([]*model.Session, error) {
-	return claude.DiscoverSessions()
+type LiveProvider struct {
+	cache        *claude.SessionCache
+	desktopCache *claude.DesktopCache
 }
 
-func (LiveProvider) UseWatcher() bool               { return true }
-func (LiveProvider) RefreshInterval() time.Duration { return 0 }
-func (LiveProvider) WatchDirs() []string {
+// NewLiveProvider creates a LiveProvider with mtime-based caches.
+func NewLiveProvider() *LiveProvider {
+	return &LiveProvider{
+		cache:        claude.NewSessionCache(),
+		desktopCache: claude.NewDesktopCache(),
+	}
+}
+
+func (p *LiveProvider) DiscoverSessions() ([]*model.Session, error) {
+	return claude.DiscoverSessions(p.cache, p.desktopCache)
+}
+
+func (p *LiveProvider) UseWatcher() bool               { return true }
+func (p *LiveProvider) RefreshInterval() time.Duration { return 0 }
+func (p *LiveProvider) WatchDirs() []string {
 	dirs := []string{claude.ClaudeProjectsDir()}
 	if d := claude.DesktopSessionsDir(); d != "" {
 		dirs = append(dirs, d)
@@ -26,15 +37,22 @@ func (LiveProvider) WatchDirs() []string {
 }
 
 // PiProvider discovers pi coding agent sessions from disk.
-type PiProvider struct{}
-
-func (PiProvider) DiscoverSessions() ([]*model.Session, error) {
-	return pi.DiscoverSessions()
+type PiProvider struct {
+	cache *pi.SessionCache
 }
 
-func (PiProvider) UseWatcher() bool               { return true }
-func (PiProvider) RefreshInterval() time.Duration { return 0 }
-func (PiProvider) WatchDirs() []string            { return []string{pi.PiSessionsDir()} }
+// NewPiProvider creates a PiProvider with an mtime-based cache.
+func NewPiProvider() *PiProvider {
+	return &PiProvider{cache: pi.NewSessionCache()}
+}
+
+func (p *PiProvider) DiscoverSessions() ([]*model.Session, error) {
+	return pi.DiscoverSessions(p.cache)
+}
+
+func (p *PiProvider) UseWatcher() bool               { return true }
+func (p *PiProvider) RefreshInterval() time.Duration { return 0 }
+func (p *PiProvider) WatchDirs() []string            { return []string{pi.PiSessionsDir()} }
 
 // MultiProvider merges sessions from multiple providers.
 type MultiProvider struct {

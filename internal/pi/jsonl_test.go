@@ -304,7 +304,7 @@ func TestDiscoverSessions_RealData(t *testing.T) {
 		t.Skip("no pi sessions directory found")
 	}
 
-	sessions, err := DiscoverSessions()
+	sessions, err := DiscoverSessions(NewSessionCache())
 	if err != nil {
 		t.Fatalf("DiscoverSessions failed: %v", err)
 	}

@@ -34,7 +34,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		if s.demoMode {
 			provider = demo.Provider{}
 		} else {
-			provider = core.LiveProvider{}
+			provider = core.NewLiveProvider()
 		}
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
@@ -62,8 +62,13 @@ func (s *SessionService) watchLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	reloadTicker := time.NewTicker(30 * time.Second)
-	defer reloadTicker.Stop()
+	// Only use a periodic reload ticker when no file watcher is available.
+	var reloadC <-chan time.Time
+	if events == nil {
+		reloadTicker := time.NewTicker(30 * time.Second)
+		defer reloadTicker.Stop()
+		reloadC = reloadTicker.C
+	}
 
 	for {
 		select {
@@ -76,7 +81,7 @@ func (s *SessionService) watchLoop() {
 			if s.manager.UpdateActivities() {
 				s.emitUpdate()
 			}
-		case <-reloadTicker.C:
+		case <-reloadC:
 			_ = s.manager.Reload()
 			s.emitUpdate()
 		}

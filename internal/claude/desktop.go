@@ -39,14 +39,15 @@ type desktopSessionJSON struct {
 
 // loadDesktopMetadata scans the Desktop sessions directory and returns
 // metadata indexed by cliSessionId (which matches JSONL filenames).
-// Returns an empty map on any error — never fatal.
-func loadDesktopMetadata() map[string]*model.DesktopMeta {
+// Uses a cache to skip unchanged files. Returns an empty map on any error.
+func loadDesktopMetadata(cache *DesktopCache) map[string]*model.DesktopMeta {
 	dir := DesktopSessionsDir()
 	if dir == "" {
 		return nil
 	}
 
 	result := make(map[string]*model.DesktopMeta)
+	seen := make(map[string]struct{})
 
 	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -54,6 +55,19 @@ func loadDesktopMetadata() map[string]*model.DesktopMeta {
 		}
 		if !strings.HasPrefix(d.Name(), "local_") || !strings.HasSuffix(d.Name(), ".json") {
 			return nil
+		}
+		seen[path] = struct{}{}
+
+		// Check cache by mtime
+		info, infoErr := d.Info()
+		if infoErr == nil {
+			cache.mu.Lock()
+			if e, ok := cache.entries[path]; ok && e.mtime.Equal(info.ModTime()) {
+				result[e.cliID] = e.meta
+				cache.mu.Unlock()
+				return nil
+			}
+			cache.mu.Unlock()
 		}
 
 		data, err := os.ReadFile(path)
@@ -80,8 +94,24 @@ func loadDesktopMetadata() map[string]*model.DesktopMeta {
 		}
 
 		result[dj.CLISessionID] = meta
+
+		// Store in cache
+		if infoErr == nil {
+			cache.mu.Lock()
+			cache.entries[path] = desktopCacheEntry{mtime: info.ModTime(), meta: meta, cliID: dj.CLISessionID}
+			cache.mu.Unlock()
+		}
 		return nil
 	})
+
+	// Prune stale entries
+	cache.mu.Lock()
+	for k := range cache.entries {
+		if _, ok := seen[k]; !ok {
+			delete(cache.entries, k)
+		}
+	}
+	cache.mu.Unlock()
 
 	return result
 }
