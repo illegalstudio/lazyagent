@@ -71,7 +71,7 @@ func (w *ProjectWatcher) run(out chan<- struct{}) {
 		if timer != nil {
 			timer.Stop()
 		}
-		timer = time.AfterFunc(200*time.Millisecond, func() {
+		timer = time.AfterFunc(500*time.Millisecond, func() {
 			select {
 			case out <- struct{}{}:
 			default:
