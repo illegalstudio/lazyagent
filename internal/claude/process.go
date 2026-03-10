@@ -12,23 +12,6 @@ import (
 	"github.com/nahime0/lazyagent/internal/model"
 )
 
-// SessionCache caches parsed JSONL sessions keyed by file path.
-// On subsequent calls, only files whose mtime changed are re-parsed.
-type SessionCache struct {
-	mu      sync.Mutex
-	entries map[string]sessionCacheEntry
-}
-
-type sessionCacheEntry struct {
-	mtime   time.Time
-	session *model.Session
-}
-
-// NewSessionCache creates an empty session cache.
-func NewSessionCache() *SessionCache {
-	return &SessionCache{entries: make(map[string]sessionCacheEntry)}
-}
-
 // DesktopCache caches parsed desktop metadata JSON files keyed by file path.
 type DesktopCache struct {
 	mu      sync.Mutex
@@ -90,7 +73,7 @@ func ProjectDirForCWD(cwd string) string {
 
 // DiscoverSessions scans ~/.claude/projects for JSONL session files.
 // Every JSONL file is a separate session. Uses caches to skip unchanged files.
-func DiscoverSessions(cache *SessionCache, desktopCache *DesktopCache) ([]*model.Session, error) {
+func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]*model.Session, error) {
 	projectsDir := ClaudeProjectsDir()
 	if projectsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
@@ -123,26 +106,22 @@ func DiscoverSessions(cache *SessionCache, desktopCache *DesktopCache) ([]*model
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
 
-			cached := true
-			session := cache.get(jsonlFile)
+			session, mtime := cache.Get(jsonlFile)
 			if session == nil {
-				cached = false
 				s, err := ParseJSONL(jsonlFile)
 				if err != nil {
 					continue
 				}
 				session = s
-			}
 
-			// If CWD is empty (brand new session not yet written), derive
-			// from the encoded directory name as a best-effort fallback
-			if session.CWD == "" {
-				session.CWD = decodeDirName(projectEntry.Name())
-			}
+				// If CWD is empty (brand new session not yet written), derive
+				// from the encoded directory name as a best-effort fallback
+				if session.CWD == "" {
+					session.CWD = decodeDirName(projectEntry.Name())
+				}
 
-			// Only run git worktree check for newly parsed sessions.
-			// Cached sessions already have IsWorktree/MainRepo set.
-			if !cached {
+				// Only run git worktree check for newly parsed sessions.
+				// Cached sessions already have IsWorktree/MainRepo set.
 				if _, ok := wtCache[session.CWD]; !ok {
 					isWT, mainRepo := IsWorktree(session.CWD)
 					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
@@ -150,13 +129,13 @@ func DiscoverSessions(cache *SessionCache, desktopCache *DesktopCache) ([]*model
 				wt := wtCache[session.CWD]
 				session.IsWorktree = wt.isWorktree
 				session.MainRepo = wt.mainRepo
-				cache.put(jsonlFile, session)
+				cache.Put(jsonlFile, mtime, session)
 			}
 
 			sessions = append(sessions, session)
 		}
 	}
-	cache.prune(seen)
+	cache.Prune(seen)
 
 	// Enrich with Claude Desktop metadata.
 	desktopMeta := loadDesktopMetadata(desktopCache)
@@ -170,42 +149,6 @@ func DiscoverSessions(cache *SessionCache, desktopCache *DesktopCache) ([]*model
 	}
 
 	return sessions, nil
-}
-
-// get returns a cached session if the file mtime hasn't changed.
-func (c *SessionCache) get(path string) *model.Session {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if e, ok := c.entries[path]; ok && e.mtime.Equal(info.ModTime()) {
-		return e.session
-	}
-	return nil
-}
-
-// put stores a session in the cache with the file's current mtime.
-func (c *SessionCache) put(path string, s *model.Session) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	c.mu.Lock()
-	c.entries[path] = sessionCacheEntry{mtime: info.ModTime(), session: s}
-	c.mu.Unlock()
-}
-
-// prune removes cache entries for files no longer on disk.
-func (c *SessionCache) prune(seen map[string]struct{}) {
-	c.mu.Lock()
-	for k := range c.entries {
-		if _, ok := seen[k]; !ok {
-			delete(c.entries, k)
-		}
-	}
-	c.mu.Unlock()
 }
 
 func decodeDirName(name string) string {

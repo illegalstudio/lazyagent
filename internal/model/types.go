@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"os"
+	"sync"
+	"time"
+)
 
 // SessionStatus represents the current activity of a coding agent session.
 type SessionStatus int
@@ -105,4 +109,57 @@ type DesktopMeta struct {
 	PermissionMode string
 	IsArchived     bool
 	CreatedAt      time.Time
+}
+
+// SessionCache caches parsed JSONL sessions keyed by file path.
+// On subsequent calls, only files whose mtime changed are re-parsed.
+// Shared by all agent providers (Claude, pi, etc.).
+type SessionCache struct {
+	mu      sync.Mutex
+	entries map[string]sessionCacheEntry
+}
+
+type sessionCacheEntry struct {
+	mtime   time.Time
+	session *Session
+}
+
+// NewSessionCache creates an empty session cache.
+func NewSessionCache() *SessionCache {
+	return &SessionCache{entries: make(map[string]sessionCacheEntry)}
+}
+
+// Get returns a cached session if the file mtime hasn't changed.
+// Returns (session, mtime) on hit, (nil, mtime) on miss.
+// The returned mtime should be passed to Put to avoid TOCTOU races.
+func (c *SessionCache) Get(path string) (*Session, time.Time) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, time.Time{}
+	}
+	mtime := info.ModTime()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.entries[path]; ok && e.mtime.Equal(mtime) {
+		return e.session, mtime
+	}
+	return nil, mtime
+}
+
+// Put stores a session in the cache with the given mtime (from a prior Get call).
+func (c *SessionCache) Put(path string, mtime time.Time, s *Session) {
+	c.mu.Lock()
+	c.entries[path] = sessionCacheEntry{mtime: mtime, session: s}
+	c.mu.Unlock()
+}
+
+// Prune removes cache entries for files no longer present in the seen set.
+func (c *SessionCache) Prune(seen map[string]struct{}) {
+	c.mu.Lock()
+	for k := range c.entries {
+		if _, ok := seen[k]; !ok {
+			delete(c.entries, k)
+		}
+	}
+	c.mu.Unlock()
 }

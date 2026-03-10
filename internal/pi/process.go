@@ -5,28 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/model"
 )
-
-// SessionCache caches parsed pi JSONL sessions keyed by file path.
-type SessionCache struct {
-	mu      sync.Mutex
-	entries map[string]cacheEntry
-}
-
-type cacheEntry struct {
-	mtime   time.Time
-	session *model.Session
-}
-
-// NewSessionCache creates an empty pi session cache.
-func NewSessionCache() *SessionCache {
-	return &SessionCache{entries: make(map[string]cacheEntry)}
-}
 
 // PiSessionsDir returns the path to ~/.pi/agent/sessions.
 func PiSessionsDir() string {
@@ -38,13 +20,13 @@ func PiSessionsDir() string {
 }
 
 // DiscoverSessions scans ~/.pi/agent/sessions for JSONL session files.
-func DiscoverSessions(cache *SessionCache) ([]*model.Session, error) {
+func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 	return discoverSessionsFromDir(PiSessionsDir(), cache)
 }
 
 // discoverSessionsFromDir scans a directory for pi session JSONL files.
 // Exported for testing with synthetic directories.
-func discoverSessionsFromDir(sessionsDir string, cache *SessionCache) ([]*model.Session, error) {
+func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
@@ -78,23 +60,19 @@ func discoverSessionsFromDir(sessionsDir string, cache *SessionCache) ([]*model.
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
 
-			cached := true
-			session := cache.get(jsonlFile)
+			session, mtime := cache.Get(jsonlFile)
 			if session == nil {
-				cached = false
 				s, err := ParsePiJSONL(jsonlFile)
 				if err != nil {
 					continue
 				}
 				session = s
-			}
 
-			if session.CWD == "" {
-				session.CWD = decodePiDirName(projectEntry.Name())
-			}
+				if session.CWD == "" {
+					session.CWD = decodePiDirName(projectEntry.Name())
+				}
 
-			// Only run git worktree check for newly parsed sessions.
-			if !cached {
+				// Only run git worktree check for newly parsed sessions.
 				if _, ok := wtCache[session.CWD]; !ok {
 					isWT, mainRepo := claude.IsWorktree(session.CWD)
 					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
@@ -102,47 +80,14 @@ func discoverSessionsFromDir(sessionsDir string, cache *SessionCache) ([]*model.
 				wt := wtCache[session.CWD]
 				session.IsWorktree = wt.isWorktree
 				session.MainRepo = wt.mainRepo
-				cache.put(jsonlFile, session)
+				cache.Put(jsonlFile, mtime, session)
 			}
 
 			sessions = append(sessions, session)
 		}
 	}
-	cache.prune(seen)
+	cache.Prune(seen)
 	return sessions, nil
-}
-
-func (c *SessionCache) get(path string) *model.Session {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if e, ok := c.entries[path]; ok && e.mtime.Equal(info.ModTime()) {
-		return e.session
-	}
-	return nil
-}
-
-func (c *SessionCache) put(path string, s *model.Session) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	c.mu.Lock()
-	c.entries[path] = cacheEntry{mtime: info.ModTime(), session: s}
-	c.mu.Unlock()
-}
-
-func (c *SessionCache) prune(seen map[string]struct{}) {
-	c.mu.Lock()
-	for k := range c.entries {
-		if _, ok := seen[k]; !ok {
-			delete(c.entries, k)
-		}
-	}
-	c.mu.Unlock()
 }
 
 // decodePiDirName reverses the pi encoding: --path-segments-- → /path/segments

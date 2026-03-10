@@ -10,14 +10,14 @@ import (
 
 // LiveProvider discovers real Claude Code sessions from disk.
 type LiveProvider struct {
-	cache        *claude.SessionCache
+	cache        *model.SessionCache
 	desktopCache *claude.DesktopCache
 }
 
 // NewLiveProvider creates a LiveProvider with mtime-based caches.
 func NewLiveProvider() *LiveProvider {
 	return &LiveProvider{
-		cache:        claude.NewSessionCache(),
+		cache:        model.NewSessionCache(),
 		desktopCache: claude.NewDesktopCache(),
 	}
 }
@@ -38,12 +38,12 @@ func (p *LiveProvider) WatchDirs() []string {
 
 // PiProvider discovers pi coding agent sessions from disk.
 type PiProvider struct {
-	cache *pi.SessionCache
+	cache *model.SessionCache
 }
 
 // NewPiProvider creates a PiProvider with an mtime-based cache.
 func NewPiProvider() *PiProvider {
-	return &PiProvider{cache: pi.NewSessionCache()}
+	return &PiProvider{cache: model.NewSessionCache()}
 }
 
 func (p *PiProvider) DiscoverSessions() ([]*model.Session, error) {

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 func TestPiSessionsDir(t *testing.T) {
@@ -52,7 +54,7 @@ func TestDiscoverSessions_FromSyntheticDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions, err := discoverSessionsFromDir(dir, NewSessionCache())
+	sessions, err := discoverSessionsFromDir(dir, model.NewSessionCache())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestDiscoverSessions_FallbackCWD(t *testing.T) {
 `
 	os.WriteFile(filepath.Join(projectDir, "session.jsonl"), []byte(content), 0644)
 
-	sessions, err := discoverSessionsFromDir(dir, NewSessionCache())
+	sessions, err := discoverSessionsFromDir(dir, model.NewSessionCache())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +94,7 @@ func TestDiscoverSessions_FallbackCWD(t *testing.T) {
 
 func TestDiscoverSessions_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	sessions, err := discoverSessionsFromDir(dir, NewSessionCache())
+	sessions, err := discoverSessionsFromDir(dir, model.NewSessionCache())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,7 +104,7 @@ func TestDiscoverSessions_EmptyDir(t *testing.T) {
 }
 
 func TestDiscoverSessions_NonexistentDir(t *testing.T) {
-	sessions, err := discoverSessionsFromDir("/nonexistent/path/that/does/not/exist", NewSessionCache())
+	sessions, err := discoverSessionsFromDir("/nonexistent/path/that/does/not/exist", model.NewSessionCache())
 	if err != nil {
 		t.Fatalf("should not error for nonexistent dir, got: %v", err)
 	}
