@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
 	"github.com/nahime0/lazyagent/internal/demo"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -22,17 +22,20 @@ type SessionService struct {
 	app      *application.App
 	ctx      context.Context
 	demoMode bool
+	provider core.SessionProvider // if set, used instead of demoMode logic
 }
 
 // ServiceStartup is called by Wails when the app starts.
 func (s *SessionService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	s.ctx = ctx
 	cfg := core.LoadConfig()
-	var provider core.SessionProvider
-	if s.demoMode {
-		provider = demo.Provider{}
-	} else {
-		provider = core.LiveProvider{}
+	provider := s.provider
+	if provider == nil {
+		if s.demoMode {
+			provider = demo.Provider{}
+		} else {
+			provider = core.LiveProvider{}
+		}
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	if err := s.manager.StartWatcher(); err != nil {
@@ -89,6 +92,7 @@ func (s *SessionService) emitUpdate() {
 // SessionItem is a lightweight session representation for the list view.
 type SessionItem struct {
 	SessionID     string    `json:"sessionId"`
+	Agent         string    `json:"agent"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"shortName"`
 	CustomName    string    `json:"customName"`
@@ -135,9 +139,10 @@ type ConversationItem struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func (s *SessionService) buildSessionItem(sess *claude.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
+func (s *SessionService) buildSessionItem(sess *model.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
+		Agent:         sess.Agent,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, nameLen),
 		CustomName:    s.manager.SessionName(sess.SessionID),

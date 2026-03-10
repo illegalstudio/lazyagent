@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // Raw JSONL entry structures
@@ -62,7 +64,7 @@ type jsonlContent struct {
 }
 
 // ParseJSONL reads a JSONL file and returns a populated Session.
-func ParseJSONL(path string) (*Session, error) {
+func ParseJSONL(path string) (*model.Session, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -78,10 +80,11 @@ func ParseJSONL(path string) (*Session, error) {
 	// After compaction, the new JSONL starts with entries from the old session,
 	// so reading sessionId from entries would give the wrong (old) ID.
 	filenameID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-	session := &Session{
+	session := &model.Session{
 		JSONLPath:    path,
 		SessionID:    filenameID,
 		LastActivity: info.ModTime(),
+		Agent:        "claude",
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -90,8 +93,8 @@ func ParseJSONL(path string) (*Session, error) {
 
 	// Single-pass: extract metadata, count messages, collect recent tools/messages,
 	// and track the last meaningful entry for status determination.
-	var recentTools []ToolCall
-	var recentMessages []ConversationMessage
+	var recentTools []model.ToolCall
+	var recentMessages []model.ConversationMessage
 	var lastMeaningful *jsonlEntry
 	var prevTimestamp time.Time
 	var entryTimestamps []time.Time
@@ -158,7 +161,7 @@ func ParseJSONL(path string) (*Session, error) {
 			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, ConversationMessage{
+					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "user", Text: truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
@@ -174,7 +177,7 @@ func ParseJSONL(path string) (*Session, error) {
 					session.Model = e.Message.Model
 				}
 				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, ConversationMessage{
+					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
@@ -183,7 +186,7 @@ func ParseJSONL(path string) (*Session, error) {
 				}
 				for _, c := range e.Message.Content {
 					if c.Type == "tool_use" {
-						recentTools = append(recentTools, ToolCall{Name: c.Name, Timestamp: ts})
+						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
 						if len(recentTools) > 40 {
 							recentTools = recentTools[len(recentTools)-20:]
 						}
@@ -222,7 +225,7 @@ func ParseJSONL(path string) (*Session, error) {
 		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
 			session.LastActivity = ts
 		}
-		if session.Status == StatusExecutingTool && lastMeaningful.Message != nil {
+		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
 			for _, c := range lastMeaningful.Message.Content {
 				if c.Type == "tool_use" {
 					session.CurrentTool = c.Name
@@ -278,32 +281,32 @@ func truncate(s string, n int) string {
 	return string(r[:n])
 }
 
-func determineStatus(e *jsonlEntry) SessionStatus {
+func determineStatus(e *jsonlEntry) model.SessionStatus {
 	if e == nil {
-		return StatusUnknown
+		return model.StatusUnknown
 	}
 	switch e.Type {
 	case "assistant":
 		if e.Message == nil {
-			return StatusUnknown
+			return model.StatusUnknown
 		}
 		for _, c := range e.Message.Content {
 			if c.Type == "tool_use" {
-				return StatusExecutingTool
+				return model.StatusExecutingTool
 			}
 		}
 		// Assistant responded with text — waiting for user
-		return StatusWaitingForUser
+		return model.StatusWaitingForUser
 	case "user":
 		if e.Message == nil {
-			return StatusUnknown
+			return model.StatusUnknown
 		}
 		if isToolResult(e.Message) {
 			// Tool result was written — Claude is now thinking about it
-			return StatusProcessingResult
+			return model.StatusProcessingResult
 		}
 		// Human sent a message — Claude is thinking
-		return StatusThinking
+		return model.StatusThinking
 	}
-	return StatusUnknown
+	return model.StatusUnknown
 }

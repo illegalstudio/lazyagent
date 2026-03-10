@@ -117,6 +117,10 @@
     <!-- Info grid -->
     <div class="border-t border-border pt-3">
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
+        {#if detail.agent}
+          <dt class="text-subtext">Agent</dt>
+          <dd class="text-text">{detail.agent === "pi" ? "π pi" : detail.agent}</dd>
+        {/if}
         {#if detail.model}
           <dt class="text-subtext">Model</dt>
           <dd class="text-text truncate">{detail.model}</dd>

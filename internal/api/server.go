@@ -11,9 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
-	"github.com/nahime0/lazyagent/internal/demo"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -37,14 +36,8 @@ type Server struct {
 // New creates a new API server.
 // If host is non-empty it binds to that address (e.g. ":7421" or "0.0.0.0:7421").
 // If host is empty it binds to 127.0.0.1 on DefaultPort with fallback.
-func New(host string, demoMode bool) (*Server, error) {
+func New(host string, provider core.SessionProvider) (*Server, error) {
 	cfg := core.LoadConfig()
-	var provider core.SessionProvider
-	if demoMode {
-		provider = demo.Provider{}
-	} else {
-		provider = core.LiveProvider{}
-	}
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 
 	s := &Server{
@@ -341,6 +334,7 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 // SessionItem is a lightweight session for list views.
 type SessionItem struct {
 	SessionID     string    `json:"session_id"`
+	Agent         string    `json:"agent"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"short_name"`
 	CustomName    string    `json:"custom_name,omitempty"`
@@ -400,9 +394,10 @@ type SSEPayload struct {
 
 // --- Builders ---
 
-func (s *Server) buildSessionItem(sess *claude.Session, activity core.ActivityKind) SessionItem {
+func (s *Server) buildSessionItem(sess *model.Session, activity core.ActivityKind) SessionItem {
 	return SessionItem{
 		SessionID:     sess.SessionID,
+		Agent:         sess.Agent,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, 60),
 		CustomName:    s.manager.SessionName(sess.SessionID),

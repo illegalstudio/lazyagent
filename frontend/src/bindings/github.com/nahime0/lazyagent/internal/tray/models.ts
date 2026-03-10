@@ -46,6 +46,7 @@ export class ConversationItem {
  */
 export class SessionFull {
     "sessionId": string;
+    "agent": string;
     "cwd": string;
     "shortName": string;
     "customName": string;
@@ -76,6 +77,9 @@ export class SessionFull {
     constructor($$source: Partial<SessionFull> = {}) {
         if (!("sessionId" in $$source)) {
             this["sessionId"] = "";
+        }
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
         }
         if (!("cwd" in $$source)) {
             this["cwd"] = "";
@@ -160,18 +164,18 @@ export class SessionFull {
      * Creates a new SessionFull instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionFull {
-        const $$createField11_0 = $$createType0;
-        const $$createField24_0 = $$createType2;
-        const $$createField25_0 = $$createType4;
+        const $$createField12_0 = $$createType0;
+        const $$createField25_0 = $$createType2;
+        const $$createField26_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField11_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField12_0($$parsedSource["sparklineData"]);
         }
         if ("recentTools" in $$parsedSource) {
-            $$parsedSource["recentTools"] = $$createField24_0($$parsedSource["recentTools"]);
+            $$parsedSource["recentTools"] = $$createField25_0($$parsedSource["recentTools"]);
         }
         if ("recentMessages" in $$parsedSource) {
-            $$parsedSource["recentMessages"] = $$createField25_0($$parsedSource["recentMessages"]);
+            $$parsedSource["recentMessages"] = $$createField26_0($$parsedSource["recentMessages"]);
         }
         return new SessionFull($$parsedSource as Partial<SessionFull>);
     }
@@ -182,6 +186,7 @@ export class SessionFull {
  */
 export class SessionItem {
     "sessionId": string;
+    "agent": string;
     "cwd": string;
     "shortName": string;
     "customName": string;
@@ -198,6 +203,9 @@ export class SessionItem {
     constructor($$source: Partial<SessionItem> = {}) {
         if (!("sessionId" in $$source)) {
             this["sessionId"] = "";
+        }
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
         }
         if (!("cwd" in $$source)) {
             this["cwd"] = "";
@@ -240,10 +248,10 @@ export class SessionItem {
      * Creates a new SessionItem instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionItem {
-        const $$createField11_0 = $$createType0;
+        const $$createField12_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField11_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField12_0($$parsedSource["sparklineData"]);
         }
         return new SessionItem($$parsedSource as Partial<SessionItem>);
     }

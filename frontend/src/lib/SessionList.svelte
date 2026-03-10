@@ -98,6 +98,7 @@
           />
         {:else}
           <div class="truncate text-[13px] font-medium text-text">
+            {#if session.agent === "pi"}<span class="text-activity-spawning">π</span>{/if}
             {session.customName || session.shortName}
           </div>
         {/if}

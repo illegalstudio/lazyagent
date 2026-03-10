@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // IsWorktree detects if a path is a git worktree and returns the main repo.
@@ -52,7 +54,7 @@ func ProjectDirForCWD(cwd string) string {
 
 // DiscoverSessions scans ~/.claude/projects for JSONL session files.
 // Every JSONL file is a separate session.
-func DiscoverSessions() ([]*Session, error) {
+func DiscoverSessions() ([]*model.Session, error) {
 	projectsDir := ClaudeProjectsDir()
 	if projectsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
@@ -70,7 +72,7 @@ func DiscoverSessions() ([]*Session, error) {
 	}
 	wtCache := make(map[string]wtInfo)
 
-	var sessions []*Session
+	var sessions []*model.Session
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
 			continue

@@ -5,18 +5,19 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // Provider implements core.SessionProvider with generated fake data.
 type Provider struct{}
 
-func (Provider) DiscoverSessions() ([]*claude.Session, error) {
+func (Provider) DiscoverSessions() ([]*model.Session, error) {
 	return GenerateSessions(), nil
 }
 
 func (Provider) UseWatcher() bool               { return false }
 func (Provider) RefreshInterval() time.Duration { return 30 * time.Second }
+func (Provider) WatchDirs() []string            { return nil }
 
 // project templates for realistic-looking demo sessions.
 var projects = []struct {
@@ -77,36 +78,36 @@ var fileWrites = []string{
 
 // statusOption pairs a JSONL status with an optional current tool.
 type statusOption struct {
-	status claude.SessionStatus
+	status model.SessionStatus
 	tool   string
 }
 
 // activeStatuses are states that represent ongoing work. Sessions randomly
 // rotate through these so the demo always shows multiple busy agents.
 var activeStatuses = []statusOption{
-	{claude.StatusExecutingTool, "Edit"},
-	{claude.StatusExecutingTool, "Write"},
-	{claude.StatusExecutingTool, "Bash"},
-	{claude.StatusExecutingTool, "Read"},
-	{claude.StatusExecutingTool, "Grep"},
-	{claude.StatusExecutingTool, "Glob"},
-	{claude.StatusExecutingTool, "Agent"},
-	{claude.StatusExecutingTool, "WebSearch"},
-	{claude.StatusThinking, ""},
-	{claude.StatusProcessingResult, ""},
+	{model.StatusExecutingTool, "Edit"},
+	{model.StatusExecutingTool, "Write"},
+	{model.StatusExecutingTool, "Bash"},
+	{model.StatusExecutingTool, "Read"},
+	{model.StatusExecutingTool, "Grep"},
+	{model.StatusExecutingTool, "Glob"},
+	{model.StatusExecutingTool, "Agent"},
+	{model.StatusExecutingTool, "WebSearch"},
+	{model.StatusThinking, ""},
+	{model.StatusProcessingResult, ""},
 }
 
 // GenerateSessions creates a set of realistic fake sessions for demo purposes.
 // Each call randomises statuses and timestamps so that multiple sessions appear
 // actively working at the same time, making the UI look alive.
-func GenerateSessions() []*claude.Session {
+func GenerateSessions() []*model.Session {
 	now := time.Now()
-	sessions := make([]*claude.Session, len(projects))
+	sessions := make([]*model.Session, len(projects))
 
 	for i, p := range projects {
 		// Decide whether this session is currently active.
 		// ~70% of sessions are active, the rest are waiting or idle.
-		var status claude.SessionStatus
+		var status model.SessionStatus
 		var currentTool string
 		var lastActivity time.Time
 
@@ -121,11 +122,11 @@ func GenerateSessions() []*claude.Session {
 			lastActivity = now.Add(-time.Duration(rand.Intn(8)) * time.Second)
 		case roll < 75:
 			// Waiting for user input (recent enough to show "waiting", not "idle").
-			status = claude.StatusWaitingForUser
+			status = model.StatusWaitingForUser
 			lastActivity = now.Add(-time.Duration(15+rand.Intn(45)) * time.Second)
 		default:
 			// Idle — hasn't been touched in a while.
-			status = claude.StatusWaitingForUser
+			status = model.StatusWaitingForUser
 			lastActivity = now.Add(-time.Duration(3+rand.Intn(10)) * time.Minute)
 		}
 
@@ -141,16 +142,16 @@ func GenerateSessions() []*claude.Session {
 		// Build recent tools — the last tool must be very recent for active sessions
 		// so ResolveActivity picks it up.
 		nTools := 5 + rand.Intn(16)
-		recentTools := make([]claude.ToolCall, nTools)
+		recentTools := make([]model.ToolCall, nTools)
 		for j := range recentTools {
 			toolAge := time.Duration(nTools-j) * 15 * time.Second
-			recentTools[j] = claude.ToolCall{
+			recentTools[j] = model.ToolCall{
 				Name:      toolNames[rand.Intn(len(toolNames))],
 				Timestamp: lastActivity.Add(-toolAge),
 			}
 		}
 		if currentTool != "" && len(recentTools) > 0 {
-			recentTools[len(recentTools)-1] = claude.ToolCall{
+			recentTools[len(recentTools)-1] = model.ToolCall{
 				Name:      currentTool,
 				Timestamp: lastActivity,
 			}
@@ -161,17 +162,17 @@ func GenerateSessions() []*claude.Session {
 		if nMsgs > 10 {
 			nMsgs = 10
 		}
-		recentMsgs := make([]claude.ConversationMessage, nMsgs)
+		recentMsgs := make([]model.ConversationMessage, nMsgs)
 		for j := range recentMsgs {
 			msgAge := time.Duration(nMsgs-j) * 45 * time.Second
 			if j%2 == 0 {
-				recentMsgs[j] = claude.ConversationMessage{
+				recentMsgs[j] = model.ConversationMessage{
 					Role:      "user",
 					Text:      userMessages[rand.Intn(len(userMessages))],
 					Timestamp: lastActivity.Add(-msgAge),
 				}
 			} else {
-				recentMsgs[j] = claude.ConversationMessage{
+				recentMsgs[j] = model.ConversationMessage{
 					Role:      "assistant",
 					Text:      assistantMessages[rand.Intn(len(assistantMessages))],
 					Timestamp: lastActivity.Add(-msgAge),
@@ -201,7 +202,7 @@ func GenerateSessions() []*claude.Session {
 			entryTimestamps[j] = now.Add(-offset)
 		}
 
-		sessions[i] = &claude.Session{
+		sessions[i] = &model.Session{
 			SessionID:           fmt.Sprintf("demo-%04d-abcd-efgh-%04d", 1000+i, 5000+i*111),
 			JSONLPath:           fmt.Sprintf("/Users/dev/.claude/projects/demo/%d.jsonl", i),
 			CWD:                 p.CWD,

@@ -10,9 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/core"
-	"github.com/nahime0/lazyagent/internal/demo"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -23,7 +22,7 @@ type renderTickMsg time.Time
 
 // sessionsMsg carries newly loaded sessions.
 type sessionsMsg struct {
-	sessions []*claude.Session
+	sessions []*model.Session
 	err      error
 }
 
@@ -52,7 +51,7 @@ type Model struct {
 	searchQuery string
 
 	// Cached visible sessions, recomputed via refreshVisible().
-	visible []*claude.Session
+	visible []*model.Session
 
 	// Flash message (modal popup, dismissed by any key)
 	flashMsg string
@@ -96,14 +95,8 @@ var keys = keyMap{
 	Open:   key.NewBinding(key.WithKeys("o")),
 }
 
-func NewModel(demoMode bool) Model {
+func NewModel(provider core.SessionProvider) Model {
 	cfg := core.LoadConfig()
-	var provider core.SessionProvider
-	if demoMode {
-		provider = demo.Provider{}
-	} else {
-		provider = core.LiveProvider{}
-	}
 	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
 	_ = mgr.StartWatcher()
 	return Model{
@@ -741,7 +734,7 @@ func (m Model) renderList(listW, innerH int) string {
 	return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
 }
 
-func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool) string {
+func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool) string {
 	activity := m.manager.ActivityFor(s.SessionID)
 	actColor, ok := activityColors[activity]
 	if !ok {
@@ -755,16 +748,21 @@ func (m Model) renderListRow(s *claude.Session, nameW, sparkW int, selected bool
 	}
 
 	customName := m.manager.SessionName(s.SessionID)
+	// Agent badge: prefix pi sessions with "π " for visual distinction.
+	agentPrefix := ""
+	if s.Agent == "pi" {
+		agentPrefix = "π "
+	}
 	var name string
 	if customName != "" {
-		runes := []rune(customName)
+		runes := []rune(agentPrefix + customName)
 		if len(runes) > nameW {
 			name = string(runes[:nameW-1]) + "…"
 		} else {
-			name = customName
+			name = agentPrefix + customName
 		}
 	} else {
-		name = core.ShortName(s.CWD, nameW)
+		name = agentPrefix + core.ShortName(s.CWD, nameW-len([]rune(agentPrefix)))
 	}
 	name = core.PadRight(name, nameW)
 
@@ -823,7 +821,7 @@ func (m Model) renderDetail(detailW, innerH int) string {
 	)
 }
 
-func (m Model) buildDetailLines(s *claude.Session, width int) []string {
+func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	var lines []string
 	add := func(line string) { lines = append(lines, line) }
 
@@ -862,6 +860,9 @@ func (m Model) buildDetailLines(s *claude.Session, width int) []string {
 	}
 	if s.Model != "" {
 		add(row("Model", s.Model))
+	}
+	if s.Agent != "" {
+		add(row("Agent", s.Agent))
 	}
 	if s.GitBranch != "" && s.GitBranch != "HEAD" {
 		add(row("Git Branch", s.GitBranch))

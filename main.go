@@ -13,6 +13,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nahime0/lazyagent/internal/api"
+	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/nahime0/lazyagent/internal/demo"
 	"github.com/nahime0/lazyagent/internal/tray"
 	"github.com/nahime0/lazyagent/internal/ui"
 )
@@ -25,12 +27,16 @@ func main() {
 	apiMode := flag.Bool("api", false, "Start the API server")
 	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
 	demoMode := flag.Bool("demo", false, "Use generated fake data instead of real Claude sessions")
+	agentMode := flag.String("agent", "all", "Which agent sessions to show: claude, pi, all (default: all)")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running Claude Code sessions
+		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running coding agent sessions
 
 Usage:
-  lazyagent                     Launch the terminal UI (default)
+  lazyagent                     Launch the terminal UI (default, monitors all agents)
+  lazyagent --agent claude      Monitor only Claude Code sessions
+  lazyagent --agent pi          Monitor only pi coding agent sessions
+  lazyagent --agent all         Monitor both (default)
   lazyagent --api               Start the API server (http://127.0.0.1:7421)
   lazyagent --api --host :7421  Start the API server on custom address
   lazyagent --tui --api         Launch TUI + API server
@@ -55,6 +61,29 @@ More info: https://github.com/illegalstudio/lazyagent
 
 	flag.Parse()
 
+	// Build the session provider based on flags.
+	var provider core.SessionProvider
+	if *demoMode {
+		provider = demo.Provider{}
+	} else {
+		switch *agentMode {
+		case "claude":
+			provider = core.LiveProvider{}
+		case "pi":
+			provider = core.PiProvider{}
+		case "all":
+			provider = core.MultiProvider{
+				Providers: []core.SessionProvider{
+					core.LiveProvider{},
+					core.PiProvider{},
+				},
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Error: unknown --agent value %q (use claude, pi, or all)\n", *agentMode)
+			os.Exit(1)
+		}
+	}
+
 	runAPI := *apiMode
 	runTray := *trayMode
 	// Default: TUI if no other mode explicitly requested.
@@ -68,7 +97,7 @@ More info: https://github.com/illegalstudio/lazyagent
 
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
 			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
-			forkTray(*demoMode)
+			forkTray(*demoMode, *agentMode)
 			if !runTUI && !runAPI {
 				return
 			}
@@ -77,7 +106,7 @@ More info: https://github.com/illegalstudio/lazyagent
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
-			if err := tray.Run(*demoMode); err != nil {
+			if err := tray.Run(*demoMode, *agentMode); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -91,7 +120,7 @@ More info: https://github.com/illegalstudio/lazyagent
 	var apiDone chan struct{}
 
 	if runAPI {
-		srv, err := api.New(*apiHost, *demoMode)
+		srv, err := api.New(*apiHost, provider)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -118,7 +147,7 @@ More info: https://github.com/illegalstudio/lazyagent
 
 	if runTUI {
 		p := tea.NewProgram(
-			ui.NewModel(*demoMode),
+			ui.NewModel(provider),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)
@@ -136,7 +165,7 @@ More info: https://github.com/illegalstudio/lazyagent
 }
 
 // forkTray launches the tray as a detached background process with its own main thread.
-func forkTray(demoMode bool) {
+func forkTray(demoMode bool, agentMode string) {
 	killPreviousTray()
 
 	exe, err := os.Executable()
@@ -147,6 +176,9 @@ func forkTray(demoMode bool) {
 	trayArgs := []string{"--tray"}
 	if demoMode {
 		trayArgs = append(trayArgs, "--demo")
+	}
+	if agentMode != "all" {
+		trayArgs = append(trayArgs, "--agent", agentMode)
 	}
 	cmd := exec.Command(exe, trayArgs...)
 	cmd.Env = append(os.Environ(), "LAZYAGENT_DETACHED=1")

@@ -3,7 +3,7 @@ package core
 import (
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/model"
 )
 
 // ActivityTimeout is the duration a tool-based activity stays visible after
@@ -70,7 +70,7 @@ type ActivityEntry struct {
 //  3. StatusWaitingForUser within WaitingTimeout (with grace period).
 //  4. LastActivity older than ActivityTimeout → idle.
 //  5. Current JSONL status → thinking if Claude is processing, idle otherwise.
-func ResolveActivity(s *claude.Session, now time.Time) ActivityKind {
+func ResolveActivity(s *model.Session, now time.Time) ActivityKind {
 	sinceActivity := now.Sub(s.LastActivity)
 
 	if !s.LastSummaryAt.IsZero() && now.Sub(s.LastSummaryAt) < ActivityTimeout {
@@ -84,7 +84,7 @@ func ResolveActivity(s *claude.Session, now time.Time) ActivityKind {
 		}
 	}
 
-	if s.Status == claude.StatusWaitingForUser {
+	if s.Status == model.StatusWaitingForUser {
 		if !s.LastActivity.IsZero() && sinceActivity < WaitingTimeout {
 			return ActivityWaiting
 		}
@@ -96,17 +96,19 @@ func ResolveActivity(s *claude.Session, now time.Time) ActivityKind {
 	}
 
 	switch s.Status {
-	case claude.StatusThinking, claude.StatusProcessingResult:
+	case model.StatusThinking, model.StatusProcessingResult:
 		return ActivityThinking
-	case claude.StatusExecutingTool:
+	case model.StatusExecutingTool:
 		return ToolActivity(s.CurrentTool)
 	}
 	return ActivityIdle
 }
 
-// ToolActivity maps a Claude tool name to an activity kind.
+// ToolActivity maps a tool name to an activity kind.
+// Supports both Claude Code (PascalCase) and pi (snake_case) tool names.
 func ToolActivity(tool string) ActivityKind {
 	switch tool {
+	// Claude Code (PascalCase)
 	case "Read":
 		return ActivityReading
 	case "Write", "Edit", "NotebookEdit":
@@ -118,6 +120,19 @@ func ToolActivity(tool string) ActivityKind {
 	case "WebFetch", "WebSearch":
 		return ActivityBrowsing
 	case "Agent":
+		return ActivitySpawning
+	// pi coding agent (snake_case) — safety net for unnormalized names
+	case "read":
+		return ActivityReading
+	case "write", "edit":
+		return ActivityWriting
+	case "bash", "process":
+		return ActivityRunning
+	case "find", "lsp":
+		return ActivitySearching
+	case "web_search":
+		return ActivityBrowsing
+	case "subagent":
 		return ActivitySpawning
 	default:
 		if tool != "" {
@@ -153,7 +168,7 @@ func NewActivityTracker() *ActivityTracker {
 
 // Update resolves and stores the current activity for each session.
 // Applies a grace period before showing ActivityWaiting to avoid false positives.
-func (t *ActivityTracker) Update(sessions []*claude.Session, now time.Time) {
+func (t *ActivityTracker) Update(sessions []*model.Session, now time.Time) {
 	activeIDs := make(map[string]struct{}, len(sessions))
 	for _, s := range sessions {
 		id := s.SessionID

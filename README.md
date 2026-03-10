@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) and [pi coding agent](https://github.com/badlogic/pi-mono) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
@@ -17,7 +17,13 @@ A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Clau
 
 ## How it works
 
-lazyagent watches Claude Code's JSONL transcript files (`~/.claude/projects/*/`) to determine what each session is doing. No modifications to Claude Code are needed — it's purely observational.
+lazyagent watches JSONL transcript files from coding agents to determine what each session is doing. No modifications to any agent are needed — it's purely observational.
+
+**Supported agents:**
+- **Claude Code** — reads from `~/.claude/projects/*/`
+- **pi coding agent** — reads from `~/.pi/agent/sessions/*/`
+
+Use `--agent claude`, `--agent pi`, or `--agent all` (default) to control which agents are monitored. Pi sessions are marked with a **π** prefix in the session list.
 
 From the JSONL stream it detects activity states with color-coded labels:
 
@@ -96,7 +102,10 @@ On first launch, macOS may block the binary. Go to **System Settings → Privacy
 ## Usage
 
 ```
-lazyagent                        Launch the terminal UI (default)
+lazyagent                        Launch the terminal UI (monitors all agents)
+lazyagent --agent claude         Monitor only Claude Code sessions
+lazyagent --agent pi             Monitor only pi coding agent sessions
+lazyagent --agent all            Monitor both (default)
 lazyagent --api                  Start the HTTP API (http://127.0.0.1:7421)
 lazyagent --api --host :8080     Start the HTTP API on a custom address
 lazyagent --tui --api            Launch TUI + API server
@@ -220,10 +229,12 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
 
 ```
 lazyagent/
-├── main.go                     # Entry point: dispatches --tui / --tray / --api
+├── main.go                     # Entry point: dispatches --tui / --tray / --api / --agent
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
-│   ├── claude/                 # JSONL parsing, types, session discovery
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi providers
+│   ├── claude/                 # Claude Code JSONL parsing, types, session discovery
+│   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss)
 │   ├── tray/                   # macOS menu bar app (Wails v3, build-tagged)
@@ -314,6 +325,16 @@ make clean
 - [x] Custom bind address (`--host`)
 - [x] Combinable with TUI and tray (`--tui --tray --api`)
 - [x] Session rename endpoints (`PUT`/`DELETE /api/sessions/{id}/name`)
+
+### v0.5 — Multi-agent support
+- [x] pi coding agent session discovery (`~/.pi/agent/sessions/`)
+- [x] Pi JSONL parser (tree-structured format → shared Session struct)
+- [x] `--agent` flag (`claude`, `pi`, `all`)
+- [x] MultiProvider merging sessions from multiple agents
+- [x] Agent type indicator (π prefix in list, Agent row in detail)
+- [x] Pi tool name normalization (snake_case → PascalCase)
+- [x] Multi-directory file watcher
+- [x] Cost estimation for Gemini and GPT model families
 
 ### Future ideas
 - [ ] Outbound webhooks on status changes
