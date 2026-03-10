@@ -16,14 +16,14 @@ import (
 func buildProvider(agentMode string) core.SessionProvider {
 	switch agentMode {
 	case "claude":
-		return core.LiveProvider{}
+		return core.NewLiveProvider()
 	case "pi":
-		return core.PiProvider{}
+		return core.NewPiProvider()
 	default:
 		return core.MultiProvider{
 			Providers: []core.SessionProvider{
-				core.LiveProvider{},
-				core.PiProvider{},
+				core.NewLiveProvider(),
+				core.NewPiProvider(),
 			},
 		}
 	}

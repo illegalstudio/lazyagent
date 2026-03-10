@@ -68,14 +68,14 @@ More info: https://github.com/illegalstudio/lazyagent
 	} else {
 		switch *agentMode {
 		case "claude":
-			provider = core.LiveProvider{}
+			provider = core.NewLiveProvider()
 		case "pi":
-			provider = core.PiProvider{}
+			provider = core.NewPiProvider()
 		case "all":
 			provider = core.MultiProvider{
 				Providers: []core.SessionProvider{
-					core.LiveProvider{},
-					core.PiProvider{},
+					core.NewLiveProvider(),
+					core.NewPiProvider(),
 				},
 			}
 		default:

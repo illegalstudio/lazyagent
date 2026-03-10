@@ -106,9 +106,12 @@ func NewModel(provider core.SessionProvider) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{makeLoadCmd(m.manager), tickCmd(), renderTickCmd()}
+	cmds := []tea.Cmd{makeLoadCmd(m.manager), renderTickCmd()}
 	if events := m.manager.WatcherEvents(); events != nil {
 		cmds = append(cmds, watchCmd(events))
+	} else {
+		// No file watcher — fall back to periodic reload.
+		cmds = append(cmds, tickCmd())
 	}
 	return tea.Batch(cmds...)
 }

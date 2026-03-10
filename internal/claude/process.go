@@ -6,9 +6,28 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/nahime0/lazyagent/internal/model"
 )
+
+// DesktopCache caches parsed desktop metadata JSON files keyed by file path.
+type DesktopCache struct {
+	mu      sync.Mutex
+	entries map[string]desktopCacheEntry
+}
+
+type desktopCacheEntry struct {
+	mtime time.Time
+	meta  *model.DesktopMeta
+	cliID string
+}
+
+// NewDesktopCache creates an empty desktop cache.
+func NewDesktopCache() *DesktopCache {
+	return &DesktopCache{entries: make(map[string]desktopCacheEntry)}
+}
 
 // IsWorktree detects if a path is a git worktree and returns the main repo.
 func IsWorktree(path string) (bool, string) {
@@ -53,8 +72,8 @@ func ProjectDirForCWD(cwd string) string {
 }
 
 // DiscoverSessions scans ~/.claude/projects for JSONL session files.
-// Every JSONL file is a separate session.
-func DiscoverSessions() ([]*model.Session, error) {
+// Every JSONL file is a separate session. Uses caches to skip unchanged files.
+func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]*model.Session, error) {
 	projectsDir := ClaudeProjectsDir()
 	if projectsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
@@ -72,6 +91,7 @@ func DiscoverSessions() ([]*model.Session, error) {
 	}
 	wtCache := make(map[string]wtInfo)
 
+	seen := make(map[string]struct{})
 	var sessions []*model.Session
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
@@ -84,29 +104,41 @@ func DiscoverSessions() ([]*model.Session, error) {
 		}
 
 		for _, jsonlFile := range jsonlFiles {
-			session, err := ParseJSONL(jsonlFile)
-			if err != nil {
-				continue
-			}
-			// If CWD is empty (brand new session not yet written), derive
-			// from the encoded directory name as a best-effort fallback
-			if session.CWD == "" {
-				session.CWD = decodeDirName(projectEntry.Name())
-			}
+			seen[jsonlFile] = struct{}{}
 
-			if _, seen := wtCache[session.CWD]; !seen {
-				isWT, mainRepo := IsWorktree(session.CWD)
-				wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+			session, mtime := cache.Get(jsonlFile)
+			if session == nil {
+				s, err := ParseJSONL(jsonlFile)
+				if err != nil {
+					continue
+				}
+				session = s
+
+				// If CWD is empty (brand new session not yet written), derive
+				// from the encoded directory name as a best-effort fallback
+				if session.CWD == "" {
+					session.CWD = decodeDirName(projectEntry.Name())
+				}
+
+				// Only run git worktree check for newly parsed sessions.
+				// Cached sessions already have IsWorktree/MainRepo set.
+				if _, ok := wtCache[session.CWD]; !ok {
+					isWT, mainRepo := IsWorktree(session.CWD)
+					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+				}
+				wt := wtCache[session.CWD]
+				session.IsWorktree = wt.isWorktree
+				session.MainRepo = wt.mainRepo
+				cache.Put(jsonlFile, mtime, session)
 			}
-			wt := wtCache[session.CWD]
-			session.IsWorktree = wt.isWorktree
-			session.MainRepo = wt.mainRepo
 
 			sessions = append(sessions, session)
 		}
 	}
+	cache.Prune(seen)
+
 	// Enrich with Claude Desktop metadata.
-	desktopMeta := loadDesktopMetadata()
+	desktopMeta := loadDesktopMetadata(desktopCache)
 	for _, session := range sessions {
 		if meta, ok := desktopMeta[session.SessionID]; ok {
 			session.Desktop = meta

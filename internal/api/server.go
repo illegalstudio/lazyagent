@@ -124,8 +124,14 @@ func (s *Server) watchLoop(ctx context.Context) {
 	events := s.manager.WatcherEvents()
 	activityTicker := time.NewTicker(1 * time.Second)
 	defer activityTicker.Stop()
-	reloadTicker := time.NewTicker(30 * time.Second)
-	defer reloadTicker.Stop()
+
+	// Only use a periodic reload ticker when no file watcher is available.
+	var reloadC <-chan time.Time
+	if events == nil {
+		reloadTicker := time.NewTicker(30 * time.Second)
+		defer reloadTicker.Stop()
+		reloadC = reloadTicker.C
+	}
 
 	for {
 		select {
@@ -138,7 +144,7 @@ func (s *Server) watchLoop(ctx context.Context) {
 			if s.manager.UpdateActivities() {
 				s.notifySSE()
 			}
-		case <-reloadTicker.C:
+		case <-reloadC:
 			_ = s.manager.Reload()
 			s.notifySSE()
 		}
