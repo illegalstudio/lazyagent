@@ -335,6 +335,7 @@ func (s *Server) writeSSEFrame(w http.ResponseWriter, flusher http.Flusher) {
 type SessionItem struct {
 	SessionID     string    `json:"session_id"`
 	Agent         string    `json:"agent"`
+	Source        string    `json:"source"` // "cli" or "desktop"
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"short_name"`
 	CustomName    string    `json:"custom_name,omitempty"`
@@ -364,6 +365,9 @@ type SessionFull struct {
 	LastFileWriteAt     time.Time          `json:"last_file_write_at"`
 	RecentTools         []ToolItem         `json:"recent_tools"`
 	RecentMessages      []ConversationItem `json:"recent_messages"`
+	DesktopTitle        string             `json:"desktop_title,omitempty"`
+	DesktopID           string             `json:"desktop_id,omitempty"`
+	PermissionMode      string             `json:"permission_mode,omitempty"`
 }
 
 // ToolItem represents a recent tool call.
@@ -395,9 +399,14 @@ type SSEPayload struct {
 // --- Builders ---
 
 func (s *Server) buildSessionItem(sess *model.Session, activity core.ActivityKind) SessionItem {
+	source := "cli"
+	if sess.Desktop != nil {
+		source = "desktop"
+	}
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		Agent:         sess.Agent,
+		Source:        source,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, 60),
 		CustomName:    s.manager.SessionName(sess.SessionID),
@@ -444,7 +453,31 @@ func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 		LastFileWriteAt:     sess.LastFileWriteAt,
 		RecentTools:         tools,
 		RecentMessages:      msgs,
+		DesktopTitle:        desktopTitle(sess),
+		DesktopID:           desktopID(sess),
+		PermissionMode:      desktopPermission(sess),
 	}
+}
+
+func desktopTitle(s *model.Session) string {
+	if s.Desktop != nil {
+		return s.Desktop.Title
+	}
+	return ""
+}
+
+func desktopID(s *model.Session) string {
+	if s.Desktop != nil {
+		return s.Desktop.DesktopID
+	}
+	return ""
+}
+
+func desktopPermission(s *model.Session) string {
+	if s.Desktop != nil {
+		return s.Desktop.PermissionMode
+	}
+	return ""
 }
 
 // --- Helpers ---

@@ -24,15 +24,16 @@ var projects = []struct {
 	CWD       string
 	GitBranch string
 	Model     string
+	Agent     string // "claude" or "pi"
 }{
-	{"/Users/dev/projects/webapp-frontend", "feature/dashboard-redesign", "claude-sonnet-4-5-20250514"},
-	{"/Users/dev/projects/api-server", "fix/auth-middleware", "claude-sonnet-4-5-20250514"},
-	{"/Users/dev/projects/mobile-app", "main", "claude-sonnet-4-5-20250514"},
-	{"/Users/dev/projects/cli-tool", "feature/config-refactor", "claude-opus-4-6-20250610"},
-	{"/Users/dev/projects/data-pipeline", "feature/streaming-etl", "claude-opus-4-6-20250610"},
-	{"/Users/dev/projects/infra-terraform", "chore/upgrade-providers", "claude-sonnet-4-5-20250514"},
-	{"/Users/dev/projects/docs-site", "feature/api-reference", "claude-haiku-4-5-20251001"},
-	{"/Users/dev/projects/shared-lib", "fix/race-condition", "claude-opus-4-6-20250610"},
+	{"/Users/dev/projects/webapp-frontend", "feature/dashboard-redesign", "claude-sonnet-4-5-20250514", "claude"},
+	{"/Users/dev/projects/api-server", "fix/auth-middleware", "claude-sonnet-4-5-20250514", "claude"},
+	{"/Users/dev/projects/mobile-app", "main", "claude-sonnet-4-5-20250514", "claude"},
+	{"/Users/dev/projects/cli-tool", "feature/config-refactor", "claude-opus-4-6-20250610", "claude"},
+	{"/Users/dev/projects/data-pipeline", "feature/streaming-etl", "gemini-3-pro", "pi"},
+	{"/Users/dev/projects/infra-terraform", "chore/upgrade-providers", "claude-sonnet-4-5-20250514", "pi"},
+	{"/Users/dev/projects/docs-site", "feature/api-reference", "claude-haiku-4-5-20251001", "claude"},
+	{"/Users/dev/projects/shared-lib", "fix/race-condition", "gpt-4.1", "pi"},
 }
 
 var toolNames = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Agent", "WebSearch"}
@@ -209,6 +210,7 @@ func GenerateSessions() []*model.Session {
 			Version:             "1.0.33",
 			Model:               p.Model,
 			GitBranch:           p.GitBranch,
+			Agent:               p.Agent,
 			Status:              status,
 			CurrentTool:         currentTool,
 			LastActivity:        lastActivity,

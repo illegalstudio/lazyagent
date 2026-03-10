@@ -93,4 +93,16 @@ type Session struct {
 	// Agent identity
 	Agent string // "claude" or "pi" — which coding agent produced this session
 	Name  string // session display name (from pi session_info or custom)
+
+	// Desktop metadata (non-nil if session was started via Claude Desktop)
+	Desktop *DesktopMeta
+}
+
+// DesktopMeta holds metadata from Claude Desktop's session JSON files.
+type DesktopMeta struct {
+	Title          string
+	DesktopID      string // Desktop's own session ID (distinct from cliSessionId)
+	PermissionMode string
+	IsArchived     bool
+	CreatedAt      time.Time
 }

@@ -93,6 +93,7 @@ func (s *SessionService) emitUpdate() {
 type SessionItem struct {
 	SessionID     string    `json:"sessionId"`
 	Agent         string    `json:"agent"`
+	Source        string    `json:"source"`
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"shortName"`
 	CustomName    string    `json:"customName"`
@@ -123,6 +124,9 @@ type SessionFull struct {
 	LastFileWriteAt     time.Time          `json:"lastFileWriteAt"`
 	RecentTools         []ToolItem         `json:"recentTools"`
 	RecentMessages      []ConversationItem `json:"recentMessages"`
+	DesktopTitle        string             `json:"desktopTitle,omitempty"`
+	DesktopID           string             `json:"desktopId,omitempty"`
+	PermissionMode      string             `json:"permissionMode,omitempty"`
 }
 
 // ToolItem is a tool call for the detail view.
@@ -140,9 +144,14 @@ type ConversationItem struct {
 }
 
 func (s *SessionService) buildSessionItem(sess *model.Session, activity core.ActivityKind, wm int, nameLen int) SessionItem {
+	source := "cli"
+	if sess.Desktop != nil {
+		source = "desktop"
+	}
 	return SessionItem{
 		SessionID:     sess.SessionID,
 		Agent:         sess.Agent,
+		Source:        source,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, nameLen),
 		CustomName:    s.manager.SessionName(sess.SessionID),
@@ -196,7 +205,7 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		})
 	}
 
-	return &SessionFull{
+	full := &SessionFull{
 		SessionItem:         s.buildSessionItem(sess, detail.Activity, wm, 60),
 		Version:             sess.Version,
 		IsWorktree:          sess.IsWorktree,
@@ -213,6 +222,12 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		RecentTools:         tools,
 		RecentMessages:      msgs,
 	}
+	if sess.Desktop != nil {
+		full.DesktopTitle = sess.Desktop.Title
+		full.DesktopID = sess.Desktop.DesktopID
+		full.PermissionMode = sess.Desktop.PermissionMode
+	}
+	return full
 }
 
 // GetActiveCount returns the number of sessions with active work.

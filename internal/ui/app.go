@@ -748,10 +748,12 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 	}
 
 	customName := m.manager.SessionName(s.SessionID)
-	// Agent badge: prefix pi sessions with "π " for visual distinction.
+	// Agent/source badge for visual distinction.
 	agentPrefix := ""
 	if s.Agent == "pi" {
 		agentPrefix = "π "
+	} else if s.Desktop != nil {
+		agentPrefix = "D "
 	}
 	var name string
 	if customName != "" {
@@ -863,6 +865,17 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	}
 	if s.Agent != "" {
 		add(row("Agent", s.Agent))
+	}
+	if s.Desktop != nil {
+		add(row("Source", "Claude Desktop"))
+		if s.Desktop.Title != "" {
+			add(row("Title", s.Desktop.Title))
+		}
+		if s.Desktop.PermissionMode != "" {
+			add(row("Permissions", s.Desktop.PermissionMode))
+		}
+	} else if s.Agent == "claude" {
+		add(row("Source", "CLI"))
 	}
 	if s.GitBranch != "" && s.GitBranch != "HEAD" {
 		add(row("Git Branch", s.GitBranch))

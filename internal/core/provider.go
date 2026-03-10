@@ -17,7 +17,13 @@ func (LiveProvider) DiscoverSessions() ([]*model.Session, error) {
 
 func (LiveProvider) UseWatcher() bool               { return true }
 func (LiveProvider) RefreshInterval() time.Duration { return 0 }
-func (LiveProvider) WatchDirs() []string            { return []string{claude.ClaudeProjectsDir()} }
+func (LiveProvider) WatchDirs() []string {
+	dirs := []string{claude.ClaudeProjectsDir()}
+	if d := claude.DesktopSessionsDir(); d != "" {
+		dirs = append(dirs, d)
+	}
+	return dirs
+}
 
 // PiProvider discovers pi coding agent sessions from disk.
 type PiProvider struct{}

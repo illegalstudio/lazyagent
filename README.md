@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) and [pi coding agent](https://github.com/badlogic/pi-mono) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) (CLI and Desktop), and [pi coding agent](https://github.com/badlogic/pi-mono) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
@@ -20,10 +20,11 @@ A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Clau
 lazyagent watches JSONL transcript files from coding agents to determine what each session is doing. No modifications to any agent are needed — it's purely observational.
 
 **Supported agents:**
-- **Claude Code** — reads from `~/.claude/projects/*/`
+- **Claude Code CLI** — reads from `~/.claude/projects/*/`
+- **Claude Code Desktop** — same JSONL files, enriched with session metadata (title, permissions) from `~/Library/Application Support/Claude/claude-code-sessions/`
 - **pi coding agent** — reads from `~/.pi/agent/sessions/*/`
 
-Use `--agent claude`, `--agent pi`, or `--agent all` (default) to control which agents are monitored. Pi sessions are marked with a **π** prefix in the session list.
+Use `--agent claude`, `--agent pi`, or `--agent all` (default) to control which agents are monitored. Pi sessions are marked with a **π** prefix, Desktop sessions with a **D** prefix in the session list.
 
 From the JSONL stream it detects activity states with color-coded labels:
 
@@ -50,6 +51,9 @@ It also surfaces:
 | Recent conversation (last 5 messages) | JSONL |
 | Last 20 tools used | JSONL |
 | Last activity timestamp | JSONL |
+| Session source (CLI / Desktop) | Desktop metadata |
+| Desktop session title | Desktop metadata |
+| Permission mode (Desktop) | Desktop metadata |
 | Custom session name | `~/.config/lazyagent/session-names.json` |
 
 ## Three interfaces, one binary
@@ -233,7 +237,8 @@ lazyagent/
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
 │   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi providers
-│   ├── claude/                 # Claude Code JSONL parsing, types, session discovery
+│   ├── model/                  # Shared types (Session, ToolCall, etc.)
+│   ├── claude/                 # Claude Code JSONL parsing, desktop metadata, session discovery
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss)
@@ -335,6 +340,8 @@ make clean
 - [x] Pi tool name normalization (snake_case → PascalCase)
 - [x] Multi-directory file watcher
 - [x] Cost estimation for Gemini and GPT model families
+- [x] Claude Code Desktop support (title, permissions, source badge)
+- [x] Shared session types extracted to `internal/model`
 
 ### Future ideas
 - [ ] Outbound webhooks on status changes

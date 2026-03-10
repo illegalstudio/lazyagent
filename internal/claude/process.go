@@ -105,6 +105,17 @@ func DiscoverSessions() ([]*model.Session, error) {
 			sessions = append(sessions, session)
 		}
 	}
+	// Enrich with Claude Desktop metadata.
+	desktopMeta := loadDesktopMetadata()
+	for _, session := range sessions {
+		if meta, ok := desktopMeta[session.SessionID]; ok {
+			session.Desktop = meta
+			if session.Name == "" && meta.Title != "" {
+				session.Name = meta.Title
+			}
+		}
+	}
+
 	return sessions, nil
 }
 

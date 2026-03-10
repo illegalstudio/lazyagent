@@ -121,6 +121,21 @@
           <dt class="text-subtext">Agent</dt>
           <dd class="text-text">{detail.agent === "pi" ? "π pi" : detail.agent}</dd>
         {/if}
+        {#if detail.source === "desktop"}
+          <dt class="text-subtext">Source</dt>
+          <dd class="text-accent">Claude Desktop</dd>
+          {#if detail.desktopTitle}
+            <dt class="text-subtext">Title</dt>
+            <dd class="text-text">{detail.desktopTitle}</dd>
+          {/if}
+          {#if detail.permissionMode}
+            <dt class="text-subtext">Permissions</dt>
+            <dd class="text-text">{detail.permissionMode}</dd>
+          {/if}
+        {:else if detail.agent === "claude"}
+          <dt class="text-subtext">Source</dt>
+          <dd class="text-text">CLI</dd>
+        {/if}
         {#if detail.model}
           <dt class="text-subtext">Model</dt>
           <dd class="text-text truncate">{detail.model}</dd>
