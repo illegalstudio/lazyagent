@@ -356,7 +356,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Open):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
-				cwd := m.visible[m.cursor].CWD
+				s := m.visible[m.cursor]
+				cwd := s.CWD
+
+				// Cursor sessions open in Cursor IDE.
+				if s.Agent == "cursor" && cwd != "" {
+					c := exec.Command("cursor", cwd)
+					c.Stdin = nil
+					c.Stdout = nil
+					c.Stderr = nil
+					_ = c.Start()
+					break
+				}
+
 				hasVisual := os.Getenv("VISUAL") != ""
 				hasEditor := os.Getenv("EDITOR") != ""
 
