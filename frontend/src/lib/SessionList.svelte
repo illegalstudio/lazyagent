@@ -99,6 +99,7 @@
         {:else}
           <div class="truncate text-[13px] font-medium text-text">
             {#if session.agent === "pi"}<span class="text-activity-spawning">π</span>
+            {:else if session.agent === "opencode"}<span class="text-subtext">O</span>
             {:else if session.source === "desktop"}<span class="text-accent">D</span>
             {/if}
             {session.customName || session.agentName || session.shortName}
