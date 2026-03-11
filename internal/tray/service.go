@@ -281,10 +281,12 @@ func (s *SessionService) OpenInEditor(cwd, agent string) {
 		return
 	}
 
-	// Cursor sessions open in Cursor IDE.
+	// Cursor sessions open in Cursor IDE if available.
 	if agent == "cursor" {
-		launchGUI("cursor", cwd)
-		return
+		if _, err := exec.LookPath("cursor"); err == nil {
+			launchGUI("cursor", cwd)
+			return
+		}
 	}
 
 	cfg := core.LoadConfig()

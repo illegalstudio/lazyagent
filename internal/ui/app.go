@@ -359,14 +359,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s := m.visible[m.cursor]
 				cwd := s.CWD
 
-				// Cursor sessions open in Cursor IDE.
+				// Cursor sessions open in Cursor IDE if available.
 				if s.Agent == "cursor" && cwd != "" {
-					c := exec.Command("cursor", cwd)
-					c.Stdin = nil
-					c.Stdout = nil
-					c.Stderr = nil
-					_ = c.Start()
-					break
+					if _, err := exec.LookPath("cursor"); err == nil {
+						c := exec.Command("cursor", cwd)
+						c.Stdin = nil
+						c.Stdout = nil
+						c.Stderr = nil
+						_ = c.Start()
+						break
+					}
 				}
 
 				hasVisual := os.Getenv("VISUAL") != ""
