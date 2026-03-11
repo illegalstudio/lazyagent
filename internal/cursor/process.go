@@ -165,8 +165,17 @@ func DiscoverSessions(cache *SessionCache) ([]*model.Session, error) {
 		cache.mu.Unlock()
 	}
 
-	// Update WAL state.
+	// Prune stale cache entries not present in current results.
+	activeIDs := make(map[string]struct{}, len(sessions))
+	for _, s := range sessions {
+		activeIDs[s.SessionID] = struct{}{}
+	}
 	cache.mu.Lock()
+	for id := range cache.entries {
+		if _, ok := activeIDs[id]; !ok {
+			delete(cache.entries, id)
+		}
+	}
 	cache.lastWALMtime = walMtime
 	cache.lastWALSize = walSize
 	cache.composers = composers
