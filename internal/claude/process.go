@@ -106,22 +106,23 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
 
-			session, mtime := cache.Get(jsonlFile)
-			if session == nil {
-				s, err := ParseJSONL(jsonlFile)
+			cached, offset, mtime := cache.GetIncremental(jsonlFile)
+			var session *model.Session
+			switch {
+			case cached != nil && offset == 0:
+				// Full cache hit — file unchanged.
+				session = cached
+			case cached != nil && offset > 0:
+				// Incremental: parse only new tail lines.
+				s, newOffset, err := ParseJSONLIncremental(jsonlFile, offset, cached)
 				if err != nil {
 					continue
 				}
 				session = s
 
-				// If CWD is empty (brand new session not yet written), derive
-				// from the encoded directory name as a best-effort fallback
 				if session.CWD == "" {
 					session.CWD = decodeDirName(projectEntry.Name())
 				}
-
-				// Only run git worktree check for newly parsed sessions.
-				// Cached sessions already have IsWorktree/MainRepo set.
 				if _, ok := wtCache[session.CWD]; !ok {
 					isWT, mainRepo := IsWorktree(session.CWD)
 					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
@@ -129,7 +130,27 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]
 				wt := wtCache[session.CWD]
 				session.IsWorktree = wt.isWorktree
 				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, session)
+				cache.Put(jsonlFile, mtime, newOffset, session)
+			default:
+				// Full miss: parse entire file.
+				s, size, err := ParseJSONL(jsonlFile)
+				if err != nil {
+					continue
+				}
+				session = s
+
+				if session.CWD == "" {
+					session.CWD = decodeDirName(projectEntry.Name())
+				}
+
+				if _, ok := wtCache[session.CWD]; !ok {
+					isWT, mainRepo := IsWorktree(session.CWD)
+					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+				}
+				wt := wtCache[session.CWD]
+				session.IsWorktree = wt.isWorktree
+				session.MainRepo = wt.mainRepo
+				cache.Put(jsonlFile, mtime, size, session)
 			}
 
 			sessions = append(sessions, session)

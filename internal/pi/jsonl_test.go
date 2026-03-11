@@ -21,7 +21,7 @@ func writeTempJSONL(t *testing.T, name, content string) string {
 func TestParsePiJSONL_SessionHeader(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl", `{"type":"session","version":3,"id":"abc-123","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/home/user/project"}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestParsePiJSONL_ModelChange(t *testing.T) {
 {"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-09T10:00:00.001Z","provider":"anthropic","modelId":"claude-sonnet-4-5"}
 {"type":"model_change","id":"mc2","parentId":"mc1","timestamp":"2026-03-09T10:00:05.000Z","provider":"google","modelId":"gemini-3-pro"}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestParsePiJSONL_MessageCounting(t *testing.T) {
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"stop","timestamp":1741514402000}}
 {"type":"message","id":"m3","parentId":"m2","timestamp":"2026-03-09T10:00:03.000Z","message":{"role":"user","content":[{"type":"text","text":"Thanks"}],"timestamp":1741514403000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestParsePiJSONL_ToolCall_StatusExecutingTool(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"Read my file"}],"timestamp":1741514401000}}
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"tc1","name":"read","arguments":{"path":"/tmp/test.txt"}}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"toolUse","timestamp":1741514402000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestParsePiJSONL_StatusWaitingForUser(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1741514401000}}
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there, how can I help?"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"stop","timestamp":1741514402000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestParsePiJSONL_StatusThinking(t *testing.T) {
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1741514401000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestParsePiJSONL_StatusProcessingResult(t *testing.T) {
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"tc1","name":"read","arguments":{"path":"/tmp/test.txt"}}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"toolUse","timestamp":1741514402000}}
 {"type":"message","id":"m3","parentId":"m2","timestamp":"2026-03-09T10:00:03.000Z","message":{"role":"toolResult","toolCallId":"tc1","toolName":"read","content":[{"type":"text","text":"file contents here"}],"isError":false,"timestamp":1741514403000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestParsePiJSONL_WriteToolTracksFilePath(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Write a file","timestamp":1741514401000}}
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"tc1","name":"write","arguments":{"path":"/tmp/output.txt","content":"hello"}}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"toolUse","timestamp":1741514402000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestParsePiJSONL_Compaction(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1741514401000}}
 {"type":"compaction","id":"c1","parentId":"m1","timestamp":"2026-03-09T10:05:00.000Z","summary":"Session summary","firstKeptEntryId":"m1","tokensBefore":50000}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestParsePiJSONL_RecentMessages(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"Hello world"}],"timestamp":1741514401000}}
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"stop","timestamp":1741514402000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestParsePiJSONL_UserContentAsString(t *testing.T) {
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Plain string content","timestamp":1741514401000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestNormalizePiToolName(t *testing.T) {
 
 func TestParsePiJSONL_EmptyFile(t *testing.T) {
 	path := writeTempJSONL(t, "empty.jsonl", "")
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestParsePiJSONL_SessionInfoName(t *testing.T) {
 {"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1741514401000}}
 {"type":"session_info","id":"si1","parentId":"m1","timestamp":"2026-03-09T10:00:05.000Z","name":"Refactor auth module"}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestParsePiJSONL_SessionInfoName_UsesLatest(t *testing.T) {
 {"type":"session_info","id":"si1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","name":"First name"}
 {"type":"session_info","id":"si2","parentId":"si1","timestamp":"2026-03-09T10:00:05.000Z","name":"Updated name"}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestParsePiJSONL_AgentField(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl",
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestParsePiJSONL_CostAndTokens(t *testing.T) {
 {"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":10,"cacheWrite":5,"totalTokens":165,"cost":{"input":0.001,"output":0.002,"cacheRead":0.0001,"cacheWrite":0.0005,"total":0.0036}},"stopReason":"stop","timestamp":1741514402000}}
 {"type":"message","id":"m3","parentId":"m2","timestamp":"2026-03-09T10:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"More"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":200,"output":100,"cacheRead":20,"cacheWrite":10,"totalTokens":330,"cost":{"input":0.002,"output":0.004,"cacheRead":0.0002,"cacheWrite":0.001,"total":0.0072}},"stopReason":"stop","timestamp":1741514403000}}
 `)
-	session, err := ParsePiJSONL(path)
+	session, _, err := ParsePiJSONL(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

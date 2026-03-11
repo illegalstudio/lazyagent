@@ -63,17 +63,18 @@ type jsonlContent struct {
 	Input      json.RawMessage `json:"input"`
 }
 
-// ParseJSONL reads a JSONL file and returns a populated Session.
-func ParseJSONL(path string) (*model.Session, error) {
+// ParseJSONL reads a JSONL file and returns a populated Session and
+// the byte offset consumed (for incremental parsing on the next call).
+func ParseJSONL(path string) (*model.Session, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// The filename (without extension) is always the authoritative session ID.
@@ -98,9 +99,11 @@ func ParseJSONL(path string) (*model.Session, error) {
 	var lastMeaningful *jsonlEntry
 	var prevTimestamp time.Time
 	var entryTimestamps []time.Time
+	var bytesConsumed int64
 	parsed := false
 
 	for scanner.Scan() {
+		bytesConsumed += int64(len(scanner.Bytes())) + 1 // +1 for newline
 		var e jsonlEntry
 		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
 			continue
@@ -157,7 +160,7 @@ func ParseJSONL(path string) (*model.Session, error) {
 
 		switch e.Type {
 		case "user":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
@@ -170,7 +173,7 @@ func ParseJSONL(path string) (*model.Session, error) {
 				}
 			}
 		case "assistant":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil {
 				session.AssistantMessages++
 				if e.Message.Model != "" {
@@ -203,7 +206,7 @@ func ParseJSONL(path string) (*model.Session, error) {
 	}
 
 	if !parsed {
-		return session, nil
+		return session, 0, nil
 	}
 
 	session.TotalMessages = session.UserMessages + session.AssistantMessages
@@ -234,7 +237,184 @@ func ParseJSONL(path string) (*model.Session, error) {
 		}
 	}
 
-	return session, nil
+	// Cap to file size: scanner adds +1 per line for the stripped newline,
+	// but the last line may lack a trailing newline during concurrent writes.
+	// Use a fresh Stat (not the one from before scanning) because the file
+	// may have grown during scanning.
+	if fi, err := f.Stat(); err == nil && bytesConsumed > fi.Size() {
+		bytesConsumed = fi.Size()
+	}
+
+	return session, bytesConsumed, nil
+}
+
+// ParseJSONLIncremental reads only the tail of a JSONL file starting at the given
+// byte offset, merging new entries into the provided base session.
+// Returns the updated session and new byte offset.
+func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*model.Session, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+
+	if _, err := f.Seek(offset, 0); err != nil {
+		return nil, 0, err
+	}
+
+	session := base
+	scanner := bufio.NewScanner(f)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 4*1024*1024)
+
+	recentTools := session.RecentTools
+	recentMessages := session.RecentMessages
+	entryTimestamps := session.EntryTimestamps
+	var lastMeaningful *jsonlEntry
+	var prevTimestamp time.Time
+	bytesConsumed := offset
+	parsed := false
+
+	for scanner.Scan() {
+		bytesConsumed += int64(len(scanner.Bytes())) + 1
+		var e jsonlEntry
+		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
+			continue
+		}
+		parsed = true
+		if e.Message != nil {
+			e.Message.parseContent()
+		}
+
+		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
+
+		if e.IsSidechain {
+			session.IsSidechain = true
+		}
+		if e.Type == "summary" {
+			if !prevTimestamp.IsZero() {
+				session.LastSummaryAt = prevTimestamp
+			} else {
+				session.LastSummaryAt = session.LastActivity
+			}
+		}
+		if !ts.IsZero() {
+			prevTimestamp = ts
+			entryTimestamps = append(entryTimestamps, ts)
+			if len(entryTimestamps) > 500 {
+				trimmed := make([]time.Time, 500)
+				copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
+				entryTimestamps = trimmed
+			}
+		}
+
+		// Metadata: only override if still empty (should be set from full parse).
+		if session.CWD == "" && e.CWD != "" {
+			session.CWD = e.CWD
+		}
+		if session.Version == "" && e.Version != "" {
+			session.Version = e.Version
+		}
+		if session.GitBranch == "" && e.GitBranch != "" {
+			session.GitBranch = e.GitBranch
+		}
+
+		session.CostUSD += e.CostUSD
+		if e.Message != nil && e.Message.Usage != nil {
+			u := e.Message.Usage
+			session.InputTokens += u.InputTokens
+			session.OutputTokens += u.OutputTokens
+			session.CacheCreationTokens += u.CacheCreationTokens
+			session.CacheReadTokens += u.CacheReadTokens
+		}
+
+		switch e.Type {
+		case "user":
+			lastMeaningful = copyEntry(&e)
+			if e.Message != nil && !isToolResult(e.Message) {
+				session.UserMessages++
+				if text := firstText(e.Message); text != "" {
+					recentMessages = append(recentMessages, model.ConversationMessage{
+						Role: "user", Text: truncate(text, 300), Timestamp: ts,
+					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
+				}
+			}
+		case "assistant":
+			lastMeaningful = copyEntry(&e)
+			if e.Message != nil {
+				session.AssistantMessages++
+				if e.Message.Model != "" {
+					session.Model = e.Message.Model
+				}
+				if text := firstText(e.Message); text != "" {
+					recentMessages = append(recentMessages, model.ConversationMessage{
+						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
+					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
+				}
+				for _, c := range e.Message.Content {
+					if c.Type == "tool_use" {
+						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
+						if len(recentTools) > 40 {
+							recentTools = recentTools[len(recentTools)-20:]
+						}
+						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
+							if fp := extractFilePath(c.Input); fp != "" {
+								session.LastFileWrite = fp
+								session.LastFileWriteAt = ts
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !parsed {
+		return session, offset, nil
+	}
+
+	session.TotalMessages = session.UserMessages + session.AssistantMessages
+	session.EntryTimestamps = entryTimestamps
+
+	if len(recentTools) > 20 {
+		recentTools = recentTools[len(recentTools)-20:]
+	}
+	session.RecentTools = recentTools
+
+	if len(recentMessages) > 10 {
+		recentMessages = recentMessages[len(recentMessages)-10:]
+	}
+	session.RecentMessages = recentMessages
+
+	// Only update status if we saw a user/assistant entry in the new tail.
+	// Otherwise keep the status inherited from the base session.
+	if lastMeaningful != nil {
+		session.Status = determineStatus(lastMeaningful)
+		session.CurrentTool = "" // reset before possibly re-setting below
+		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
+			session.LastActivity = ts
+		}
+		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
+			for _, c := range lastMeaningful.Message.Content {
+				if c.Type == "tool_use" {
+					session.CurrentTool = c.Name
+				}
+			}
+		}
+	}
+
+	// Cap to file size to handle last line without trailing newline.
+	if fi, err := f.Stat(); err == nil && bytesConsumed > fi.Size() {
+		bytesConsumed = fi.Size()
+	}
+
+	return session, bytesConsumed, nil
 }
 
 func isToolResult(m *jsonlMessage) bool {
@@ -279,6 +459,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n])
+}
+
+// copyEntry returns a shallow copy of a jsonlEntry so we can safely keep
+// a pointer to it across loop iterations.
+func copyEntry(e *jsonlEntry) *jsonlEntry {
+	cp := *e
+	return &cp
 }
 
 func determineStatus(e *jsonlEntry) model.SessionStatus {
