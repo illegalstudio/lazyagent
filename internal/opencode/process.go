@@ -63,7 +63,7 @@ func DiscoverSessions(cache *SessionCache) ([]*model.Session, error) {
 		return nil, nil // OpenCode not installed
 	}
 
-	db, err := sql.Open("sqlite", dbPath+"?mode=ro&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", dbPath+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("open opencode db: %w", err)
 	}
