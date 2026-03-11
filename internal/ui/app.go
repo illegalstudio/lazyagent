@@ -755,16 +755,25 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 	agentPrefix := ""
 	if s.Agent == "pi" {
 		agentPrefix = "π "
+	} else if s.Agent == "opencode" {
+		agentPrefix = "O "
 	} else if s.Desktop != nil {
 		agentPrefix = "D "
 	}
-	var name string
+	// Priority: manual rename > agent-provided name > CWD short name
+	displayName := ""
 	if customName != "" {
-		runes := []rune(agentPrefix + customName)
+		displayName = customName
+	} else if s.Name != "" {
+		displayName = s.Name
+	}
+	var name string
+	if displayName != "" {
+		runes := []rune(agentPrefix + displayName)
 		if len(runes) > nameW {
 			name = string(runes[:nameW-1]) + "…"
 		} else {
-			name = agentPrefix + customName
+			name = agentPrefix + displayName
 		}
 	} else {
 		name = agentPrefix + core.ShortName(s.CWD, nameW-len([]rune(agentPrefix)))
@@ -831,6 +840,9 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	add := func(line string) { lines = append(lines, line) }
 
 	detailTitle := m.manager.SessionName(s.SessionID)
+	if detailTitle == "" && s.Name != "" {
+		detailTitle = s.Name
+	}
 	if detailTitle == "" {
 		detailTitle = core.ShortName(s.CWD, width-2)
 	}
