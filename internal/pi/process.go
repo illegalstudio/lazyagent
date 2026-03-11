@@ -73,6 +73,17 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 					continue
 				}
 				session = s
+
+				if session.CWD == "" {
+					session.CWD = decodePiDirName(projectEntry.Name())
+				}
+				if _, ok := wtCache[session.CWD]; !ok {
+					isWT, mainRepo := claude.IsWorktree(session.CWD)
+					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+				}
+				wt := wtCache[session.CWD]
+				session.IsWorktree = wt.isWorktree
+				session.MainRepo = wt.mainRepo
 				cache.Put(jsonlFile, mtime, newOffset, session)
 			default:
 				// Full miss: parse entire file.

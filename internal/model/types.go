@@ -149,23 +149,6 @@ func NewSessionCache() *SessionCache {
 	return &SessionCache{entries: make(map[string]sessionCacheEntry)}
 }
 
-// Get returns a cached session if the file mtime hasn't changed.
-// Returns (session, mtime) on hit, (nil, mtime) on miss.
-// The returned mtime should be passed to Put to avoid TOCTOU races.
-func (c *SessionCache) Get(path string) (*Session, time.Time) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, time.Time{}
-	}
-	mtime := info.ModTime()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if e, ok := c.entries[path]; ok && e.mtime.Equal(mtime) {
-		return e.session, mtime
-	}
-	return nil, mtime
-}
-
 // GetIncremental returns the cached session and byte offset for incremental parsing.
 // If the file is unchanged, returns (session, 0, mtime) — a full cache hit.
 // If the file has changed and a previous entry exists, returns (session, offset, mtime)
