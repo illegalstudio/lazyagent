@@ -12,7 +12,7 @@
 
   let detail = $derived($selectedDetail);
   let color = $derived(detail ? activityColor(detail.activity) : "var(--color-activity-idle)");
-  let displayName = $derived(detail ? (detail.customName || detail.shortName) : "");
+  let displayName = $derived(detail ? (detail.customName || detail.agentName || detail.shortName) : "");
 
   let renaming = $state(false);
   let renameValue = $state("");

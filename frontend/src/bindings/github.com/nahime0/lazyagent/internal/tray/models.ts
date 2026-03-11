@@ -50,6 +50,7 @@ export class SessionFull {
     "source": string;
     "cwd": string;
     "shortName": string;
+    "agentName": string;
     "customName": string;
     "activity": string;
     "isActive": boolean;
@@ -93,6 +94,9 @@ export class SessionFull {
         }
         if (!("shortName" in $$source)) {
             this["shortName"] = "";
+        }
+        if (!("agentName" in $$source)) {
+            this["agentName"] = "";
         }
         if (!("customName" in $$source)) {
             this["customName"] = "";
@@ -197,6 +201,7 @@ export class SessionItem {
     "source": string;
     "cwd": string;
     "shortName": string;
+    "agentName": string;
     "customName": string;
     "activity": string;
     "isActive": boolean;
@@ -223,6 +228,9 @@ export class SessionItem {
         }
         if (!("shortName" in $$source)) {
             this["shortName"] = "";
+        }
+        if (!("agentName" in $$source)) {
+            this["agentName"] = "";
         }
         if (!("customName" in $$source)) {
             this["customName"] = "";
