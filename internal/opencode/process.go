@@ -285,6 +285,9 @@ func buildSession(db *sql.DB, ds dbSession) (*model.Session, error) {
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate messages: %w", err)
+	}
 
 	session.TotalMessages = session.UserMessages + session.AssistantMessages
 
