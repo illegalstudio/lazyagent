@@ -356,7 +356,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Open):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
-				cwd := m.visible[m.cursor].CWD
+				s := m.visible[m.cursor]
+				cwd := s.CWD
+
+				// Cursor sessions open in Cursor IDE if available.
+				if s.Agent == "cursor" && cwd != "" {
+					if _, err := exec.LookPath("cursor"); err == nil {
+						c := exec.Command("cursor", cwd)
+						c.Stdin = nil
+						c.Stdout = nil
+						c.Stderr = nil
+						_ = c.Start()
+						break
+					}
+				}
+
 				hasVisual := os.Getenv("VISUAL") != ""
 				hasEditor := os.Getenv("EDITOR") != ""
 
@@ -757,6 +771,8 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 		agentPrefix = "π "
 	} else if s.Agent == "opencode" {
 		agentPrefix = "O "
+	} else if s.Agent == "cursor" {
+		agentPrefix = "C "
 	} else if s.Desktop != nil {
 		agentPrefix = "D "
 	}

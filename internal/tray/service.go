@@ -272,10 +272,23 @@ func (s *SessionService) SetSearchQuery(q string) {
 }
 
 // OpenInEditor opens a directory in the user's editor.
-// It follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
+// For Cursor sessions, it opens Cursor IDE directly.
+// Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
 // $EDITOR is a terminal editor (opened inside a Terminal.app window).
 // The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
-func (s *SessionService) OpenInEditor(cwd string) {
+func (s *SessionService) OpenInEditor(cwd, agent string) {
+	if cwd == "" {
+		return
+	}
+
+	// Cursor sessions open in Cursor IDE if available.
+	if agent == "cursor" {
+		if _, err := exec.LookPath("cursor"); err == nil {
+			launchGUI("cursor", cwd)
+			return
+		}
+	}
+
 	cfg := core.LoadConfig()
 
 	// Config editor and VISUAL: launch directly (GUI editor).

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/nahime0/lazyagent/internal/claude"
+	"github.com/nahime0/lazyagent/internal/cursor"
 	"github.com/nahime0/lazyagent/internal/model"
 	"github.com/nahime0/lazyagent/internal/opencode"
 	"github.com/nahime0/lazyagent/internal/pi"
@@ -76,6 +77,67 @@ func (p *OpenCodeProvider) WatchDirs() []string {
 		return []string{d}
 	}
 	return nil
+}
+
+// CursorProvider discovers Cursor sessions from store.db files.
+type CursorProvider struct {
+	cache *cursor.SessionCache
+}
+
+// NewCursorProvider creates a CursorProvider.
+func NewCursorProvider() *CursorProvider {
+	return &CursorProvider{cache: cursor.NewSessionCache()}
+}
+
+func (p *CursorProvider) DiscoverSessions() ([]*model.Session, error) {
+	return cursor.DiscoverSessions(p.cache)
+}
+
+func (p *CursorProvider) UseWatcher() bool               { return false }
+func (p *CursorProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *CursorProvider) WatchDirs() []string {
+	if d := cursor.StateDBDir(); d != "" {
+		return []string{d}
+	}
+	return nil
+}
+
+// BuildProvider creates a SessionProvider based on agent mode and config.
+// When agentMode is "all", it reads the agents config to decide which providers
+// to include. A specific agentMode (e.g. "claude") overrides the config.
+func BuildProvider(agentMode string, cfg Config) SessionProvider {
+	switch agentMode {
+	case "claude":
+		return NewLiveProvider()
+	case "pi":
+		return NewPiProvider()
+	case "opencode":
+		return NewOpenCodeProvider()
+	case "cursor":
+		return NewCursorProvider()
+	default: // "all"
+		var providers []SessionProvider
+		if cfg.AgentEnabled("claude") {
+			providers = append(providers, NewLiveProvider())
+		}
+		if cfg.AgentEnabled("pi") {
+			providers = append(providers, NewPiProvider())
+		}
+		if cfg.AgentEnabled("opencode") {
+			providers = append(providers, NewOpenCodeProvider())
+		}
+		if cfg.AgentEnabled("cursor") {
+			providers = append(providers, NewCursorProvider())
+		}
+		if len(providers) == 0 {
+			// All disabled — return a no-op provider.
+			return MultiProvider{}
+		}
+		if len(providers) == 1 {
+			return providers[0]
+		}
+		return MultiProvider{Providers: providers}
+	}
 }
 
 // MultiProvider merges sessions from multiple providers.

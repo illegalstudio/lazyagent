@@ -20,7 +20,7 @@
 
   function openEditor() {
     if (detail) {
-      SessionService.OpenInEditor(detail.cwd).catch(() => {});
+      SessionService.OpenInEditor(detail.cwd, detail.agent).catch(() => {});
     }
   }
 

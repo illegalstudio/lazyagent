@@ -68,12 +68,13 @@ export function GetWindowMinutes(): $CancellablePromise<number> {
 
 /**
  * OpenInEditor opens a directory in the user's editor.
- * It follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
+ * For Cursor sessions, it opens Cursor IDE directly.
+ * Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
  * $EDITOR is a terminal editor (opened inside a Terminal.app window).
  * The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
  */
-export function OpenInEditor(cwd: string): $CancellablePromise<void> {
-    return $Call.ByID(1983870972, cwd);
+export function OpenInEditor(cwd: string, agent: string): $CancellablePromise<void> {
+    return $Call.ByID(1983870972, cwd, agent);
 }
 
 /**
