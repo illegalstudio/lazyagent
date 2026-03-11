@@ -60,9 +60,23 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
 
-			session, mtime := cache.Get(jsonlFile)
-			if session == nil {
-				s, err := ParsePiJSONL(jsonlFile)
+			cached, offset, mtime := cache.GetIncremental(jsonlFile)
+			var session *model.Session
+			switch {
+			case cached != nil && offset == 0:
+				// Full cache hit — file unchanged.
+				session = cached
+			case cached != nil && offset > 0:
+				// Incremental: parse only new tail lines.
+				s, newOffset, err := ParsePiJSONLIncremental(jsonlFile, offset, cached)
+				if err != nil {
+					continue
+				}
+				session = s
+				cache.Put(jsonlFile, mtime, newOffset, session)
+			default:
+				// Full miss: parse entire file.
+				s, size, err := ParsePiJSONL(jsonlFile)
 				if err != nil {
 					continue
 				}
@@ -72,7 +86,6 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 					session.CWD = decodePiDirName(projectEntry.Name())
 				}
 
-				// Only run git worktree check for newly parsed sessions.
 				if _, ok := wtCache[session.CWD]; !ok {
 					isWT, mainRepo := claude.IsWorktree(session.CWD)
 					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
@@ -80,7 +93,7 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 				wt := wtCache[session.CWD]
 				session.IsWorktree = wt.isWorktree
 				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, session)
+				cache.Put(jsonlFile, mtime, size, session)
 			}
 
 			sessions = append(sessions, session)

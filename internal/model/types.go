@@ -102,6 +102,25 @@ type Session struct {
 	Desktop *DesktopMeta
 }
 
+// Clone returns a deep copy of the Session suitable for use as a base
+// in incremental parsing. Slice fields are copied so the original is not mutated.
+func (s *Session) Clone() *Session {
+	cp := *s
+	if len(s.RecentTools) > 0 {
+		cp.RecentTools = make([]ToolCall, len(s.RecentTools))
+		copy(cp.RecentTools, s.RecentTools)
+	}
+	if len(s.RecentMessages) > 0 {
+		cp.RecentMessages = make([]ConversationMessage, len(s.RecentMessages))
+		copy(cp.RecentMessages, s.RecentMessages)
+	}
+	if len(s.EntryTimestamps) > 0 {
+		cp.EntryTimestamps = make([]time.Time, len(s.EntryTimestamps))
+		copy(cp.EntryTimestamps, s.EntryTimestamps)
+	}
+	return &cp
+}
+
 // DesktopMeta holds metadata from Claude Desktop's session JSON files.
 type DesktopMeta struct {
 	Title          string
@@ -121,6 +140,7 @@ type SessionCache struct {
 
 type sessionCacheEntry struct {
 	mtime   time.Time
+	size    int64 // byte offset of last fully parsed line
 	session *Session
 }
 
@@ -146,10 +166,34 @@ func (c *SessionCache) Get(path string) (*Session, time.Time) {
 	return nil, mtime
 }
 
-// Put stores a session in the cache with the given mtime (from a prior Get call).
-func (c *SessionCache) Put(path string, mtime time.Time, s *Session) {
+// GetIncremental returns the cached session and byte offset for incremental parsing.
+// If the file is unchanged, returns (session, 0, mtime) — a full cache hit.
+// If the file has changed and a previous entry exists, returns (session, offset, mtime)
+// where session is a Clone of the previous state and offset is the byte position to resume from.
+// If no previous entry exists, returns (nil, 0, mtime) — a full miss.
+func (c *SessionCache) GetIncremental(path string) (*Session, int64, time.Time) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, 0, time.Time{}
+	}
+	mtime := info.ModTime()
 	c.mu.Lock()
-	c.entries[path] = sessionCacheEntry{mtime: mtime, session: s}
+	defer c.mu.Unlock()
+	if e, ok := c.entries[path]; ok {
+		if e.mtime.Equal(mtime) {
+			// Full cache hit — file unchanged.
+			return e.session, 0, mtime
+		}
+		// File changed — return clone + offset for incremental parse.
+		return e.session.Clone(), e.size, mtime
+	}
+	return nil, 0, mtime
+}
+
+// Put stores a session in the cache with the given mtime and byte offset.
+func (c *SessionCache) Put(path string, mtime time.Time, size int64, s *Session) {
+	c.mu.Lock()
+	c.entries[path] = sessionCacheEntry{mtime: mtime, size: size, session: s}
 	c.mu.Unlock()
 }
 
