@@ -47,7 +47,6 @@ type SessionManager struct {
 	windowMinutes    int
 	activityFilter   ActivityKind
 	searchQuery      string
-	lastDiscover     time.Time
 	lastPollDiscover time.Time
 }
 
@@ -109,8 +108,7 @@ func (m *SessionManager) Reload() error {
 	m.sessions = sessions
 	m.tracker.Update(sessions, time.Now())
 	SortSessions(m.sessions)
-	m.lastDiscover = time.Now()
-	m.lastPollDiscover = m.lastDiscover
+	m.lastPollDiscover = time.Now()
 	m.mu.Unlock()
 	return nil
 }
