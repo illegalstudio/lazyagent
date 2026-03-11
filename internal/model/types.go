@@ -184,7 +184,11 @@ func (c *SessionCache) GetIncremental(path string) (*Session, int64, time.Time) 
 			// Full cache hit — file unchanged.
 			return e.session, 0, mtime
 		}
-		// File changed — return clone + offset for incremental parse.
+		// File shrunk (compaction/rewrite) — force full re-parse.
+		if info.Size() < e.size {
+			return nil, 0, mtime
+		}
+		// File grew — return clone + offset for incremental parse.
 		return e.session.Clone(), e.size, mtime
 	}
 	return nil, 0, mtime
