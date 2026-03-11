@@ -121,7 +121,7 @@ func ToolActivity(tool string) ActivityKind {
 		return ActivityBrowsing
 	case "Agent":
 		return ActivitySpawning
-	// pi coding agent (snake_case) — safety net for unnormalized names
+	// opencode / pi (snake_case) — safety net for unnormalized names
 	case "read":
 		return ActivityReading
 	case "write", "edit":
@@ -132,7 +132,7 @@ func ToolActivity(tool string) ActivityKind {
 		return ActivitySearching
 	case "web_search":
 		return ActivityBrowsing
-	case "subagent":
+	case "subagent", "task":
 		return ActivitySpawning
 	default:
 		if tool != "" {

@@ -344,6 +344,7 @@ type SessionItem struct {
 	Source        string    `json:"source"` // "cli" or "desktop"
 	CWD           string    `json:"cwd"`
 	ShortName     string    `json:"short_name"`
+	AgentName     string    `json:"agent_name,omitempty"`
 	CustomName    string    `json:"custom_name,omitempty"`
 	Activity      string    `json:"activity"`
 	IsActive      bool      `json:"is_active"`
@@ -415,6 +416,7 @@ func (s *Server) buildSessionItem(sess *model.Session, activity core.ActivityKin
 		Source:        source,
 		CWD:           sess.CWD,
 		ShortName:     core.ShortName(sess.CWD, 60),
+		AgentName:     sess.Name,
 		CustomName:    s.manager.SessionName(sess.SessionID),
 		Activity:      string(activity),
 		IsActive:      core.IsActiveActivity(activity),

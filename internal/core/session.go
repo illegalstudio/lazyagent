@@ -44,10 +44,10 @@ type SessionManager struct {
 	provider SessionProvider
 	names    *SessionNames
 
-	windowMinutes  int
-	activityFilter ActivityKind
-	searchQuery    string
-	lastDiscover   time.Time
+	windowMinutes    int
+	activityFilter   ActivityKind
+	searchQuery      string
+	lastPollDiscover time.Time
 }
 
 // NewSessionManager creates a new SessionManager with the given provider.
@@ -106,16 +106,9 @@ func (m *SessionManager) Reload() error {
 	}
 	m.mu.Lock()
 	m.sessions = sessions
-	// Auto-populate session names from embedded names (e.g., pi session_info)
-	// without overwriting user-set names.
-	for _, s := range sessions {
-		if s.Name != "" && m.names.Get(s.SessionID) == "" {
-			_ = m.names.Set(s.SessionID, s.Name)
-		}
-	}
 	m.tracker.Update(sessions, time.Now())
 	SortSessions(m.sessions)
-	m.lastDiscover = time.Now()
+	m.lastPollDiscover = time.Now()
 	m.mu.Unlock()
 	return nil
 }
@@ -129,7 +122,7 @@ func (m *SessionManager) UpdateActivities() bool {
 	if interval := m.provider.RefreshInterval(); interval > 0 {
 		now := time.Now()
 		m.mu.RLock()
-		needsRefresh := len(m.sessions) == 0 || now.Sub(m.lastDiscover) > interval
+		needsRefresh := len(m.sessions) == 0 || now.Sub(m.lastPollDiscover) > interval
 		m.mu.RUnlock()
 		if needsRefresh {
 			sessions, err := m.provider.DiscoverSessions()
@@ -138,7 +131,7 @@ func (m *SessionManager) UpdateActivities() bool {
 				m.sessions = sessions
 				m.tracker.Update(sessions, time.Now())
 				SortSessions(m.sessions)
-				m.lastDiscover = time.Now()
+				m.lastPollDiscover = time.Now()
 				m.mu.Unlock()
 				return true
 			}
@@ -240,8 +233,9 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 		}
 		if lowerQuery != "" {
 			matchCWD := strings.Contains(strings.ToLower(s.CWD), lowerQuery)
-			matchName := strings.Contains(strings.ToLower(m.names.Get(s.SessionID)), lowerQuery)
-			if !matchCWD && !matchName {
+			matchCustom := strings.Contains(strings.ToLower(m.names.Get(s.SessionID)), lowerQuery)
+			matchAgent := strings.Contains(strings.ToLower(s.Name), lowerQuery)
+			if !matchCWD && !matchCustom && !matchAgent {
 				continue
 			}
 		}

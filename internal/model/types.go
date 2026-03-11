@@ -195,3 +195,15 @@ func (c *SessionCache) Prune(seen map[string]struct{}) {
 	}
 	c.mu.Unlock()
 }
+
+// Truncate returns the first n runes of s, or s unchanged if shorter.
+func Truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}

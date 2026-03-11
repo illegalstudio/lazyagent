@@ -19,11 +19,14 @@ func buildProvider(agentMode string) core.SessionProvider {
 		return core.NewLiveProvider()
 	case "pi":
 		return core.NewPiProvider()
+	case "opencode":
+		return core.NewOpenCodeProvider()
 	default:
 		return core.MultiProvider{
 			Providers: []core.SessionProvider{
 				core.NewLiveProvider(),
 				core.NewPiProvider(),
+				core.NewOpenCodeProvider(),
 			},
 		}
 	}

@@ -4,6 +4,7 @@ export interface SessionItem {
   sessionId: string;
   cwd: string;
   shortName: string;
+  agentName: string;
   customName: string;
   activity: string;
   isActive: boolean;
