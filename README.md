@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) (CLI and Desktop), [pi coding agent](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [pi coding agent](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
@@ -22,10 +22,11 @@ lazyagent watches session data from coding agents to determine what each session
 **Supported agents:**
 - **Claude Code CLI** — reads JSONL from `~/.claude/projects/*/`
 - **Claude Code Desktop** — same JSONL files, enriched with session metadata (title, permissions) from `~/Library/Application Support/Claude/claude-code-sessions/`
+- **Cursor** — reads SQLite from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
 - **pi coding agent** — reads JSONL from `~/.pi/agent/sessions/*/`
 - **OpenCode** — reads SQLite from `~/.local/share/opencode/opencode.db`
 
-Use `--agent claude`, `--agent pi`, `--agent opencode`, or `--agent all` (default) to control which agents are monitored. Pi sessions are marked with a **π** prefix, Desktop sessions with a **D** prefix in the session list.
+Use `--agent claude`, `--agent pi`, `--agent opencode`, `--agent cursor`, or `--agent all` (default) to control which agents are monitored. Agents can also be enabled/disabled in the config file. Pi sessions are marked with a **π** prefix, Cursor with **C**, OpenCode with **O**, and Desktop sessions with a **D** prefix in the session list.
 
 From the JSONL stream it detects activity states with color-coded labels:
 
@@ -111,6 +112,7 @@ lazyagent                        Launch the terminal UI (monitors all agents)
 lazyagent --agent claude         Monitor only Claude Code sessions
 lazyagent --agent pi             Monitor only pi coding agent sessions
 lazyagent --agent opencode       Monitor only OpenCode sessions
+lazyagent --agent cursor         Monitor only Cursor sessions
 lazyagent --agent all            Monitor all agents (default)
 lazyagent --api                  Start the HTTP API (http://127.0.0.1:7421)
 lazyagent --api --host :8080     Start the HTTP API on a custom address
@@ -194,6 +196,8 @@ Full API documentation: [docs/API.md](docs/API.md)
 
 Pressing `o` (TUI) or the **Open** button (app) opens the selected session's working directory in your editor.
 
+**Cursor sessions** automatically open in Cursor IDE (if the `cursor` CLI is installed). If not installed, the standard editor flow below is used.
+
 | Configuration | Behavior |
 |---------------|----------|
 | Both `$VISUAL` and `$EDITOR` set | A picker popup asks which one to use (TUI only) |
@@ -213,23 +217,30 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
 
 ```json
 {
-  "windowMinutes": 30,
-  "defaultFilter": "",
+  "window_minutes": 30,
+  "default_filter": "",
   "editor": "",
-  "launchAtLogin": false,
+  "launch_at_login": false,
   "notifications": false,
-  "notifyAfterSec": 30
+  "notify_after_sec": 30,
+  "agents": {
+    "claude": true,
+    "cursor": true,
+    "opencode": true,
+    "pi": true
+  }
 }
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `windowMinutes` | `30` | Time window for session visibility (minutes) |
-| `defaultFilter` | `""` | Default activity filter (empty = show all) |
+| `window_minutes` | `30` | Time window for session visibility (minutes) |
+| `default_filter` | `""` | Default activity filter (empty = show all) |
 | `editor` | `""` | Override for `$VISUAL`/`$EDITOR` |
-| `launchAtLogin` | `false` | Auto-start the menu bar app at login |
+| `launch_at_login` | `false` | Auto-start the menu bar app at login |
 | `notifications` | `false` | macOS notifications when a session needs input |
-| `notifyAfterSec` | `30` | Seconds before triggering a "waiting" notification |
+| `notify_after_sec` | `30` | Seconds before triggering a "waiting" notification |
+| `agents` | all `true` | Enable/disable individual agent providers |
 
 ## Architecture
 
@@ -238,9 +249,10 @@ lazyagent/
 ├── main.go                     # Entry point: dispatches --tui / --tray / --api / --agent
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
-│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi providers
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor providers
 │   ├── model/                  # Shared types (Session, ToolCall, etc.)
 │   ├── claude/                 # Claude Code JSONL parsing, desktop metadata, session discovery
+│   ├── cursor/                 # Cursor IDE session discovery from state.vscdb
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── opencode/               # OpenCode SQLite parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
@@ -352,6 +364,15 @@ make clean
 - [x] Polling-based refresh (5s interval, no file watcher needed)
 - [x] Tool name normalization and activity mapping
 - [x] Subagent detection via `parent_id`
+
+### v0.7 — Cursor support
+- [x] Cursor session discovery from `state.vscdb` (composerData + bubbleId entries)
+- [x] `--agent cursor` flag
+- [x] WAL-based cache invalidation for real-time updates
+- [x] CWD inference from file URIs when workspace URI is unavailable
+- [x] Cursor tool name normalization (Read_file_v2, Glob_file_search, etc.)
+- [x] Open in Cursor IDE (with fallback if CLI not installed)
+- [x] Per-agent enable/disable in config (`agents` map)
 
 ### Future ideas
 - [ ] Outbound webhooks on status changes
