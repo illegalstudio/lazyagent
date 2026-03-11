@@ -74,7 +74,7 @@ All three share `internal/core/` — session discovery, file watcher, activity s
 
 ## Install
 
-### Homebrew (TUI)
+### Homebrew
 
 ```bash
 brew tap illegalstudio/tap
