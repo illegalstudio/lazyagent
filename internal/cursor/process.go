@@ -40,7 +40,6 @@ type composerSummary struct {
 	sid        string
 	count      int
 	lastBubble string // UUID of last bubble
-	lastType   int    // 1=user, 2=assistant
 }
 
 // NewSessionCache creates an empty Cursor session cache.
@@ -209,8 +208,7 @@ func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	rows, err := db.Query(`
 		SELECT json_extract(value, '$.composerId'),
 		       json_array_length(json_extract(value, '$.fullConversationHeadersOnly')),
-		       json_extract(value, '$.fullConversationHeadersOnly[#-1].bubbleId'),
-		       json_extract(value, '$.fullConversationHeadersOnly[#-1].type')
+		       json_extract(value, '$.fullConversationHeadersOnly[#-1].bubbleId')
 		FROM cursorDiskKV
 		WHERE key LIKE 'composerData:%'
 	`)
@@ -222,20 +220,12 @@ func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	var result []composerSummary
 	for rows.Next() {
 		var c composerSummary
-		var lastBubble, lastType *string
-		if err := rows.Scan(&c.sid, &c.count, &lastBubble, &lastType); err != nil {
+		var lastBubble *string
+		if err := rows.Scan(&c.sid, &c.count, &lastBubble); err != nil {
 			continue
 		}
 		if lastBubble != nil {
 			c.lastBubble = *lastBubble
-		}
-		if lastType != nil {
-			switch *lastType {
-			case "1":
-				c.lastType = 1
-			case "2":
-				c.lastType = 2
-			}
 		}
 		result = append(result, c)
 	}
@@ -283,6 +273,16 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 		return
 	}
 
+	if len(composer.Headers) == 0 {
+		return
+	}
+
+	// Batch-fetch all bubbles for this session in one query.
+	bubbleMap := fetchBubbles(db, sid)
+	if len(bubbleMap) == 0 {
+		return
+	}
+
 	var recentTools []model.ToolCall
 	var recentMessages []model.ConversationMessage
 	var lastBubbleType int
@@ -290,9 +290,8 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 	var fileURIs []string
 
 	for _, header := range composer.Headers {
-		key := "bubbleId:" + sid + ":" + header.BubbleID
-		var raw string
-		if err := db.QueryRow("SELECT value FROM cursorDiskKV WHERE key = ?", key).Scan(&raw); err != nil {
+		raw, ok := bubbleMap[header.BubbleID]
+		if !ok {
 			continue
 		}
 
@@ -378,6 +377,31 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 	if session.Status == model.StatusExecutingTool && len(recentTools) > 0 {
 		session.CurrentTool = recentTools[len(recentTools)-1].Name
 	}
+}
+
+// fetchBubbles fetches all bubble values for a session in a single query.
+// Returns a map of bubbleID → raw JSON value.
+func fetchBubbles(db *sql.DB, sid string) map[string]string {
+	rows, err := db.Query(
+		"SELECT key, value FROM cursorDiskKV WHERE key LIKE ?",
+		"bubbleId:"+sid+":%",
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	prefix := "bubbleId:" + sid + ":"
+	result := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			continue
+		}
+		bubbleID := strings.TrimPrefix(key, prefix)
+		result[bubbleID] = value
+	}
+	return result
 }
 
 // fileURIRe matches file:///path URIs in JSON strings.
