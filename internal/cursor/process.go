@@ -317,7 +317,9 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 
 		// Extract workspace URI.
 		if session.CWD == "" && len(bubble.WorkspaceUris) > 0 {
-			session.CWD = strings.TrimPrefix(bubble.WorkspaceUris[0], "file://")
+			if decoded, err := url.PathUnescape(strings.TrimPrefix(bubble.WorkspaceUris[0], "file://")); err == nil {
+				session.CWD = decoded
+			}
 		}
 
 		// Collect file URIs for CWD inference.
@@ -434,7 +436,7 @@ func inferWorkspace(paths []string) string {
 	}
 
 	if len(dirs) == 1 {
-		return findProjectRoot(dirs[0])
+		return findProjectRoot(dirs[0] + "/dummy")
 	}
 
 	parts := strings.Split(dirs[0], "/")
