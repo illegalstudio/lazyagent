@@ -160,7 +160,7 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 
 		switch e.Type {
 		case "user":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
@@ -173,7 +173,7 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 				}
 			}
 		case "assistant":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil {
 				session.AssistantMessages++
 				if e.Message.Model != "" {
@@ -330,7 +330,7 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 
 		switch e.Type {
 		case "user":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil && !isToolResult(e.Message) {
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
@@ -343,7 +343,7 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 				}
 			}
 		case "assistant":
-			lastMeaningful = &e
+			lastMeaningful = copyEntry(&e)
 			if e.Message != nil {
 				session.AssistantMessages++
 				if e.Message.Model != "" {
@@ -459,6 +459,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n])
+}
+
+// copyEntry returns a shallow copy of a jsonlEntry so we can safely keep
+// a pointer to it across loop iterations.
+func copyEntry(e *jsonlEntry) *jsonlEntry {
+	cp := *e
+	return &cp
 }
 
 func determineStatus(e *jsonlEntry) model.SessionStatus {
