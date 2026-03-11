@@ -384,8 +384,10 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 	}
 	session.RecentMessages = recentMessages
 
-	session.Status = determineStatus(lastMeaningful)
+	// Only update status if we saw a user/assistant entry in the new tail.
+	// Otherwise keep the status inherited from the base session.
 	if lastMeaningful != nil {
+		session.Status = determineStatus(lastMeaningful)
 		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
 			session.LastActivity = ts
 		}

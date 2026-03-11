@@ -328,8 +328,10 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 	}
 	session.RecentMessages = recentMessages
 
-	session.Status = determinePiStatus(lastMessageEntry)
+	// Only update status if we saw a message entry in the new tail.
+	// Otherwise keep the status inherited from the base session.
 	if lastMessageEntry != nil {
+		session.Status = determinePiStatus(lastMessageEntry)
 		entryTs, _ := time.Parse(time.RFC3339Nano, lastMessageEntry.Timestamp)
 		if !entryTs.IsZero() {
 			session.LastActivity = entryTs
