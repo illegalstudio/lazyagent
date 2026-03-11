@@ -92,7 +92,7 @@ func (w *ProjectWatcher) run(out chan<- struct{}) {
 					_ = w.fw.Add(event.Name)
 				}
 			}
-			if strings.HasSuffix(event.Name, ".jsonl") {
+			if strings.HasSuffix(event.Name, ".jsonl") || strings.HasSuffix(event.Name, ".db-wal") || strings.HasSuffix(event.Name, ".db") {
 				notify()
 			}
 		case _, ok := <-w.fw.Errors:

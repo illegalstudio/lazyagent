@@ -5,6 +5,7 @@ import (
 
 	"github.com/nahime0/lazyagent/internal/claude"
 	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/nahime0/lazyagent/internal/opencode"
 	"github.com/nahime0/lazyagent/internal/pi"
 )
 
@@ -53,6 +54,29 @@ func (p *PiProvider) DiscoverSessions() ([]*model.Session, error) {
 func (p *PiProvider) UseWatcher() bool               { return true }
 func (p *PiProvider) RefreshInterval() time.Duration { return 0 }
 func (p *PiProvider) WatchDirs() []string            { return []string{pi.PiSessionsDir()} }
+
+// OpenCodeProvider discovers OpenCode sessions from SQLite.
+type OpenCodeProvider struct {
+	cache *opencode.SessionCache
+}
+
+// NewOpenCodeProvider creates an OpenCodeProvider.
+func NewOpenCodeProvider() *OpenCodeProvider {
+	return &OpenCodeProvider{cache: opencode.NewSessionCache()}
+}
+
+func (p *OpenCodeProvider) DiscoverSessions() ([]*model.Session, error) {
+	return opencode.DiscoverSessions(p.cache)
+}
+
+func (p *OpenCodeProvider) UseWatcher() bool               { return false }
+func (p *OpenCodeProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *OpenCodeProvider) WatchDirs() []string {
+	if d := opencode.OpenCodeDataDir(); d != "" {
+		return []string{d}
+	}
+	return nil
+}
 
 // MultiProvider merges sessions from multiple providers.
 type MultiProvider struct {
