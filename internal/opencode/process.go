@@ -261,7 +261,7 @@ func buildSession(db *sql.DB, ds dbSession) (*model.Session, error) {
 				case "text":
 					if pd.Text != "" && lastMsgData != nil {
 						recentMessages = append(recentMessages, model.ConversationMessage{
-							Role: lastMsgData.Role, Text: truncate(pd.Text, 300), Timestamp: ts,
+							Role: lastMsgData.Role, Text: model.Truncate(pd.Text, 300), Timestamp: ts,
 						})
 						if len(recentMessages) > 20 {
 							recentMessages = recentMessages[len(recentMessages)-10:]
@@ -392,10 +392,3 @@ func extractToolFilePath(state json.RawMessage) string {
 	return input.Path
 }
 
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
-}

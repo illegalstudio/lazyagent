@@ -165,7 +165,7 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: truncate(text, 300), Timestamp: ts,
+						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -181,7 +181,7 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 				}
 				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
+						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -335,7 +335,7 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 				session.UserMessages++
 				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: truncate(text, 300), Timestamp: ts,
+						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -351,7 +351,7 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 				}
 				if text := firstText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
+						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -450,16 +450,6 @@ func extractFilePath(raw json.RawMessage) string {
 	return ""
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
-}
 
 // copyEntry returns a shallow copy of a jsonlEntry so we can safely keep
 // a pointer to it across loop iterations.

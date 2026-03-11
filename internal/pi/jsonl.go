@@ -95,7 +95,7 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 				lastMessageEntry = copyEntry(&e)
 				if text := firstPiText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: truncate(text, 300), Timestamp: ts,
+						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -137,7 +137,7 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 				}
 				if text := firstPiTextFromBlocks(blocks); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
+						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -265,7 +265,7 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 				lastMessageEntry = copyEntry(&e)
 				if text := firstPiText(e.Message); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: truncate(text, 300), Timestamp: ts,
+						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -306,7 +306,7 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 				}
 				if text := firstPiTextFromBlocks(blocks); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: truncate(text, 300), Timestamp: ts,
+						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
 					if len(recentMessages) > 20 {
 						recentMessages = recentMessages[len(recentMessages)-10:]
@@ -473,10 +473,3 @@ func determinePiStatus(e *piEntry) model.SessionStatus {
 	return model.StatusUnknown
 }
 
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
-}
