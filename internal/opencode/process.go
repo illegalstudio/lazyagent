@@ -203,6 +203,7 @@ func buildSession(db *sql.DB, ds dbSession) (*model.Session, error) {
 				lastMsgParts = nil
 			}
 			lastMsgID = msgID
+			lastMsgData = nil
 
 			var md messageData
 			if err := json.Unmarshal([]byte(msgDataRaw), &md); err != nil {
