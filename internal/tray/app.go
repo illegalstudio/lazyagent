@@ -14,22 +14,8 @@ import (
 
 // buildProvider returns the session provider for the given agent mode.
 func buildProvider(agentMode string) core.SessionProvider {
-	switch agentMode {
-	case "claude":
-		return core.NewLiveProvider()
-	case "pi":
-		return core.NewPiProvider()
-	case "opencode":
-		return core.NewOpenCodeProvider()
-	default:
-		return core.MultiProvider{
-			Providers: []core.SessionProvider{
-				core.NewLiveProvider(),
-				core.NewPiProvider(),
-				core.NewOpenCodeProvider(),
-			},
-		}
-	}
+	cfg := core.LoadConfig()
+	return core.BuildProvider(agentMode, cfg)
 }
 
 // Available reports whether tray support was compiled in.
