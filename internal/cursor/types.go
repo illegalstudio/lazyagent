@@ -7,7 +7,6 @@ type bubbleData struct {
 	Text           string       `json:"text"`
 	CreatedAt      string       `json:"createdAt"` // ISO 8601
 	WorkspaceUris  []string     `json:"workspaceUris"`
-	IsAgentic      bool         `json:"isAgentic"`
 	TokenCount     bubbleTokens `json:"tokenCount"`
 	ToolFormerData toolFormer   `json:"toolFormerData"`
 }
@@ -18,7 +17,6 @@ type bubbleTokens struct {
 }
 
 type toolFormer struct {
-	ToolCallID string `json:"toolCallId"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
