@@ -237,6 +237,12 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 		}
 	}
 
+	// Cap to file size: scanner adds +1 per line for the stripped newline,
+	// but the last line may lack a trailing newline during concurrent writes.
+	if bytesConsumed > info.Size() {
+		bytesConsumed = info.Size()
+	}
+
 	return session, bytesConsumed, nil
 }
 
@@ -398,6 +404,11 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 				}
 			}
 		}
+	}
+
+	// Cap to file size to handle last line without trailing newline.
+	if fi, err := f.Stat(); err == nil && bytesConsumed > fi.Size() {
+		bytesConsumed = fi.Size()
 	}
 
 	return session, bytesConsumed, nil
