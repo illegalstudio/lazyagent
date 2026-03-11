@@ -396,6 +396,7 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 	// Otherwise keep the status inherited from the base session.
 	if lastMeaningful != nil {
 		session.Status = determineStatus(lastMeaningful)
+		session.CurrentTool = "" // reset before possibly re-setting below
 		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
 			session.LastActivity = ts
 		}
