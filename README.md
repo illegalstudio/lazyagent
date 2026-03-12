@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI, macOS menu bar app, and HTTP API for monitoring all running [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [pi coding agent](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) instances on your machine — inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree) and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents — [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — from a single place. No lock-in, no server, purely observational.
 
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
