@@ -8,6 +8,12 @@ A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding a
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
+## Why lazyagent?
+
+Unlike other tools, lazyagent doesn't replace your workflow — it watches it. Launch agents wherever you want (terminal, IDE, desktop app), lazyagent just observes. No lock-in, no server, no account required.
+
+If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it.
+
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
 
