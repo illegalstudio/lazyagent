@@ -17,11 +17,13 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/tray"
 	"github.com/illegalstudio/lazyagent/internal/ui"
+	"github.com/illegalstudio/lazyagent/internal/version"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
 func main() {
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app")
 	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
 	apiMode := flag.Bool("api", false, "Start the API server")
@@ -30,7 +32,7 @@ func main() {
 	agentMode := flag.String("agent", "all", "Which agent sessions to show: claude, pi, opencode, cursor, all (default: all)")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent — monitor all running coding agent sessions
+		fmt.Fprintf(os.Stderr, `%s — monitor all running coding agent sessions
 
 Usage:
   lazyagent                     Launch the terminal UI (default, monitors all agents)
@@ -48,7 +50,7 @@ Usage:
   lazyagent --demo              Launch with fake data (for screenshots)
 
 Flags:
-`)
+`, version.String())
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, `
 TUI keybindings:
@@ -62,6 +64,11 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	}
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	// Build the session provider based on flags and config.
 	cfg := core.LoadConfig()
