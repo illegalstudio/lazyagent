@@ -59,7 +59,7 @@ func isNewer(a, b string) bool {
 	ap := parseSemver(a)
 	bp := parseSemver(b)
 	if ap == nil || bp == nil {
-		return a != b // fallback to string inequality
+		return false // can't compare, assume up-to-date
 	}
 	for i := 0; i < 3; i++ {
 		if ap[i] > bp[i] {
