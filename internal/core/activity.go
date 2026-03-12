@@ -3,7 +3,7 @@ package core
 import (
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // ActivityTimeout is the duration a tool-based activity stays visible after

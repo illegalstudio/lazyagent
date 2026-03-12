@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // Provider implements core.SessionProvider with generated fake data.

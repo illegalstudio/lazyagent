@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 func writeTempJSONL(t *testing.T, name, content string) string {

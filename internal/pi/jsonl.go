@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // ParsePiJSONL reads a pi session JSONL file and returns a populated Session

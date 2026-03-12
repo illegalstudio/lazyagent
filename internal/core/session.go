@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // Window minutes bounds.

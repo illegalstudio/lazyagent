@@ -2,7 +2,7 @@ package ui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 // activityColors maps each activity kind to a display color (TUI-specific).

@@ -12,11 +12,11 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/nahime0/lazyagent/internal/api"
-	"github.com/nahime0/lazyagent/internal/core"
-	"github.com/nahime0/lazyagent/internal/demo"
-	"github.com/nahime0/lazyagent/internal/tray"
-	"github.com/nahime0/lazyagent/internal/ui"
+	"github.com/illegalstudio/lazyagent/internal/api"
+	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/tray"
+	"github.com/illegalstudio/lazyagent/internal/ui"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"

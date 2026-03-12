@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
-	"github.com/nahime0/lazyagent/internal/core"
-	"github.com/nahime0/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

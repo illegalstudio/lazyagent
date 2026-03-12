@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/nahime0/lazyagent/internal/assets"
-	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/assets"
+	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

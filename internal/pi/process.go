@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nahime0/lazyagent/internal/claude"
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/claude"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // PiSessionsDir returns the path to ~/.pi/agent/sessions.

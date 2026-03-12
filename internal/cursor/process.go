@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/claude"
+	"github.com/illegalstudio/lazyagent/internal/model"
 	_ "modernc.org/sqlite"
 )
 

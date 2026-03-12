@@ -8,7 +8,7 @@
   } from "./stores";
   import ActivityBadge from "./ActivityBadge.svelte";
   import Sparkline from "./Sparkline.svelte";
-  import * as SessionService from "../bindings/github.com/nahime0/lazyagent/internal/tray/sessionservice";
+  import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
   let detail = $derived($selectedDetail);
   let color = $derived(detail ? activityColor(detail.activity) : "var(--color-activity-idle)");

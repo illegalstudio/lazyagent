@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // fakeProvider is a test helper that returns pre-configured sessions.

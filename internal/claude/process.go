@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // DesktopCache caches parsed desktop metadata JSON files keyed by file path.

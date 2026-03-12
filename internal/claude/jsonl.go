@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // Raw JSONL entry structures

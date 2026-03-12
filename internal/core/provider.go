@@ -3,11 +3,11 @@ package core
 import (
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/claude"
-	"github.com/nahime0/lazyagent/internal/cursor"
-	"github.com/nahime0/lazyagent/internal/model"
-	"github.com/nahime0/lazyagent/internal/opencode"
-	"github.com/nahime0/lazyagent/internal/pi"
+	"github.com/illegalstudio/lazyagent/internal/claude"
+	"github.com/illegalstudio/lazyagent/internal/cursor"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/opencode"
+	"github.com/illegalstudio/lazyagent/internal/pi"
 )
 
 // LiveProvider discovers real Claude Code sessions from disk.

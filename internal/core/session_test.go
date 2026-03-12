@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 func TestReload_DoesNotAutoPopulateNames(t *testing.T) {

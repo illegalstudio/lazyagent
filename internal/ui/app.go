@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nahime0/lazyagent/internal/model"
-	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).

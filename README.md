@@ -84,13 +84,13 @@ brew install lazyagent
 ### Go (TUI only)
 
 ```bash
-go install github.com/nahime0/lazyagent@latest
+go install github.com/illegalstudio/lazyagent@latest
 ```
 
 ### Build from source
 
 ```bash
-git clone https://github.com/nahime0/lazyagent
+git clone https://github.com/illegalstudio/lazyagent
 cd lazyagent
 
 # TUI only (no Wails/Node.js needed)

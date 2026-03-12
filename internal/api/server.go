@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
-	"github.com/nahime0/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.

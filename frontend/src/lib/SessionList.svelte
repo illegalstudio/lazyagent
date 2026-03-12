@@ -2,7 +2,7 @@
   import { sessions, selectedId, activityColor } from "./stores";
   import Sparkline from "./Sparkline.svelte";
   import ActivityBadge from "./ActivityBadge.svelte";
-  import * as SessionService from "../bindings/github.com/nahime0/lazyagent/internal/tray/sessionservice";
+  import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
   let renamingId = $state<string | null>(null);
   let renameValue = $state("");

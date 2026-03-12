@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nahime0/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // testProvider is a no-op provider for API tests.
