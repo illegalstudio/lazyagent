@@ -8,21 +8,26 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/version"
+	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // SessionService is the Go service exposed to the Svelte frontend via Wails bindings.
 type SessionService struct {
-	manager  *core.SessionManager
-	app      *application.App
-	ctx      context.Context
-	demoMode bool
-	provider core.SessionProvider // if set, used instead of demoMode logic
+	manager       *core.SessionManager
+	app           *application.App
+	ctx           context.Context
+	demoMode      bool
+	provider      core.SessionProvider // if set, used instead of demoMode logic
+	updateMu      sync.RWMutex
+	updateVersion string // newer version available, empty if up-to-date
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -47,6 +52,15 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 
 	// Background goroutine: watch for file changes + periodic refresh
 	go s.watchLoop()
+
+	// Background update check
+	go func() {
+		if v := version.CheckLatest(); v != "" {
+			s.updateMu.Lock()
+			s.updateVersion = v
+			s.updateMu.Unlock()
+		}
+	}()
 
 	return nil
 }
@@ -349,6 +363,18 @@ func (s *SessionService) SetSessionName(sessionID, name string) error {
 		s.emitUpdate()
 	}
 	return err
+}
+
+// GetUpdateVersion returns the newer version available, or empty if up-to-date.
+func (s *SessionService) GetUpdateVersion() string {
+	s.updateMu.RLock()
+	defer s.updateMu.RUnlock()
+	return s.updateVersion
+}
+
+// OpenReleases opens the GitHub releases page in the system browser.
+func (s *SessionService) OpenReleases() {
+	browser.OpenURL("https://github.com/illegalstudio/lazyagent/releases")
 }
 
 // GetConfig returns the current config.

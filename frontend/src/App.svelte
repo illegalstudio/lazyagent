@@ -16,6 +16,7 @@
 
   let showDetail = $derived($selectedId !== null);
   let searching = $state(false);
+  let updateVersion = $state("");
 
   async function loadSessions() {
     try {
@@ -110,6 +111,14 @@
       loadSessions();
       if ($selectedId) loadDetail($selectedId);
     });
+
+    // Check for updates after a short delay (gives the backend time to fetch)
+    setTimeout(async () => {
+      try {
+        const v = await SessionService.GetUpdateVersion();
+        if (v) updateVersion = v;
+      } catch {}
+    }, 3000);
   });
 </script>
 
@@ -177,12 +186,23 @@
   </div>
 
   <!-- Footer -->
-  <footer class="flex items-center justify-center gap-3 px-3 py-1 bg-surface border-t border-border text-[10px] text-subtext">
-    <span><kbd class="text-text/60">j/k</kbd> navigate</span>
-    <span><kbd class="text-text/60">/</kbd> search</span>
-    <span><kbd class="text-text/60">f</kbd> filter</span>
-    <span><kbd class="text-text/60">+/−</kbd> window</span>
-    <span><kbd class="text-text/60">r</kbd> rename</span>
-    <span><kbd class="text-text/60">esc</kbd> back</span>
+  <footer class="px-3 py-1 bg-surface border-t border-border">
+    {#if updateVersion}
+      <div class="flex items-center justify-center gap-1 text-[10px] text-accent pb-0.5">
+        <span>↑ lazyagent {updateVersion} available —</span>
+        <button
+          class="underline hover:text-text cursor-pointer"
+          onclick={() => SessionService.OpenReleases()}
+        >releases</button>
+      </div>
+    {/if}
+    <div class="flex items-center justify-center gap-3 text-[10px] text-subtext">
+      <span><kbd class="text-text/60">j/k</kbd> navigate</span>
+      <span><kbd class="text-text/60">/</kbd> search</span>
+      <span><kbd class="text-text/60">f</kbd> filter</span>
+      <span><kbd class="text-text/60">+/−</kbd> window</span>
+      <span><kbd class="text-text/60">r</kbd> rename</span>
+      <span><kbd class="text-text/60">esc</kbd> back</span>
+    </div>
   </footer>
 </div>

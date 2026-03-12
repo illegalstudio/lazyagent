@@ -13,6 +13,10 @@ builds:
     binary: lazyagent
     env:
       - CGO_ENABLED=1
+    ldflags:
+      - -s -w
+      - -X github.com/illegalstudio/lazyagent/internal/version.Version={{.Version}}
+      - -X github.com/illegalstudio/lazyagent/internal/version.Commit={{.ShortCommit}}
     goos:
       - darwin
     goarch:
@@ -25,6 +29,10 @@ builds:
     binary: lazyagent
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/illegalstudio/lazyagent/internal/version.Version={{.Version}}
+      - -X github.com/illegalstudio/lazyagent/internal/version.Commit={{.ShortCommit}}
     tags:
       - notray
     goos:

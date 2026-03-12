@@ -9,6 +9,7 @@ import (
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -50,7 +51,11 @@ func Run(demoMode bool, agentMode string) error {
 	// System tray
 	tray := app.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon)
-	tray.SetTooltip("lazyagent")
+	tooltip := "lazyagent"
+	if version.Version != "dev" {
+		tooltip += " v" + version.Version
+	}
+	tray.SetTooltip(tooltip)
 
 	// Panel window attached to tray
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
