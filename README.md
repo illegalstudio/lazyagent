@@ -1,6 +1,6 @@
 # lazyagent
 
-![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total)
+![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?v=1)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
