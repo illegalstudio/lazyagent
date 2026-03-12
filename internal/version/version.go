@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,8 +48,44 @@ func CheckLatest() string {
 
 	latest := strings.TrimPrefix(release.TagName, "v")
 	current := strings.TrimPrefix(Version, "v")
-	if latest != "" && latest != current {
+	if latest != "" && isNewer(latest, current) {
 		return release.TagName
 	}
 	return ""
+}
+
+// isNewer returns true if version a is strictly newer than b (semver major.minor.patch).
+func isNewer(a, b string) bool {
+	ap := parseSemver(a)
+	bp := parseSemver(b)
+	if ap == nil || bp == nil {
+		return a != b // fallback to string inequality
+	}
+	for i := 0; i < 3; i++ {
+		if ap[i] > bp[i] {
+			return true
+		}
+		if ap[i] < bp[i] {
+			return false
+		}
+	}
+	return false
+}
+
+// parseSemver extracts [major, minor, patch] from a version string like "1.2.3".
+// Returns nil if parsing fails.
+func parseSemver(v string) []int {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+	nums := make([]int, 3)
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return nil
+		}
+		nums[i] = n
+	}
+	return nums
 }

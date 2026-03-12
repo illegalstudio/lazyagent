@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -25,7 +26,8 @@ type SessionService struct {
 	ctx           context.Context
 	demoMode      bool
 	provider      core.SessionProvider // if set, used instead of demoMode logic
-	updateVersion string               // newer version available, empty if up-to-date
+	updateMu      sync.RWMutex
+	updateVersion string // newer version available, empty if up-to-date
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -54,7 +56,9 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 	// Background update check
 	go func() {
 		if v := version.CheckLatest(); v != "" {
+			s.updateMu.Lock()
 			s.updateVersion = v
+			s.updateMu.Unlock()
 		}
 	}()
 
@@ -363,6 +367,8 @@ func (s *SessionService) SetSessionName(sessionID, name string) error {
 
 // GetUpdateVersion returns the newer version available, or empty if up-to-date.
 func (s *SessionService) GetUpdateVersion() string {
+	s.updateMu.RLock()
+	defer s.updateMu.RUnlock()
 	return s.updateVersion
 }
 
