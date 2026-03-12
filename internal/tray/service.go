@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -47,6 +48,13 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 
 	// Background goroutine: watch for file changes + periodic refresh
 	go s.watchLoop()
+
+	// Background update check
+	go func() {
+		if v := version.CheckLatest(); v != "" && s.app != nil {
+			s.app.Event.Emit("update:available", v)
+		}
+	}()
 
 	return nil
 }

@@ -16,6 +16,7 @@
 
   let showDetail = $derived($selectedId !== null);
   let searching = $state(false);
+  let updateVersion = $state("");
 
   async function loadSessions() {
     try {
@@ -110,6 +111,12 @@
       loadSessions();
       if ($selectedId) loadDetail($selectedId);
     });
+
+    Events.On("update:available", (event: any) => {
+      if (event?.data?.length) {
+        updateVersion = event.data[0];
+      }
+    });
   });
 </script>
 
@@ -146,6 +153,25 @@
       >+</button>
     </div>
   </header>
+
+  <!-- Update banner -->
+  {#if updateVersion}
+    <div class="flex items-center justify-between px-3 py-1.5 bg-accent/10 border-b border-accent/20 text-[12px]">
+      <span class="text-accent">
+        lazyagent {updateVersion} is available!
+        <a
+          href="https://github.com/illegalstudio/lazyagent/releases"
+          target="_blank"
+          class="underline hover:text-text ml-1"
+        >View release</a>
+      </span>
+      <button
+        class="text-subtext hover:text-text text-[14px] leading-none"
+        onclick={() => updateVersion = ""}
+        title="Dismiss"
+      >&times;</button>
+    </div>
+  {/if}
 
   <!-- Search bar -->
   {#if searching}

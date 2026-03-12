@@ -10,8 +10,9 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/version"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -25,6 +26,9 @@ type sessionsMsg struct {
 	sessions []*model.Session
 	err      error
 }
+
+// updateAvailableMsg is sent when a newer release is found on GitHub.
+type updateAvailableMsg struct{ version string }
 
 // editorFinishedMsg is sent when a TUI editor (tea.Exec) exits.
 type editorFinishedMsg struct{ err error }
@@ -105,8 +109,17 @@ func NewModel(provider core.SessionProvider) Model {
 	}
 }
 
+func checkUpdateCmd() tea.Cmd {
+	return func() tea.Msg {
+		if v := version.CheckLatest(); v != "" {
+			return updateAvailableMsg{version: v}
+		}
+		return nil
+	}
+}
+
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{makeLoadCmd(m.manager), renderTickCmd()}
+	cmds := []tea.Cmd{makeLoadCmd(m.manager), renderTickCmd(), checkUpdateCmd()}
 	if events := m.manager.WatcherEvents(); events != nil {
 		cmds = append(cmds, watchCmd(events))
 	} else {
@@ -146,6 +159,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case updateAvailableMsg:
+		if msg.version != "" {
+			m.flashMsg = fmt.Sprintf("lazyagent %s is available!\n\n→ https://github.com/illegalstudio/lazyagent/releases", msg.version)
+		}
 
 	case editorFinishedMsg:
 		// TUI editor exited, bubbletea resumes automatically.
@@ -645,7 +663,11 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTitleBar() string {
-	left := titleStyle.Render("lazyagent")
+	title := "lazyagent"
+	if version.Version != "dev" {
+		title += " v" + version.Version
+	}
+	left := titleStyle.Render(title)
 	count := lipgloss.NewStyle().
 		Background(colorPrimary).Foreground(colorSubtext).
 		Padding(0, 1).
