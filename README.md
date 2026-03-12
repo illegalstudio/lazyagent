@@ -12,7 +12,7 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 
 Unlike other tools, lazyagent doesn't replace your workflow — it watches it. Launch agents wherever you want (terminal, IDE, desktop app), lazyagent just observes. No lock-in, no server, no account required.
 
-If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it.
+> ⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
 
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
