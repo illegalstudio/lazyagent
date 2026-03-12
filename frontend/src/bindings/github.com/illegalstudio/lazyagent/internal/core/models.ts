@@ -15,6 +15,7 @@ export class Config {
     "launch_at_login": boolean;
     "notifications": boolean;
     "notify_after_sec": number;
+    "agents": { [_ in string]?: boolean };
 
     /** Creates a new Config instance. */
     constructor($$source: Partial<Config> = {}) {
@@ -36,6 +37,9 @@ export class Config {
         if (!("notify_after_sec" in $$source)) {
             this["notify_after_sec"] = 0;
         }
+        if (!("agents" in $$source)) {
+            this["agents"] = {};
+        }
 
         Object.assign(this, $$source);
     }
@@ -44,7 +48,14 @@ export class Config {
      * Creates a new Config instance from a string or object.
      */
     static createFrom($$source: any = {}): Config {
+        const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("agents" in $$parsedSource) {
+            $$parsedSource["agents"] = $$createField6_0($$parsedSource["agents"]);
+        }
         return new Config($$parsedSource as Partial<Config>);
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Map($Create.Any, $Create.Any);

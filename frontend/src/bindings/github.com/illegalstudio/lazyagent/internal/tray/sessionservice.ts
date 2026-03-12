@@ -22,14 +22,14 @@ import * as $models from "./models.js";
  * GetActiveCount returns the number of sessions with active work.
  */
 export function GetActiveCount(): $CancellablePromise<number> {
-    return $Call.ByID(4081026139);
+    return $Call.ByID(1984306295);
 }
 
 /**
  * GetConfig returns the current config.
  */
 export function GetConfig(): $CancellablePromise<core$0.Config> {
-    return $Call.ByID(3325798956).then(($result: any) => {
+    return $Call.ByID(1670992424).then(($result: any) => {
         return $$createType0($result);
     });
 }
@@ -38,7 +38,7 @@ export function GetConfig(): $CancellablePromise<core$0.Config> {
  * GetSessionDetail returns full detail for a session.
  */
 export function GetSessionDetail(id: string): $CancellablePromise<$models.SessionFull | null> {
-    return $Call.ByID(3865970311, id).then(($result: any) => {
+    return $Call.ByID(378650659, id).then(($result: any) => {
         return $$createType2($result);
     });
 }
@@ -47,14 +47,14 @@ export function GetSessionDetail(id: string): $CancellablePromise<$models.Sessio
  * GetSessionName returns the custom name for a session.
  */
 export function GetSessionName(sessionID: string): $CancellablePromise<string> {
-    return $Call.ByID(3799911173, sessionID);
+    return $Call.ByID(190900857, sessionID);
 }
 
 /**
  * GetSessions returns all visible sessions for the list view.
  */
 export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
-    return $Call.ByID(2715330479).then(($result: any) => {
+    return $Call.ByID(330309427).then(($result: any) => {
         return $$createType4($result);
     });
 }
@@ -63,7 +63,7 @@ export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
  * GetWindowMinutes returns the current time window in minutes.
  */
 export function GetWindowMinutes(): $CancellablePromise<number> {
-    return $Call.ByID(623328891);
+    return $Call.ByID(4178116159);
 }
 
 /**
@@ -74,35 +74,35 @@ export function GetWindowMinutes(): $CancellablePromise<number> {
  * The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
  */
 export function OpenInEditor(cwd: string, agent: string): $CancellablePromise<void> {
-    return $Call.ByID(1983870972, cwd, agent);
+    return $Call.ByID(2149184312, cwd, agent);
 }
 
 /**
  * SetActivityFilter sets the activity filter.
  */
 export function SetActivityFilter(f: string): $CancellablePromise<void> {
-    return $Call.ByID(3340685613, f);
+    return $Call.ByID(3837448025, f);
 }
 
 /**
  * SetSearchQuery sets the search query.
  */
 export function SetSearchQuery(q: string): $CancellablePromise<void> {
-    return $Call.ByID(2439661330, q);
+    return $Call.ByID(3971927958, q);
 }
 
 /**
  * SetSessionName stores a custom name for a session. Empty name resets it.
  */
 export function SetSessionName(sessionID: string, name: string): $CancellablePromise<void> {
-    return $Call.ByID(602820185, sessionID, name);
+    return $Call.ByID(3660716453, sessionID, name);
 }
 
 /**
  * SetWindowMinutes updates the time window.
  */
 export function SetWindowMinutes(m: number): $CancellablePromise<void> {
-    return $Call.ByID(2220190495, m);
+    return $Call.ByID(75887259, m);
 }
 
 // Private type creation functions

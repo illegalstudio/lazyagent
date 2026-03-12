@@ -175,18 +175,18 @@ export class SessionFull {
      * Creates a new SessionFull instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionFull {
-        const $$createField13_0 = $$createType0;
-        const $$createField26_0 = $$createType2;
-        const $$createField27_0 = $$createType4;
+        const $$createField14_0 = $$createType0;
+        const $$createField27_0 = $$createType2;
+        const $$createField28_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField13_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
         }
         if ("recentTools" in $$parsedSource) {
-            $$parsedSource["recentTools"] = $$createField26_0($$parsedSource["recentTools"]);
+            $$parsedSource["recentTools"] = $$createField27_0($$parsedSource["recentTools"]);
         }
         if ("recentMessages" in $$parsedSource) {
-            $$parsedSource["recentMessages"] = $$createField27_0($$parsedSource["recentMessages"]);
+            $$parsedSource["recentMessages"] = $$createField28_0($$parsedSource["recentMessages"]);
         }
         return new SessionFull($$parsedSource as Partial<SessionFull>);
     }
@@ -267,10 +267,10 @@ export class SessionItem {
      * Creates a new SessionItem instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionItem {
-        const $$createField13_0 = $$createType0;
+        const $$createField14_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField13_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
         }
         return new SessionItem($$parsedSource as Partial<SessionItem>);
     }
