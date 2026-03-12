@@ -6,6 +6,8 @@
 
 A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents — [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — from a single place. No lock-in, no server, purely observational.
 
+Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
+
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
 
