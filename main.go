@@ -57,7 +57,7 @@ TUI keybindings:
   /            Search by project path   o         Open in editor ($VISUAL)
   r            Rename session           q/ctrl+c  Quit
 
-More info: https://github.com/illegalstudio/lazyagent
+If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/lazyagent
 `)
 	}
 
@@ -150,6 +150,7 @@ More info: https://github.com/illegalstudio/lazyagent
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+		fmt.Fprintln(os.Stderr, "Thanks for using lazyagent! If you find it useful, leave a ⭐ → https://github.com/illegalstudio/lazyagent")
 		// TUI exited: cancel ctx to stop API server, then wait for graceful shutdown.
 		cancel()
 		if apiDone != nil {

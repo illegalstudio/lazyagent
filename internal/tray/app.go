@@ -9,6 +9,7 @@ import (
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -86,6 +87,9 @@ func Run(demoMode bool, agentMode string) error {
 		svc.emitUpdate()
 	})
 	menu.AddSeparator()
+	menu.Add("⭐ Star on GitHub").OnClick(func(ctx *application.Context) {
+		_ = browser.OpenURL("https://github.com/illegalstudio/lazyagent")
+	})
 	menu.Add("Quit lazyagent").OnClick(func(ctx *application.Context) {
 		app.Quit()
 	})
