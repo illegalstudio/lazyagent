@@ -112,11 +112,13 @@
       if ($selectedId) loadDetail($selectedId);
     });
 
-    Events.On("update:available", (event: any) => {
-      if (event?.data?.length) {
-        updateVersion = event.data[0];
-      }
-    });
+    // Check for updates after a short delay (gives the backend time to fetch)
+    setTimeout(async () => {
+      try {
+        const v = await SessionService.GetUpdateVersion();
+        if (v) updateVersion = v;
+      } catch {}
+    }, 3000);
   });
 </script>
 
@@ -154,25 +156,6 @@
     </div>
   </header>
 
-  <!-- Update banner -->
-  {#if updateVersion}
-    <div class="flex items-center justify-between px-3 py-1.5 bg-accent/10 border-b border-accent/20 text-[12px]">
-      <span class="text-accent">
-        lazyagent {updateVersion} is available!
-        <a
-          href="https://github.com/illegalstudio/lazyagent/releases"
-          target="_blank"
-          class="underline hover:text-text ml-1"
-        >View release</a>
-      </span>
-      <button
-        class="text-subtext hover:text-text text-[14px] leading-none"
-        onclick={() => updateVersion = ""}
-        title="Dismiss"
-      >&times;</button>
-    </div>
-  {/if}
-
   <!-- Search bar -->
   {#if searching}
     <div class="px-3 py-1.5 bg-surface border-b border-border">
@@ -203,12 +186,23 @@
   </div>
 
   <!-- Footer -->
-  <footer class="flex items-center justify-center gap-3 px-3 py-1 bg-surface border-t border-border text-[10px] text-subtext">
-    <span><kbd class="text-text/60">j/k</kbd> navigate</span>
-    <span><kbd class="text-text/60">/</kbd> search</span>
-    <span><kbd class="text-text/60">f</kbd> filter</span>
-    <span><kbd class="text-text/60">+/−</kbd> window</span>
-    <span><kbd class="text-text/60">r</kbd> rename</span>
-    <span><kbd class="text-text/60">esc</kbd> back</span>
+  <footer class="px-3 py-1 bg-surface border-t border-border">
+    {#if updateVersion}
+      <div class="flex items-center justify-center gap-1 text-[10px] text-accent pb-0.5">
+        <span>↑ lazyagent {updateVersion} available —</span>
+        <button
+          class="underline hover:text-text cursor-pointer"
+          onclick={() => SessionService.OpenReleases()}
+        >releases</button>
+      </div>
+    {/if}
+    <div class="flex items-center justify-center gap-3 text-[10px] text-subtext">
+      <span><kbd class="text-text/60">j/k</kbd> navigate</span>
+      <span><kbd class="text-text/60">/</kbd> search</span>
+      <span><kbd class="text-text/60">f</kbd> filter</span>
+      <span><kbd class="text-text/60">+/−</kbd> window</span>
+      <span><kbd class="text-text/60">r</kbd> rename</span>
+      <span><kbd class="text-text/60">esc</kbd> back</span>
+    </div>
   </footer>
 </div>

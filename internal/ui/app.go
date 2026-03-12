@@ -60,6 +60,9 @@ type Model struct {
 	// Flash message (modal popup, dismissed by any key)
 	flashMsg string
 
+	// Update notification shown in footer
+	updateVersion string
+
 	// Editor picker popup
 	editorPicker       bool
 	editorPickerCursor int // 0 = VISUAL (GUI), 1 = EDITOR (TUI)
@@ -161,9 +164,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case updateAvailableMsg:
-		if msg.version != "" {
-			m.flashMsg = fmt.Sprintf("lazyagent %s is available!\n\n→ https://github.com/illegalstudio/lazyagent/releases", msg.version)
-		}
+		m.updateVersion = msg.version
 
 	case editorFinishedMsg:
 		// TUI editor exited, bubbletea resumes automatically.
@@ -1063,7 +1064,16 @@ func (m Model) renderHelp() string {
 		helpKeyStyle.Render("r")+helpStyle.Render(" rename"),
 		helpKeyStyle.Render("q")+helpStyle.Render(" quit"),
 	)
-	return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
+	helpLine := helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
+	if m.updateVersion != "" {
+		updateLine := lipgloss.NewStyle().
+			Foreground(colorAccent).
+			Background(lipgloss.Color("#111827")).
+			Width(m.width).
+			Render(fmt.Sprintf("  ↑ lazyagent %s available — https://github.com/illegalstudio/lazyagent/releases", m.updateVersion))
+		return updateLine + "\n" + helpLine
+	}
+	return helpLine
 }
 
 

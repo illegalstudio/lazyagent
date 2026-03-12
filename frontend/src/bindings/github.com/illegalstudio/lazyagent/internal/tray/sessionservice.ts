@@ -60,6 +60,13 @@ export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
 }
 
 /**
+ * GetUpdateVersion returns the newer version available, or empty if up-to-date.
+ */
+export function GetUpdateVersion(): $CancellablePromise<string> {
+    return $Call.ByID(707030249);
+}
+
+/**
  * GetWindowMinutes returns the current time window in minutes.
  */
 export function GetWindowMinutes(): $CancellablePromise<number> {
@@ -75,6 +82,13 @@ export function GetWindowMinutes(): $CancellablePromise<number> {
  */
 export function OpenInEditor(cwd: string, agent: string): $CancellablePromise<void> {
     return $Call.ByID(2149184312, cwd, agent);
+}
+
+/**
+ * OpenReleases opens the GitHub releases page in the system browser.
+ */
+export function OpenReleases(): $CancellablePromise<void> {
+    return $Call.ByID(2731872152);
 }
 
 /**
