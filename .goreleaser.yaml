@@ -7,7 +7,7 @@ before:
     - cp -r frontend/dist internal/assets/dist
 
 builds:
-  # macOS: full build with tray support (runs on macos-latest runner)
+  # macOS: full build with GUI support (runs on macos-latest runner)
   - id: darwin
     main: .
     binary: lazyagent
@@ -23,7 +23,7 @@ builds:
       - amd64
       - arm64
 
-  # Linux: TUI only, no tray (no CGo needed)
+  # Linux: TUI only, no GUI (no CGo needed)
   - id: linux
     main: .
     binary: lazyagent

@@ -12,10 +12,10 @@ lazyagent --api
 lazyagent --api --host :8080
 lazyagent --api --host 0.0.0.0:7421
 
-# Combined with TUI or tray
+# Combined with TUI or GUI
 lazyagent --tui --api
-lazyagent --tray --api
-lazyagent --tui --tray --api
+lazyagent --gui --api
+lazyagent --tui --gui --api
 ```
 
 The default port is **7421**. If it's busy, the server tries up to 10 sequential ports (7421–7431) and binds to the first available one. The actual address is printed to stderr on startup.
