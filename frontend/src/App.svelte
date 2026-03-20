@@ -17,6 +17,8 @@
   let showDetail = $derived($selectedId !== null);
   let searching = $state(false);
   let updateVersion = $state("");
+  let isDetached = $state(false);
+  let isPinned = $state(false);
 
   async function loadSessions() {
     try {
@@ -65,6 +67,9 @@
     } else if (e.key === "/") {
       e.preventDefault();
       searching = true;
+    } else if (e.key === "d") {
+      e.preventDefault();
+      toggleDetach();
     } else if (e.key === "f") {
       e.preventDefault();
       cycleFilter();
@@ -93,6 +98,19 @@
     loadSessions();
   }
 
+  function syncDetachState() {
+    SessionService.IsDetached().then((d) => { isDetached = d; }).catch(() => {});
+    SessionService.IsPinned().then((p) => { isPinned = p; }).catch(() => {});
+  }
+
+  function toggleDetach() {
+    if (isDetached) {
+      SessionService.Attach().catch(() => {});
+    } else {
+      SessionService.Detach().catch(() => {});
+    }
+  }
+
   function adjustWindow(delta: number) {
     const next = Math.max(10, Math.min(480, $windowMinutes + delta));
     $windowMinutes = next;
@@ -110,6 +128,12 @@
     Events.On("sessions:updated", () => {
       loadSessions();
       if ($selectedId) loadDetail($selectedId);
+    });
+
+    syncDetachState();
+
+    Events.On("detach:changed", () => {
+      syncDetachState();
     });
 
     // Check for updates after a short delay (gives the backend time to fetch)
@@ -153,6 +177,18 @@
         onclick={() => adjustWindow(10)}
         title="Increase time window"
       >+</button>
+      {#if isDetached}
+        <button
+          class="leading-none ml-1 text-[11px] font-medium rounded px-1 py-0.5 {isPinned ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
+          onclick={() => SessionService.TogglePin().catch(() => {})}
+          title={isPinned ? "Unpin from top" : "Pin on top"}
+        >pin</button>
+      {/if}
+      <button
+        class="text-subtext hover:text-text text-[14px] leading-none ml-1"
+        onclick={toggleDetach}
+        title={isDetached ? "Attach to tray" : "Detach to window"}
+      >{isDetached ? "\u2921" : "\u2922"}</button>
     </div>
   </header>
 
@@ -202,6 +238,7 @@
       <span><kbd class="text-text/60">f</kbd> filter</span>
       <span><kbd class="text-text/60">+/−</kbd> window</span>
       <span><kbd class="text-text/60">r</kbd> rename</span>
+      <span><kbd class="text-text/60">d</kbd> {isDetached ? "attach" : "detach"}</span>
       <span><kbd class="text-text/60">esc</kbd> back</span>
     </div>
   </footer>
