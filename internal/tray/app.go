@@ -98,7 +98,7 @@ func Run(demoMode bool, agentMode string) error {
 
 	// Intercept detached window close: hide instead and switch back to panel mode.
 	detachedWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		if svc.detached {
+		if svc.IsDetached() {
 			event.Cancel()
 			svc.Attach()
 		}
@@ -106,13 +106,12 @@ func Run(demoMode bool, agentMode string) error {
 
 	svc.panelWindow = panelWindow
 	svc.detachedWindow = detachedWindow
-	svc.tray = tray
 
 	tray.AttachWindow(panelWindow).WindowOffset(5)
 
 	// Override tray click: if detached, focus the detached window instead.
 	tray.OnClick(func() {
-		if svc.detached {
+		if svc.IsDetached() {
 			svc.detachedWindow.Show().Focus()
 		} else {
 			tray.ToggleWindow()
@@ -122,7 +121,7 @@ func Run(demoMode bool, agentMode string) error {
 	// Context menu
 	menu := app.NewMenu()
 	menu.Add("Show Panel").OnClick(func(ctx *application.Context) {
-		if svc.detached {
+		if svc.IsDetached() {
 			svc.detachedWindow.Show().Focus()
 		} else {
 			panelWindow.Show()

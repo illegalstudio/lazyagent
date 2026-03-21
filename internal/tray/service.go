@@ -30,7 +30,7 @@ type SessionService struct {
 	updateVersion  string // newer version available, empty if up-to-date
 	panelWindow    *application.WebviewWindow
 	detachedWindow *application.WebviewWindow
-	tray           *application.SystemTray
+	detachMu       sync.RWMutex
 	detached       bool
 	pinned         bool
 }
@@ -389,10 +389,13 @@ func (s *SessionService) GetConfig() core.Config {
 
 // Detach switches from tray panel to a normal detached window.
 func (s *SessionService) Detach() {
+	s.detachMu.Lock()
 	if s.detached {
+		s.detachMu.Unlock()
 		return
 	}
 	s.detached = true
+	s.detachMu.Unlock()
 	s.panelWindow.Hide()
 	s.detachedWindow.Show().Focus()
 	s.detachedWindow.Center()
@@ -401,12 +404,16 @@ func (s *SessionService) Detach() {
 
 // Attach switches from detached window back to tray panel mode.
 func (s *SessionService) Attach() {
+	s.detachMu.Lock()
 	if !s.detached {
+		s.detachMu.Unlock()
 		return
 	}
 	s.detached = false
-	if s.pinned {
-		s.pinned = false
+	resetPin := s.pinned
+	s.pinned = false
+	s.detachMu.Unlock()
+	if resetPin {
 		s.detachedWindow.SetAlwaysOnTop(false)
 	}
 	s.detachedWindow.Hide()
@@ -415,21 +422,29 @@ func (s *SessionService) Attach() {
 
 // IsDetached returns whether the app is currently in detached window mode.
 func (s *SessionService) IsDetached() bool {
+	s.detachMu.RLock()
+	defer s.detachMu.RUnlock()
 	return s.detached
 }
 
 // TogglePin toggles always-on-top for the detached window.
 func (s *SessionService) TogglePin() {
+	s.detachMu.Lock()
 	if !s.detached {
+		s.detachMu.Unlock()
 		return
 	}
 	s.pinned = !s.pinned
-	s.detachedWindow.SetAlwaysOnTop(s.pinned)
+	pinned := s.pinned
+	s.detachMu.Unlock()
+	s.detachedWindow.SetAlwaysOnTop(pinned)
 	s.emitDetachChanged()
 }
 
 // IsPinned returns whether the detached window is always on top.
 func (s *SessionService) IsPinned() bool {
+	s.detachMu.RLock()
+	defer s.detachMu.RUnlock()
 	return s.pinned
 }
 
