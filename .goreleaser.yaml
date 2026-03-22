@@ -45,7 +45,18 @@ builds:
       - arm64
 
 archives:
-  - formats:
+  - id: darwin
+    builds:
+      - darwin
+    formats:
+      - zip
+    files:
+      - README.md
+      - LICENSE
+  - id: linux
+    builds:
+      - linux
+    formats:
       - tar.gz
     files:
       - README.md
