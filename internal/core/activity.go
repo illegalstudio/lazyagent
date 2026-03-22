@@ -13,6 +13,11 @@ const ActivityTimeout = 30 * time.Second
 // WaitingTimeout is how long "waiting" stays visible before falling back to idle.
 const WaitingTimeout = 2 * time.Minute
 
+// SpawningTimeout is how long a spawning activity (Agent, subagent, task) stays
+// visible without new JSONL entries before falling back to idle. Spawned agents
+// can run for minutes, so this is much longer than ActivityTimeout.
+const SpawningTimeout = 15 * time.Minute
+
 // WaitingGrace is the minimum time StatusWaitingForUser must be stable before
 // displaying ActivityWaiting. Claude sometimes writes a text-only assistant message
 // before immediately continuing with a tool_use message (~2s later), which would
@@ -89,6 +94,12 @@ func ResolveActivity(s *model.Session, now time.Time) ActivityKind {
 			return ActivityWaiting
 		}
 		return ActivityIdle
+	}
+
+	// Spawning tools (Agent, subagent, task) can run for minutes — use a
+	// longer timeout while the session status still shows tool execution.
+	if s.Status == model.StatusExecutingTool && ToolActivity(s.CurrentTool) == ActivitySpawning && sinceActivity < SpawningTimeout {
+		return ActivitySpawning
 	}
 
 	if s.LastActivity.IsZero() || sinceActivity > ActivityTimeout {
