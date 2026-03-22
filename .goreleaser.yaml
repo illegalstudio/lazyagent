@@ -22,6 +22,9 @@ builds:
     goarch:
       - amd64
       - arm64
+    hooks:
+      post:
+        - scripts/codesign.sh {{ .Path }}
 
   # Linux: TUI only, no GUI (no CGo needed)
   - id: linux
