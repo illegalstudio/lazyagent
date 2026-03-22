@@ -16,7 +16,7 @@ const WaitingTimeout = 2 * time.Minute
 // SpawningTimeout is how long a spawning activity (Agent, subagent, task) stays
 // visible without new JSONL entries before falling back to idle. Spawned agents
 // can run for minutes, so this is much longer than ActivityTimeout.
-const SpawningTimeout = 15 * time.Minute
+const SpawningTimeout = 20 * time.Minute
 
 // WaitingGrace is the minimum time StatusWaitingForUser must be stable before
 // displaying ActivityWaiting. Claude sometimes writes a text-only assistant message
