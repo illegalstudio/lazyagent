@@ -19,6 +19,20 @@ import * as core$0 from "../core/models.js";
 import * as $models from "./models.js";
 
 /**
+ * Attach switches from detached window back to tray panel mode.
+ */
+export function Attach(): $CancellablePromise<void> {
+    return $Call.ByID(770700779);
+}
+
+/**
+ * Detach switches from tray panel to a normal detached window.
+ */
+export function Detach(): $CancellablePromise<void> {
+    return $Call.ByID(3825720405);
+}
+
+/**
  * GetActiveCount returns the number of sessions with active work.
  */
 export function GetActiveCount(): $CancellablePromise<number> {
@@ -71,6 +85,27 @@ export function GetUpdateVersion(): $CancellablePromise<string> {
  */
 export function GetWindowMinutes(): $CancellablePromise<number> {
     return $Call.ByID(4178116159);
+}
+
+/**
+ * IsDetached returns whether the app is currently in detached window mode.
+ */
+export function IsDetached(): $CancellablePromise<boolean> {
+    return $Call.ByID(279822792);
+}
+
+/**
+ * IsPinned returns whether the detached window is always on top.
+ */
+export function IsPinned(): $CancellablePromise<boolean> {
+    return $Call.ByID(3827525600);
+}
+
+/**
+ * TogglePin toggles always-on-top for the detached window.
+ */
+export function TogglePin(): $CancellablePromise<void> {
+    return $Call.ByID(2605085233);
 }
 
 /**

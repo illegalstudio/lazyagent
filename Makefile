@@ -2,7 +2,7 @@
 
 all: build
 
-# Build with frontend (TUI + tray support)
+# Build with frontend (TUI + GUI support)
 build: frontend
 	cp -r frontend/dist internal/assets/dist
 	go build -o lazyagent .
@@ -23,11 +23,11 @@ bindings:
 install:
 	cd frontend && npm install
 
-# Dev mode: rebuild frontend and run tray app
+# Dev mode: rebuild frontend and run GUI app
 dev: bindings
 	cd frontend && npm run build
 	cp -r frontend/dist internal/assets/dist
-	go run . --tray
+	go run . --gui
 
 # Clean build artifacts
 clean:

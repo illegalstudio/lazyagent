@@ -12,6 +12,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // buildProvider returns the session provider for the given agent mode.
@@ -58,7 +59,7 @@ func Run(demoMode bool, agentMode string) error {
 	tray.SetTooltip(tooltip)
 
 	// Panel window attached to tray
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	panelWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:            "main",
 		Title:           "lazyagent",
 		Width:           380,
@@ -80,12 +81,51 @@ func Run(demoMode bool, agentMode string) error {
 		URL: "/",
 	})
 
-	tray.AttachWindow(window).WindowOffset(5)
+	// Detached window (normal window, hidden at startup)
+	detachedWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:           "detached",
+		Title:          "lazyagent",
+		Width:          800,
+		Height:         600,
+		Hidden:         true,
+		DisableResize:  false,
+		BackgroundType: application.BackgroundTypeTranslucent,
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTranslucent,
+		},
+		URL: "/",
+	})
+
+	// Intercept detached window close: hide instead and switch back to panel mode.
+	detachedWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if svc.IsDetached() {
+			event.Cancel()
+			svc.Attach()
+		}
+	})
+
+	svc.panelWindow = panelWindow
+	svc.detachedWindow = detachedWindow
+
+	tray.AttachWindow(panelWindow).WindowOffset(5)
+
+	// Override tray click: if detached, focus the detached window instead.
+	tray.OnClick(func() {
+		if svc.IsDetached() {
+			svc.detachedWindow.Show().Focus()
+		} else {
+			tray.ToggleWindow()
+		}
+	})
 
 	// Context menu
 	menu := app.NewMenu()
 	menu.Add("Show Panel").OnClick(func(ctx *application.Context) {
-		window.Show()
+		if svc.IsDetached() {
+			svc.detachedWindow.Show().Focus()
+		} else {
+			panelWindow.Show()
+		}
 	})
 	menu.Add("Refresh Now").OnClick(func(ctx *application.Context) {
 		_ = svc.manager.Reload()

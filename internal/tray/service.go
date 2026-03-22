@@ -21,13 +21,18 @@ import (
 
 // SessionService is the Go service exposed to the Svelte frontend via Wails bindings.
 type SessionService struct {
-	manager       *core.SessionManager
-	app           *application.App
-	ctx           context.Context
-	demoMode      bool
-	provider      core.SessionProvider // if set, used instead of demoMode logic
-	updateMu      sync.RWMutex
-	updateVersion string // newer version available, empty if up-to-date
+	manager        *core.SessionManager
+	app            *application.App
+	ctx            context.Context
+	demoMode       bool
+	provider       core.SessionProvider // if set, used instead of demoMode logic
+	updateMu       sync.RWMutex
+	updateVersion  string // newer version available, empty if up-to-date
+	panelWindow    *application.WebviewWindow
+	detachedWindow *application.WebviewWindow
+	detachMu       sync.RWMutex
+	detached       bool
+	pinned         bool
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -380,4 +385,71 @@ func (s *SessionService) OpenReleases() {
 // GetConfig returns the current config.
 func (s *SessionService) GetConfig() core.Config {
 	return core.LoadConfig()
+}
+
+// Detach switches from tray panel to a normal detached window.
+func (s *SessionService) Detach() {
+	s.detachMu.Lock()
+	if s.detached {
+		s.detachMu.Unlock()
+		return
+	}
+	s.detached = true
+	s.detachMu.Unlock()
+	s.panelWindow.Hide()
+	s.detachedWindow.Show().Focus()
+	s.detachedWindow.Center()
+	s.emitDetachChanged()
+}
+
+// Attach switches from detached window back to tray panel mode.
+func (s *SessionService) Attach() {
+	s.detachMu.Lock()
+	if !s.detached {
+		s.detachMu.Unlock()
+		return
+	}
+	s.detached = false
+	resetPin := s.pinned
+	s.pinned = false
+	s.detachMu.Unlock()
+	if resetPin {
+		s.detachedWindow.SetAlwaysOnTop(false)
+	}
+	s.detachedWindow.Hide()
+	s.emitDetachChanged()
+}
+
+// IsDetached returns whether the app is currently in detached window mode.
+func (s *SessionService) IsDetached() bool {
+	s.detachMu.RLock()
+	defer s.detachMu.RUnlock()
+	return s.detached
+}
+
+// TogglePin toggles always-on-top for the detached window.
+func (s *SessionService) TogglePin() {
+	s.detachMu.Lock()
+	if !s.detached {
+		s.detachMu.Unlock()
+		return
+	}
+	s.pinned = !s.pinned
+	pinned := s.pinned
+	s.detachMu.Unlock()
+	s.detachedWindow.SetAlwaysOnTop(pinned)
+	s.emitDetachChanged()
+}
+
+// IsPinned returns whether the detached window is always on top.
+func (s *SessionService) IsPinned() bool {
+	s.detachMu.RLock()
+	defer s.detachMu.RUnlock()
+	return s.pinned
+}
+
+func (s *SessionService) emitDetachChanged() {
+	if s.app != nil {
+		s.app.Event.Emit("detach:changed")
+	}
 }

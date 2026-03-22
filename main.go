@@ -24,7 +24,8 @@ var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
 func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
-	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app")
+	guiMode := flag.Bool("gui", false, "Launch as macOS menu bar app")
+	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app (deprecated: use --gui)")
 	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
 	apiMode := flag.Bool("api", false, "Start the API server")
 	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
@@ -44,9 +45,9 @@ Usage:
   lazyagent --api               Start the API server (http://127.0.0.1:7421)
   lazyagent --api --host :7421  Start the API server on custom address
   lazyagent --tui --api         Launch TUI + API server
-  lazyagent --tray              Launch as macOS menu bar app (detaches)
-  lazyagent --tray --api        Launch tray + API server (foreground)
-  lazyagent --tui --tray --api  Launch everything
+  lazyagent --gui               Launch as macOS menu bar app (detaches)
+  lazyagent --gui --api         Launch GUI + API server (foreground)
+  lazyagent --tui --gui --api   Launch everything
   lazyagent --demo              Launch with fake data (for screenshots)
 
 Flags:
@@ -86,13 +87,16 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	}
 
 	runAPI := *apiMode
-	runTray := *trayMode
+	if *trayMode {
+		fmt.Fprintln(os.Stderr, "Warning: --tray is deprecated, use --gui instead")
+	}
+	runGUI := *guiMode || *trayMode
 	// Default: TUI if no other mode explicitly requested.
-	runTUI := *tuiMode || (!runTray && !runAPI)
+	runTUI := *tuiMode || (!runGUI && !runAPI)
 
-	if runTray {
+	if runGUI {
 		if !tray.Available() {
-			fmt.Fprintln(os.Stderr, "Error: --tray is not available in this build")
+			fmt.Fprintln(os.Stderr, "Error: --gui is not available in this build")
 			os.Exit(1)
 		}
 
@@ -175,7 +179,7 @@ func forkTray(demoMode bool, agentMode string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	trayArgs := []string{"--tray"}
+	trayArgs := []string{"--gui"}
 	if demoMode {
 		trayArgs = append(trayArgs, "--demo")
 	}

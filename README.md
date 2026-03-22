@@ -73,12 +73,12 @@ lazyagent ships as a single binary with three interfaces:
 | | TUI | macOS Menu Bar | HTTP API |
 |---|---|---|---|
 | Interface | Terminal (bubbletea) | Native menu bar panel (Wails v3 + Svelte 5) | REST + SSE |
-| Launch | `lazyagent` | `lazyagent --tray` | `lazyagent --api` |
+| Launch | `lazyagent` | `lazyagent --gui` | `lazyagent --api` |
 | Dock icon | N/A | Hidden (accessory) | N/A |
 | Sparkline | Unicode braille characters | SVG area chart | JSON data |
 | Theme | Terminal colors | Catppuccin Mocha (Tailwind 4) | N/A |
 
-All three share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config. You can combine them freely: `lazyagent --tui --tray --api`.
+All three share `internal/core/` — session discovery, file watcher, activity state machine, cost estimation, and config. You can combine them freely: `lazyagent --tui --gui --api`.
 
 ## Install
 
@@ -125,9 +125,9 @@ lazyagent --agent all            Monitor all agents (default)
 lazyagent --api                  Start the HTTP API (http://127.0.0.1:7421)
 lazyagent --api --host :8080     Start the HTTP API on a custom address
 lazyagent --tui --api            Launch TUI + API server
-lazyagent --tray                 Launch as macOS menu bar app (detaches)
-lazyagent --tray --api           Launch tray + API server (foreground)
-lazyagent --tui --tray --api     Launch everything
+lazyagent --gui                  Launch as macOS menu bar app (detaches)
+lazyagent --gui --api            Launch GUI + API server (foreground)
+lazyagent --tui --gui --api      Launch everything
 lazyagent --help                 Show help
 ```
 
@@ -150,10 +150,10 @@ lazyagent --help                 Show help
 ### macOS Menu Bar App
 
 ```
-lazyagent --tray
+lazyagent --gui
 ```
 
-The tray process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel.
+The GUI process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel. You can detach the panel into a standalone window and optionally pin it on top.
 
 #### Keybindings
 
@@ -165,6 +165,7 @@ The tray process detaches automatically — your terminal returns immediately. T
 | `f` | Cycle activity filter |
 | `/` | Search sessions |
 | `r` | Rename session (empty name resets) |
+| `d` | Detach/attach window |
 | `esc` | Close detail / dismiss search |
 
 #### Right-click menu
