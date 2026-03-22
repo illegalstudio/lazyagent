@@ -68,7 +68,7 @@ jobs:
               --apple-id "$APPLE_ID" \
               --team-id "$APPLE_TEAM_ID" \
               --password "$APPLE_APP_PASSWORD" \
-              --wait --timeout 15m
+              --wait --timeout 30m
             echo "Notarized: $archive"
           done
 
