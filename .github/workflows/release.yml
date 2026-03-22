@@ -62,7 +62,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          for archive in dist/lazyagent_darwin_*.tar.gz; do
+          for archive in dist/lazyagent_*_darwin_*.tar.gz; do
             echo "Notarizing $archive ..."
             xcrun notarytool submit "$archive" \
               --apple-id "$APPLE_ID" \
