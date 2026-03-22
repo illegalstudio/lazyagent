@@ -70,7 +70,7 @@ It also surfaces:
 
 lazyagent ships as a single binary with three interfaces:
 
-| | TUI | macOS Menu Bar | HTTP API |
+| | TUI | macOS Detachable Menu Bar | HTTP API |
 |---|---|---|---|
 | Interface | Terminal (bubbletea) | Native menu bar panel (Wails v3 + Svelte 5) | REST + SSE |
 | Launch | `lazyagent` | `lazyagent --gui` | `lazyagent --api` |
@@ -147,13 +147,15 @@ lazyagent --help                 Show help
 | `r` | Rename session (empty name resets) |
 | `q` / `ctrl+c` | Quit |
 
-### macOS Menu Bar App
+### macOS Detachable Menu Bar App
 
 ```
 lazyagent --gui
 ```
 
-The GUI process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel. You can detach the panel into a standalone window and optionally pin it on top.
+The GUI process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel.
+
+The panel is **detachable**: press `d` or click the detach button to pop it out into a standalone resizable window. Once detached, you can pin it always-on-top. Press `d` again or close the window to snap it back to the menu bar.
 
 #### Keybindings
 
