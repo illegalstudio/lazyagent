@@ -45,23 +45,26 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
-      # Build, sign, and archive — but don't publish yet
+      # Build, sign, archive, publish release, and update Homebrew cask
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean --skip=publish
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
 
-      # Notarize macOS archives before publishing
-      - name: Notarize macOS binaries
+      # Notarize macOS archives, then replace them in the release
+      - name: Notarize and update macOS binaries
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+
           for archive in dist/lazyagent_*_darwin_*.zip; do
             echo "Notarizing $archive ..."
             xcrun notarytool submit "$archive" \
@@ -70,17 +73,26 @@ jobs:
               --password "$APPLE_APP_PASSWORD" \
               --wait --timeout 360m
             echo "Notarized: $archive"
+
+            # Replace the asset in the GitHub release with the notarized one
+            FILENAME="$(basename "$archive")"
+            echo "Replacing $FILENAME in release $TAG ..."
+            gh release delete-asset "$TAG" "$FILENAME" --repo "$GITHUB_REPOSITORY" --yes
+            gh release upload "$TAG" "$archive" --repo "$GITHUB_REPOSITORY"
           done
 
-      # Now publish: create GitHub release and upload all artifacts
-      - name: Publish release
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: continue --merge
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Update checksums
+          echo "Updating checksums ..."
+          CHECKSUMS="dist/lazyagent_${TAG#v}_checksums.txt"
+          if [ -f "$CHECKSUMS" ]; then
+            # Regenerate checksums for all release archives
+            cd dist
+            shasum -a 256 lazyagent_*.zip lazyagent_*.tar.gz > "$(basename "$CHECKSUMS")"
+            cd ..
+            CHECKSUMS_NAME="$(basename "$CHECKSUMS")"
+            gh release delete-asset "$TAG" "$CHECKSUMS_NAME" --repo "$GITHUB_REPOSITORY" --yes
+            gh release upload "$TAG" "$CHECKSUMS" --repo "$GITHUB_REPOSITORY"
+          fi
 
       # Clean up keychain
       - name: Clean up keychain
