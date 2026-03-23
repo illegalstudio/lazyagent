@@ -109,10 +109,6 @@ make install   # npm install (first time only)
 make build
 ```
 
-### macOS note
-
-On first launch, macOS may block the binary. Go to **System Settings → Privacy & Security**, scroll down and click **Allow Anyway**, then run it again.
-
 ## Usage
 
 ```
