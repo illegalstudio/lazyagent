@@ -68,6 +68,9 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 	if *showVersion {
 		fmt.Println(version.String())
+		if v := version.CheckLatest(); v != "" {
+			fmt.Printf("Update available: %s → https://github.com/illegalstudio/lazyagent/releases\n", v)
+		}
 		return
 	}
 
