@@ -109,10 +109,14 @@ func Run(demoMode bool, agentMode string) error {
 
 	tray.AttachWindow(panelWindow).WindowOffset(5)
 
-	// Override tray click: if detached, focus the detached window instead.
+	// Override tray click: if detached, toggle the detached window visibility.
 	tray.OnClick(func() {
 		if svc.IsDetached() {
-			svc.detachedWindow.Show().Focus()
+			if svc.detachedWindow.IsVisible() && svc.detachedWindow.IsFocused() {
+				svc.detachedWindow.Hide()
+			} else {
+				svc.detachedWindow.Show().Focus()
+			}
 		} else {
 			tray.ToggleWindow()
 		}
