@@ -235,7 +235,8 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
     "cursor": true,
     "opencode": true,
     "pi": true
-  }
+  },
+  "claude_dirs": []
 }
 ```
 
@@ -248,6 +249,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
 | `notifications` | `false` | macOS notifications when a session needs input |
 | `notify_after_sec` | `30` | Seconds before triggering a "waiting" notification |
 | `agents` | all `true` | Enable/disable individual agent providers |
+| `claude_dirs` | `[]` | Extra Claude base directories to scan (each must contain a `projects/` subfolder). When empty, auto-detects from `CLAUDE_CONFIG_DIR` env var with `~/.claude` fallback |
 
 ## Architecture
 
