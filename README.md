@@ -14,6 +14,8 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 
 > ⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
 
+> **Want to support lazyagent's development?** If this project saves you time or you just love it, consider [becoming a sponsor](https://github.com/sponsors/nahime0). It keeps the project alive and growing — every bit counts!
+
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
 
