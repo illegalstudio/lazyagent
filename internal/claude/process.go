@@ -55,13 +55,34 @@ func IsWorktree(path string) (bool, string) {
 	return true, ""
 }
 
-// ClaudeProjectsDir returns the path to ~/.claude/projects.
-func ClaudeProjectsDir() string {
+// ClaudeProjectsDirs returns the Claude projects directories to scan.
+// If configDirs is non-empty, those are used directly (with /projects appended).
+// Otherwise it auto-detects from CLAUDE_CONFIG_DIR (falling back to ~/.claude).
+func ClaudeProjectsDirs(configDirs []string) []string {
+	if len(configDirs) > 0 {
+		dirs := make([]string, 0, len(configDirs))
+		for _, d := range configDirs {
+			dirs = append(dirs, filepath.Join(d, "projects"))
+		}
+		return dirs
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return nil
 	}
-	return filepath.Join(home, ".claude", "projects")
+
+	defaultDir := filepath.Join(home, ".claude")
+	if configDir := os.Getenv("CLAUDE_CONFIG_DIR"); configDir != "" {
+		if configDir == defaultDir {
+			return []string{filepath.Join(defaultDir, "projects")}
+		}
+		return []string{
+			filepath.Join(configDir, "projects"),
+			filepath.Join(defaultDir, "projects"),
+		}
+	}
+	return []string{filepath.Join(defaultDir, "projects")}
 }
 
 // ProjectDirForCWD encodes a CWD path to the ~/.claude/projects directory name.
@@ -71,17 +92,12 @@ func ProjectDirForCWD(cwd string) string {
 	return r.Replace(cwd)
 }
 
-// DiscoverSessions scans ~/.claude/projects for JSONL session files.
+// DiscoverSessions scans Claude projects directories for JSONL session files.
 // Every JSONL file is a separate session. Uses caches to skip unchanged files.
-func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]*model.Session, error) {
-	projectsDir := ClaudeProjectsDir()
-	if projectsDir == "" {
-		return nil, fmt.Errorf("could not find home directory")
-	}
-
-	entries, err := os.ReadDir(projectsDir)
-	if err != nil {
-		return nil, fmt.Errorf("could not read projects dir: %w", err)
+func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, configDirs []string) ([]*model.Session, error) {
+	projectsDirs := ClaudeProjectsDirs(configDirs)
+	if len(projectsDirs) == 0 {
+		return nil, fmt.Errorf("could not find any Claude projects directories")
 	}
 
 	// Cache worktree lookups per CWD to avoid redundant git calls.
@@ -93,67 +109,74 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache) ([]
 
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
-	for _, projectEntry := range entries {
-		if !projectEntry.IsDir() {
-			continue
-		}
-		projectPath := filepath.Join(projectsDir, projectEntry.Name())
-		jsonlFiles, err := filepath.Glob(filepath.Join(projectPath, "*.jsonl"))
-		if err != nil || len(jsonlFiles) == 0 {
-			continue
+	for _, projectsDir := range projectsDirs {
+		entries, err := os.ReadDir(projectsDir)
+		if err != nil {
+			continue // Directory may not exist; skip it
 		}
 
-		for _, jsonlFile := range jsonlFiles {
-			seen[jsonlFile] = struct{}{}
-
-			cached, offset, mtime := cache.GetIncremental(jsonlFile)
-			var session *model.Session
-			switch {
-			case cached != nil && offset == 0:
-				// Full cache hit — file unchanged.
-				session = cached
-			case cached != nil && offset > 0:
-				// Incremental: parse only new tail lines.
-				s, newOffset, err := ParseJSONLIncremental(jsonlFile, offset, cached)
-				if err != nil {
-					continue
-				}
-				session = s
-
-				if session.CWD == "" {
-					session.CWD = decodeDirName(projectEntry.Name())
-				}
-				if _, ok := wtCache[session.CWD]; !ok {
-					isWT, mainRepo := IsWorktree(session.CWD)
-					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
-				}
-				wt := wtCache[session.CWD]
-				session.IsWorktree = wt.isWorktree
-				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, newOffset, session)
-			default:
-				// Full miss: parse entire file.
-				s, size, err := ParseJSONL(jsonlFile)
-				if err != nil {
-					continue
-				}
-				session = s
-
-				if session.CWD == "" {
-					session.CWD = decodeDirName(projectEntry.Name())
-				}
-
-				if _, ok := wtCache[session.CWD]; !ok {
-					isWT, mainRepo := IsWorktree(session.CWD)
-					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
-				}
-				wt := wtCache[session.CWD]
-				session.IsWorktree = wt.isWorktree
-				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, size, session)
+		for _, projectEntry := range entries {
+			if !projectEntry.IsDir() {
+				continue
+			}
+			projectPath := filepath.Join(projectsDir, projectEntry.Name())
+			jsonlFiles, err := filepath.Glob(filepath.Join(projectPath, "*.jsonl"))
+			if err != nil || len(jsonlFiles) == 0 {
+				continue
 			}
 
-			sessions = append(sessions, session)
+			for _, jsonlFile := range jsonlFiles {
+				seen[jsonlFile] = struct{}{}
+
+				cached, offset, mtime := cache.GetIncremental(jsonlFile)
+				var session *model.Session
+				switch {
+				case cached != nil && offset == 0:
+					// Full cache hit — file unchanged.
+					session = cached
+				case cached != nil && offset > 0:
+					// Incremental: parse only new tail lines.
+					s, newOffset, err := ParseJSONLIncremental(jsonlFile, offset, cached)
+					if err != nil {
+						continue
+					}
+					session = s
+
+					if session.CWD == "" {
+						session.CWD = decodeDirName(projectEntry.Name())
+					}
+					if _, ok := wtCache[session.CWD]; !ok {
+						isWT, mainRepo := IsWorktree(session.CWD)
+						wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+					}
+					wt := wtCache[session.CWD]
+					session.IsWorktree = wt.isWorktree
+					session.MainRepo = wt.mainRepo
+					cache.Put(jsonlFile, mtime, newOffset, session)
+				default:
+					// Full miss: parse entire file.
+					s, size, err := ParseJSONL(jsonlFile)
+					if err != nil {
+						continue
+					}
+					session = s
+
+					if session.CWD == "" {
+						session.CWD = decodeDirName(projectEntry.Name())
+					}
+
+					if _, ok := wtCache[session.CWD]; !ok {
+						isWT, mainRepo := IsWorktree(session.CWD)
+						wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+					}
+					wt := wtCache[session.CWD]
+					session.IsWorktree = wt.isWorktree
+					session.MainRepo = wt.mainRepo
+					cache.Put(jsonlFile, mtime, size, session)
+				}
+
+				sessions = append(sessions, session)
+			}
 		}
 	}
 	cache.Prune(seen)

@@ -14,24 +14,28 @@ import (
 type LiveProvider struct {
 	cache        *model.SessionCache
 	desktopCache *claude.DesktopCache
+	claudeDirs   []string
 }
 
 // NewLiveProvider creates a LiveProvider with mtime-based caches.
-func NewLiveProvider() *LiveProvider {
+// claudeDirs configures which Claude base directories to scan (e.g. ~/.claude).
+// When empty, auto-detection via CLAUDE_CONFIG_DIR / ~/.claude is used.
+func NewLiveProvider(claudeDirs []string) *LiveProvider {
 	return &LiveProvider{
 		cache:        model.NewSessionCache(),
 		desktopCache: claude.NewDesktopCache(),
+		claudeDirs:   claudeDirs,
 	}
 }
 
 func (p *LiveProvider) DiscoverSessions() ([]*model.Session, error) {
-	return claude.DiscoverSessions(p.cache, p.desktopCache)
+	return claude.DiscoverSessions(p.cache, p.desktopCache, p.claudeDirs)
 }
 
 func (p *LiveProvider) UseWatcher() bool               { return true }
 func (p *LiveProvider) RefreshInterval() time.Duration { return 0 }
 func (p *LiveProvider) WatchDirs() []string {
-	dirs := []string{claude.ClaudeProjectsDir()}
+	dirs := claude.ClaudeProjectsDirs(p.claudeDirs)
 	if d := claude.DesktopSessionsDir(); d != "" {
 		dirs = append(dirs, d)
 	}
@@ -108,7 +112,7 @@ func (p *CursorProvider) WatchDirs() []string {
 func BuildProvider(agentMode string, cfg Config) SessionProvider {
 	switch agentMode {
 	case "claude":
-		return NewLiveProvider()
+		return NewLiveProvider(cfg.ClaudeDirs)
 	case "pi":
 		return NewPiProvider()
 	case "opencode":
@@ -118,7 +122,7 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 	default: // "all"
 		var providers []SessionProvider
 		if cfg.AgentEnabled("claude") {
-			providers = append(providers, NewLiveProvider())
+			providers = append(providers, NewLiveProvider(cfg.ClaudeDirs))
 		}
 		if cfg.AgentEnabled("pi") {
 			providers = append(providers, NewPiProvider())
