@@ -15,6 +15,7 @@ type Config struct {
 	Notifications  bool            `json:"notifications"`
 	NotifyAfterSec int             `json:"notify_after_sec"`
 	Agents         map[string]bool `json:"agents"`
+	ClaudeDirs     []string        `json:"claude_dirs,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

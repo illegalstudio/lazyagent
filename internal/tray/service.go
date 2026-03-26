@@ -44,7 +44,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		if s.demoMode {
 			provider = demo.Provider{}
 		} else {
-			provider = core.NewLiveProvider()
+			provider = core.NewLiveProvider(cfg.ClaudeDirs)
 		}
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
