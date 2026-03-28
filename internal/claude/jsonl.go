@@ -2,6 +2,7 @@ package claude
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,6 +14,19 @@ import (
 
 // Raw JSONL entry structures
 
+// jsonlHeader is the lightweight struct used for pre-screening every line.
+// Only cheap fields are decoded; the heavy Message field is skipped.
+type jsonlHeader struct {
+	Type        string  `json:"type"`
+	CWD         string  `json:"cwd"`
+	Version     string  `json:"version"`
+	GitBranch   string  `json:"gitBranch"`
+	Timestamp   string  `json:"timestamp"`
+	IsSidechain bool    `json:"isSidechain"`
+	CostUSD     float64 `json:"costUSD"`
+}
+
+// jsonlEntry is the full struct used only for user/assistant entries.
 type jsonlEntry struct {
 	Type        string        `json:"type"`
 	SessionID   string        `json:"sessionId"`
@@ -30,7 +44,7 @@ type jsonlMessage struct {
 	Role        string          `json:"role"`
 	Model       string          `json:"model"`
 	RawContent  json.RawMessage `json:"content"`
-	Content     []jsonlContent  `json:"-"` // parsed from RawContent
+	Content     []jsonlContent  `json:"-"` // parsed from RawContent (without Input)
 	TextContent string          `json:"-"` // set when content is a plain string
 	Usage       *jsonlUsage     `json:"usage"`
 }
@@ -54,13 +68,180 @@ func (m *jsonlMessage) parseContent() {
 	}
 }
 
+// jsonlContent is the lightweight content struct — Input is omitted to avoid
+// deserializing potentially large tool payloads (Write/Edit file contents).
 type jsonlContent struct {
-	Type       string          `json:"type"`
-	Text       string          `json:"text"`
-	Name       string          `json:"name"`       // tool_use
-	ToolUseID  string          `json:"tool_use_id"` // tool_result
-	IsError    bool            `json:"is_error"`
-	Input      json.RawMessage `json:"input"`
+	Type      string `json:"type"`
+	Text      string `json:"text"`
+	Name      string `json:"name"`       // tool_use
+	ToolUseID string `json:"tool_use_id"` // tool_result
+	IsError   bool   `json:"is_error"`
+}
+
+// needsFullParse returns true if the entry type requires full unmarshal.
+func needsFullParse(typ string) bool {
+	return typ == "user" || typ == "assistant"
+}
+
+// scanEntries is the shared scanning loop used by both ParseJSONL and ParseJSONLIncremental.
+func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset int64,
+	recentTools []model.ToolCall, recentMessages []model.ConversationMessage,
+	entryTimestamps []time.Time,
+) (int64, bool, *jsonlEntry) {
+	var lastMeaningful *jsonlEntry
+	var prevTimestamp time.Time
+	bytesConsumed := initialOffset
+	parsed := false
+
+	for scanner.Scan() {
+		lineBytes := scanner.Bytes()
+		bytesConsumed += int64(len(lineBytes)) + 1 // +1 for newline
+
+		// Step 1: lightweight pre-screen — only decode cheap fields.
+		var h jsonlHeader
+		if err := json.Unmarshal(lineBytes, &h); err != nil {
+			continue
+		}
+		parsed = true
+
+		ts, _ := time.Parse(time.RFC3339Nano, h.Timestamp)
+
+		if h.IsSidechain {
+			session.IsSidechain = true
+		}
+
+		if h.Type == "summary" {
+			if !prevTimestamp.IsZero() {
+				session.LastSummaryAt = prevTimestamp
+			} else {
+				session.LastSummaryAt = session.LastActivity
+			}
+		}
+
+		if !ts.IsZero() {
+			prevTimestamp = ts
+			entryTimestamps = append(entryTimestamps, ts)
+		}
+
+		// Extract metadata from whichever entry provides it first.
+		if session.CWD == "" && h.CWD != "" {
+			session.CWD = h.CWD
+		}
+		if session.Version == "" && h.Version != "" {
+			session.Version = h.Version
+		}
+		if session.GitBranch == "" && h.GitBranch != "" {
+			session.GitBranch = h.GitBranch
+		}
+
+		// Accumulate cost (always available in the header).
+		session.CostUSD += h.CostUSD
+
+		// Step 2: only do full unmarshal for user/assistant entries.
+		if !needsFullParse(h.Type) {
+			continue
+		}
+
+		var e jsonlEntry
+		if err := json.Unmarshal(lineBytes, &e); err != nil {
+			continue
+		}
+		if e.Message != nil {
+			e.Message.parseContent()
+
+			// Accumulate tokens from the full entry.
+			if e.Message.Usage != nil {
+				u := e.Message.Usage
+				session.InputTokens += u.InputTokens
+				session.OutputTokens += u.OutputTokens
+				session.CacheCreationTokens += u.CacheCreationTokens
+				session.CacheReadTokens += u.CacheReadTokens
+			}
+		}
+
+		switch e.Type {
+		case "user":
+			lastMeaningful = copyEntry(&e)
+			if e.Message != nil && !isToolResult(e.Message) {
+				session.UserMessages++
+				if text := firstText(e.Message); text != "" {
+					recentMessages = append(recentMessages, model.ConversationMessage{
+						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
+					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
+				}
+			}
+		case "assistant":
+			lastMeaningful = copyEntry(&e)
+			if e.Message != nil {
+				session.AssistantMessages++
+				if e.Message.Model != "" {
+					session.Model = e.Message.Model
+				}
+				if text := firstText(e.Message); text != "" {
+					recentMessages = append(recentMessages, model.ConversationMessage{
+						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
+					})
+					if len(recentMessages) > 20 {
+						recentMessages = recentMessages[len(recentMessages)-10:]
+					}
+				}
+				for _, c := range e.Message.Content {
+					if c.Type == "tool_use" {
+						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
+						if len(recentTools) > 40 {
+							recentTools = recentTools[len(recentTools)-20:]
+						}
+						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
+							if fp := extractFilePathFromRaw(e.Message.RawContent, c.Name); fp != "" {
+								session.LastFileWrite = fp
+								session.LastFileWriteAt = ts
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Trim slices once at the end instead of per-iteration.
+	if len(entryTimestamps) > 500 {
+		entryTimestamps = entryTimestamps[len(entryTimestamps)-500:]
+	}
+	session.EntryTimestamps = entryTimestamps
+
+	if len(recentTools) > 20 {
+		recentTools = recentTools[len(recentTools)-20:]
+	}
+	session.RecentTools = recentTools
+
+	if len(recentMessages) > 10 {
+		recentMessages = recentMessages[len(recentMessages)-10:]
+	}
+	session.RecentMessages = recentMessages
+
+	session.TotalMessages = session.UserMessages + session.AssistantMessages
+
+	return bytesConsumed, parsed, lastMeaningful
+}
+
+// applyLastMeaningful sets status and current tool from the last user/assistant entry.
+func applyLastMeaningful(session *model.Session, lastMeaningful *jsonlEntry) {
+	session.Status = determineStatus(lastMeaningful)
+	if lastMeaningful != nil {
+		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
+			session.LastActivity = ts
+		}
+		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
+			for _, c := range lastMeaningful.Message.Content {
+				if c.Type == "tool_use" {
+					session.CurrentTool = c.Name
+				}
+			}
+		}
+	}
 }
 
 // ParseJSONL reads a JSONL file and returns a populated Session and
@@ -92,150 +273,13 @@ func ParseJSONL(path string) (*model.Session, int64, error) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 4*1024*1024)
 
-	// Single-pass: extract metadata, count messages, collect recent tools/messages,
-	// and track the last meaningful entry for status determination.
-	var recentTools []model.ToolCall
-	var recentMessages []model.ConversationMessage
-	var lastMeaningful *jsonlEntry
-	var prevTimestamp time.Time
-	var entryTimestamps []time.Time
-	var bytesConsumed int64
-	parsed := false
-
-	for scanner.Scan() {
-		bytesConsumed += int64(len(scanner.Bytes())) + 1 // +1 for newline
-		var e jsonlEntry
-		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
-			continue
-		}
-		parsed = true
-		if e.Message != nil {
-			e.Message.parseContent()
-		}
-
-		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
-
-		if e.IsSidechain {
-			session.IsSidechain = true
-		}
-
-		if e.Type == "summary" {
-			if !prevTimestamp.IsZero() {
-				session.LastSummaryAt = prevTimestamp
-			} else {
-				session.LastSummaryAt = session.LastActivity
-			}
-		}
-
-		if !ts.IsZero() {
-			prevTimestamp = ts
-			entryTimestamps = append(entryTimestamps, ts)
-			if len(entryTimestamps) > 500 {
-				trimmed := make([]time.Time, 500)
-				copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
-				entryTimestamps = trimmed
-			}
-		}
-
-		// Extract metadata from whichever entry provides it first.
-		if session.CWD == "" && e.CWD != "" {
-			session.CWD = e.CWD
-		}
-		if session.Version == "" && e.Version != "" {
-			session.Version = e.Version
-		}
-		if session.GitBranch == "" && e.GitBranch != "" {
-			session.GitBranch = e.GitBranch
-		}
-
-		// Accumulate cost and tokens
-		session.CostUSD += e.CostUSD
-		if e.Message != nil && e.Message.Usage != nil {
-			u := e.Message.Usage
-			session.InputTokens += u.InputTokens
-			session.OutputTokens += u.OutputTokens
-			session.CacheCreationTokens += u.CacheCreationTokens
-			session.CacheReadTokens += u.CacheReadTokens
-		}
-
-		switch e.Type {
-		case "user":
-			lastMeaningful = copyEntry(&e)
-			if e.Message != nil && !isToolResult(e.Message) {
-				session.UserMessages++
-				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
-					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
-				}
-			}
-		case "assistant":
-			lastMeaningful = copyEntry(&e)
-			if e.Message != nil {
-				session.AssistantMessages++
-				if e.Message.Model != "" {
-					session.Model = e.Message.Model
-				}
-				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
-					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
-				}
-				for _, c := range e.Message.Content {
-					if c.Type == "tool_use" {
-						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
-						if len(recentTools) > 40 {
-							recentTools = recentTools[len(recentTools)-20:]
-						}
-						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
-							if fp := extractFilePath(c.Input); fp != "" {
-								session.LastFileWrite = fp
-								session.LastFileWriteAt = ts
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	bytesConsumed, parsed, lastMeaningful := scanEntries(scanner, session, 0, nil, nil, nil)
 
 	if !parsed {
 		return session, 0, nil
 	}
 
-	session.TotalMessages = session.UserMessages + session.AssistantMessages
-	session.EntryTimestamps = entryTimestamps
-
-	if len(recentTools) > 20 {
-		recentTools = recentTools[len(recentTools)-20:]
-	}
-	session.RecentTools = recentTools
-
-	if len(recentMessages) > 10 {
-		recentMessages = recentMessages[len(recentMessages)-10:]
-	}
-	session.RecentMessages = recentMessages
-
-	// Determine status from the last meaningful entry
-	session.Status = determineStatus(lastMeaningful)
-	if lastMeaningful != nil {
-		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
-			session.LastActivity = ts
-		}
-		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
-			for _, c := range lastMeaningful.Message.Content {
-				if c.Type == "tool_use" {
-					session.CurrentTool = c.Name
-				}
-			}
-		}
-	}
+	applyLastMeaningful(session, lastMeaningful)
 
 	// Cap to file size: scanner adds +1 per line for the stripped newline,
 	// but the last line may lack a trailing newline during concurrent writes.
@@ -267,146 +311,20 @@ func ParseJSONLIncremental(path string, offset int64, base *model.Session) (*mod
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 4*1024*1024)
 
-	recentTools := session.RecentTools
-	recentMessages := session.RecentMessages
-	entryTimestamps := session.EntryTimestamps
-	var lastMeaningful *jsonlEntry
-	var prevTimestamp time.Time
-	bytesConsumed := offset
-	parsed := false
-
-	for scanner.Scan() {
-		bytesConsumed += int64(len(scanner.Bytes())) + 1
-		var e jsonlEntry
-		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
-			continue
-		}
-		parsed = true
-		if e.Message != nil {
-			e.Message.parseContent()
-		}
-
-		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
-
-		if e.IsSidechain {
-			session.IsSidechain = true
-		}
-		if e.Type == "summary" {
-			if !prevTimestamp.IsZero() {
-				session.LastSummaryAt = prevTimestamp
-			} else {
-				session.LastSummaryAt = session.LastActivity
-			}
-		}
-		if !ts.IsZero() {
-			prevTimestamp = ts
-			entryTimestamps = append(entryTimestamps, ts)
-			if len(entryTimestamps) > 500 {
-				trimmed := make([]time.Time, 500)
-				copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
-				entryTimestamps = trimmed
-			}
-		}
-
-		// Metadata: only override if still empty (should be set from full parse).
-		if session.CWD == "" && e.CWD != "" {
-			session.CWD = e.CWD
-		}
-		if session.Version == "" && e.Version != "" {
-			session.Version = e.Version
-		}
-		if session.GitBranch == "" && e.GitBranch != "" {
-			session.GitBranch = e.GitBranch
-		}
-
-		session.CostUSD += e.CostUSD
-		if e.Message != nil && e.Message.Usage != nil {
-			u := e.Message.Usage
-			session.InputTokens += u.InputTokens
-			session.OutputTokens += u.OutputTokens
-			session.CacheCreationTokens += u.CacheCreationTokens
-			session.CacheReadTokens += u.CacheReadTokens
-		}
-
-		switch e.Type {
-		case "user":
-			lastMeaningful = copyEntry(&e)
-			if e.Message != nil && !isToolResult(e.Message) {
-				session.UserMessages++
-				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
-					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
-				}
-			}
-		case "assistant":
-			lastMeaningful = copyEntry(&e)
-			if e.Message != nil {
-				session.AssistantMessages++
-				if e.Message.Model != "" {
-					session.Model = e.Message.Model
-				}
-				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
-					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
-				}
-				for _, c := range e.Message.Content {
-					if c.Type == "tool_use" {
-						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
-						if len(recentTools) > 40 {
-							recentTools = recentTools[len(recentTools)-20:]
-						}
-						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
-							if fp := extractFilePath(c.Input); fp != "" {
-								session.LastFileWrite = fp
-								session.LastFileWriteAt = ts
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	bytesConsumed, parsed, lastMeaningful := scanEntries(
+		scanner, session, offset,
+		session.RecentTools, session.RecentMessages, session.EntryTimestamps,
+	)
 
 	if !parsed {
 		return session, offset, nil
 	}
 
-	session.TotalMessages = session.UserMessages + session.AssistantMessages
-	session.EntryTimestamps = entryTimestamps
-
-	if len(recentTools) > 20 {
-		recentTools = recentTools[len(recentTools)-20:]
-	}
-	session.RecentTools = recentTools
-
-	if len(recentMessages) > 10 {
-		recentMessages = recentMessages[len(recentMessages)-10:]
-	}
-	session.RecentMessages = recentMessages
-
 	// Only update status if we saw a user/assistant entry in the new tail.
 	// Otherwise keep the status inherited from the base session.
 	if lastMeaningful != nil {
-		session.Status = determineStatus(lastMeaningful)
 		session.CurrentTool = "" // reset before possibly re-setting below
-		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
-			session.LastActivity = ts
-		}
-		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
-			for _, c := range lastMeaningful.Message.Content {
-				if c.Type == "tool_use" {
-					session.CurrentTool = c.Name
-				}
-			}
-		}
+		applyLastMeaningful(session, lastMeaningful)
 	}
 
 	// Cap to file size to handle last line without trailing newline.
@@ -438,18 +356,36 @@ func firstText(m *jsonlMessage) string {
 	return ""
 }
 
-// extractFilePath extracts the "file_path" value from a tool_use input
-// without unmarshaling the entire JSON into a map.
-func extractFilePath(raw json.RawMessage) string {
-	var obj struct {
-		FilePath string `json:"file_path"`
+// extractFilePathFromRaw extracts the "file_path" from the raw content JSON array
+// without deserializing the full content. Uses byte-level scanning to find the
+// file_path value directly, avoiding allocation of large tool Input payloads.
+func extractFilePathFromRaw(rawContent json.RawMessage, _ string) string {
+	if len(rawContent) == 0 {
+		return ""
 	}
-	if json.Unmarshal(raw, &obj) == nil {
-		return obj.FilePath
+	// Quick check: does the raw content even contain "file_path"?
+	needle := []byte(`"file_path"`)
+	idx := bytes.Index(rawContent, needle)
+	if idx < 0 {
+		return ""
 	}
-	return ""
+	// Find the value after "file_path": <optional whitespace> : <optional whitespace> "value"
+	rest := rawContent[idx+len(needle):]
+	// Skip whitespace and colon
+	i := 0
+	for i < len(rest) && (rest[i] == ' ' || rest[i] == '\t' || rest[i] == '\n' || rest[i] == '\r' || rest[i] == ':') {
+		i++
+	}
+	if i >= len(rest) || rest[i] != '"' {
+		return ""
+	}
+	// Extract the string value
+	var fp string
+	if json.Unmarshal(rest[i:], &fp) != nil {
+		return ""
+	}
+	return fp
 }
-
 
 // copyEntry returns a shallow copy of a jsonlEntry so we can safely keep
 // a pointer to it across loop iterations.
