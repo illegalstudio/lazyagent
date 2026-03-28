@@ -934,6 +934,9 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	if s.GitBranch != "" && s.GitBranch != "HEAD" {
 		add(row("Git Branch", s.GitBranch))
 	}
+	if s.RemoteURL != "" {
+		add(row("Remote", lipgloss.NewStyle().Foreground(colorAccent).Render(s.RemoteURL)))
+	}
 
 	wtStr := "no"
 	if s.IsWorktree {
