@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/claude"
@@ -179,13 +180,34 @@ type MultiProvider struct {
 }
 
 func (m MultiProvider) DiscoverSessions() ([]*model.Session, error) {
-	var all []*model.Session
-	for _, p := range m.Providers {
-		sessions, err := p.DiscoverSessions()
-		if err != nil {
-			continue // One provider failing shouldn't block others
+	if len(m.Providers) <= 1 {
+		// Fast path: no need for goroutines.
+		for _, p := range m.Providers {
+			return p.DiscoverSessions()
 		}
-		all = append(all, sessions...)
+		return nil, nil
+	}
+
+	type result struct {
+		sessions []*model.Session
+	}
+	results := make([]result, len(m.Providers))
+	var wg sync.WaitGroup
+	for i, p := range m.Providers {
+		wg.Add(1)
+		go func(idx int, prov SessionProvider) {
+			defer wg.Done()
+			sessions, err := prov.DiscoverSessions()
+			if err == nil {
+				results[idx] = result{sessions: sessions}
+			}
+		}(i, p)
+	}
+	wg.Wait()
+
+	var all []*model.Session
+	for _, r := range results {
+		all = append(all, r.sessions...)
 	}
 	return all, nil
 }

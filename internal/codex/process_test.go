@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -132,5 +133,58 @@ func TestParseJSONLIncremental(t *testing.T) {
 	}
 	if got.TotalMessages != 2 {
 		t.Fatalf("TotalMessages = %d, want 2", got.TotalMessages)
+	}
+}
+
+func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+
+	// Create 5 session files across different date dirs to exercise parallel parsing.
+	var indexLines string
+	for i := 0; i < 5; i++ {
+		dayDir := filepath.Join(dir, "2026", "03", fmt.Sprintf("%02d", i+1))
+		if err := os.MkdirAll(dayDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sid := fmt.Sprintf("sess-%04d-0000-0000-0000-000000000000", i)
+		indexLines += fmt.Sprintf(`{"id":"%s","thread_name":"Session %d"}`+"\n", sid, i)
+
+		content := fmt.Sprintf(`{"timestamp":"2026-03-%02dT11:00:00.000Z","type":"session_meta","payload":{"id":"%s","cwd":"/tmp/project%d","cli_version":"0.116.0","source":"cli"}}
+{"timestamp":"2026-03-%02dT11:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello %d"}]}}
+{"timestamp":"2026-03-%02dT11:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi %d"}]}}
+`, i+1, sid, i, i+1, i, i+1, i)
+		fname := filepath.Join(dayDir, fmt.Sprintf("rollout-2026-03-%02dT11-00-00-%s.jsonl", i+1, sid))
+		if err := os.WriteFile(fname, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(indexPath, []byte(indexLines), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 5 {
+		t.Fatalf("got %d sessions, want 5", len(sessions))
+	}
+
+	ids := make(map[string]bool)
+	for _, s := range sessions {
+		ids[s.SessionID] = true
+		if s.Agent != "codex" {
+			t.Errorf("session %s: Agent = %q, want codex", s.SessionID, s.Agent)
+		}
+		if s.Name == "" {
+			t.Errorf("session %s: Name should be set from index", s.SessionID)
+		}
+		if s.UserMessages != 1 || s.AssistantMessages != 1 {
+			t.Errorf("session %s: messages = (%d,%d), want (1,1)", s.SessionID, s.UserMessages, s.AssistantMessages)
+		}
+	}
+	if len(ids) != 5 {
+		t.Errorf("got %d unique session IDs, want 5", len(ids))
 	}
 }

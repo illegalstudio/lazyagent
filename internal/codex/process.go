@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/claude"
@@ -37,16 +39,31 @@ func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache)
 }
 
+type parseJob struct {
+	path   string
+	cached *model.Session
+	offset int64
+	mtime  time.Time
+}
+
+type parseResult struct {
+	session   *model.Session
+	path      string
+	mtime     time.Time
+	newOffset int64
+}
+
 func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
 
 	names := loadSessionNames(indexPath)
-	wtCache := make(map[string]wtInfo)
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
+	var jobs []parseJob
 
+	// Phase 1: walk the tree, collect cache hits and jobs for parsing.
 	err := filepath.WalkDir(sessionsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -58,29 +75,16 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 		seen[path] = struct{}{}
 		cached, offset, mtime := cache.GetIncremental(path)
 
-		var session *model.Session
-		switch {
-		case cached != nil && offset == 0:
-			session = cached
-		case cached != nil && offset > 0:
-			s, newOffset, err := ParseJSONLIncremental(path, offset, cached)
-			if err != nil {
-				return nil
-			}
-			session = s
-			enrichSession(session, wtCache, names)
-			cache.Put(path, mtime, newOffset, session)
-		default:
-			s, size, err := ParseJSONL(path)
-			if err != nil {
-				return nil
-			}
-			session = s
-			enrichSession(session, wtCache, names)
-			cache.Put(path, mtime, size, session)
+		if cached != nil && offset == 0 {
+			sessions = append(sessions, cached)
+			return nil
 		}
-
-		sessions = append(sessions, session)
+		jobs = append(jobs, parseJob{
+			path:   path,
+			cached: cached,
+			offset: offset,
+			mtime:  mtime,
+		})
 		return nil
 	})
 	if err != nil {
@@ -88,6 +92,70 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 			return nil, nil
 		}
 		return nil, fmt.Errorf("walk codex sessions: %w", err)
+	}
+
+	if len(jobs) > 0 {
+		// Phase 2: parse files in parallel.
+		workers := runtime.GOMAXPROCS(0)
+		if workers > len(jobs) {
+			workers = len(jobs)
+		}
+
+		results := make([]parseResult, len(jobs))
+		var wg sync.WaitGroup
+		jobCh := make(chan int, len(jobs))
+
+		for i := range jobs {
+			jobCh <- i
+		}
+		close(jobCh)
+
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for idx := range jobCh {
+					j := &jobs[idx]
+					var session *model.Session
+					var newOffset int64
+
+					if j.cached != nil && j.offset > 0 {
+						s, off, err := ParseJSONLIncremental(j.path, j.offset, j.cached)
+						if err != nil {
+							continue
+						}
+						session = s
+						newOffset = off
+					} else {
+						s, size, err := ParseJSONL(j.path)
+						if err != nil {
+							continue
+						}
+						session = s
+						newOffset = size
+					}
+
+					results[idx] = parseResult{
+						session:   session,
+						path:      j.path,
+						mtime:     j.mtime,
+						newOffset: newOffset,
+					}
+				}
+			}()
+		}
+		wg.Wait()
+
+		// Phase 3: enrich and update cache (sequential — wtCache is not thread-safe).
+		wtCache := make(map[string]wtInfo)
+		for _, r := range results {
+			if r.session == nil {
+				continue
+			}
+			enrichSession(r.session, wtCache, names)
+			cache.Put(r.path, r.mtime, r.newOffset, r.session)
+			sessions = append(sessions, r.session)
+		}
 	}
 
 	cache.Prune(seen)
