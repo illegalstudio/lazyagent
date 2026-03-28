@@ -494,6 +494,17 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 			}
 		} else {
 			m.focus = 1
+			// Copy remote URL to clipboard on detail panel click.
+			if m.cursor >= 0 && m.cursor < len(m.visible) {
+				if u := m.visible[m.cursor].RemoteURL; u != "" {
+					if cmd := exec.Command("pbcopy"); cmd != nil {
+						cmd.Stdin = strings.NewReader(u)
+						if cmd.Run() == nil {
+							m.flashMsg = "Remote URL copied!"
+						}
+					}
+				}
+			}
 		}
 	}
 }
