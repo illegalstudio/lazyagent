@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
 
-A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents — [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — from a single place. No lock-in, no server, purely observational.
+A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents — [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — from a single place. No lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
@@ -33,10 +33,11 @@ lazyagent watches session data from coding agents to determine what each session
 - **Claude Code CLI** — reads JSONL from `~/.claude/projects/*/`
 - **Claude Code Desktop** — same JSONL files, enriched with session metadata (title, permissions) from `~/Library/Application Support/Claude/claude-code-sessions/`
 - **Cursor** — reads SQLite from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
+- **Amp CLI** — reads thread JSON from `~/.local/share/amp/threads/*.json`
 - **pi coding agent** — reads JSONL from `~/.pi/agent/sessions/*/`
 - **OpenCode** — reads SQLite from `~/.local/share/opencode/opencode.db`
 
-Use `--agent claude`, `--agent pi`, `--agent opencode`, `--agent cursor`, or `--agent all` (default) to control which agents are monitored. Agents can also be enabled/disabled in the config file. Pi sessions are marked with a **π** prefix, Cursor with **C**, OpenCode with **O**, and Desktop sessions with a **D** prefix in the session list.
+Use `--agent claude`, `--agent pi`, `--agent opencode`, `--agent cursor`, `--agent amp`, or `--agent all` (default) to control which agents are monitored. Agents can also be enabled/disabled in the config file. Pi sessions are marked with a **π** prefix, Cursor with **C**, Amp with **A**, OpenCode with **O**, and Desktop sessions with a **D** prefix in the session list.
 
 From the JSONL stream it detects activity states with color-coded labels:
 
@@ -119,6 +120,7 @@ lazyagent --agent claude         Monitor only Claude Code sessions
 lazyagent --agent pi             Monitor only pi coding agent sessions
 lazyagent --agent opencode       Monitor only OpenCode sessions
 lazyagent --agent cursor         Monitor only Cursor sessions
+lazyagent --agent amp            Monitor only Amp CLI sessions
 lazyagent --agent all            Monitor all agents (default)
 lazyagent --api                  Start the HTTP API (http://127.0.0.1:7421)
 lazyagent --api --host :8080     Start the HTTP API on a custom address
@@ -233,6 +235,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (created automatically with de
   "notifications": false,
   "notify_after_sec": 30,
   "agents": {
+    "amp": true,
     "claude": true,
     "cursor": true,
     "opencode": true,
@@ -260,8 +263,9 @@ lazyagent/
 ├── main.go                     # Entry point: dispatches --tui / --tray / --api / --agent
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config, helpers
-│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor providers
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Amp providers
 │   ├── model/                  # Shared types (Session, ToolCall, etc.)
+│   ├── amp/                    # Amp CLI thread parsing and session discovery
 │   ├── claude/                 # Claude Code JSONL parsing, desktop metadata, session discovery
 │   ├── cursor/                 # Cursor IDE session discovery from state.vscdb
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
