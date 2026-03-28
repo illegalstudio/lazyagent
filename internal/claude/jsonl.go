@@ -18,6 +18,8 @@ import (
 // Only cheap fields are decoded; the heavy Message field is skipped.
 type jsonlHeader struct {
 	Type        string  `json:"type"`
+	Subtype     string  `json:"subtype"`
+	URL         string  `json:"url"`
 	CWD         string  `json:"cwd"`
 	Version     string  `json:"version"`
 	GitBranch   string  `json:"gitBranch"`
@@ -116,6 +118,10 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 			} else {
 				session.LastSummaryAt = session.LastActivity
 			}
+		}
+
+		if h.Type == "system" && h.Subtype == "bridge_status" && h.URL != "" {
+			session.RemoteURL = h.URL
 		}
 
 		if !ts.IsZero() {
