@@ -76,40 +76,33 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 			}
 
 		case "message":
-			if e.Message == nil {
+			msg := e.parseMessage()
+			if msg == nil {
 				continue
 			}
 
 			if !ts.IsZero() {
 				entryTimestamps = append(entryTimestamps, ts)
-				if len(entryTimestamps) > 500 {
-					trimmed := make([]time.Time, 500)
-					copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
-					entryTimestamps = trimmed
-				}
 			}
 
-			switch e.Message.Role {
+			switch msg.Role {
 			case "user":
 				session.UserMessages++
 				lastMessageEntry = copyEntry(&e)
-				if text := firstPiText(e.Message); text != "" {
+				if text := firstPiText(msg); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
 				}
 
 			case "assistant":
 				session.AssistantMessages++
 				lastMessageEntry = copyEntry(&e)
-				if e.Message.Model != "" {
-					session.Model = e.Message.Model
+				if msg.Model != "" {
+					session.Model = msg.Model
 				}
-				if e.Message.Usage != nil {
-					u := e.Message.Usage
+				if msg.Usage != nil {
+					u := msg.Usage
 					session.InputTokens += u.Input
 					session.OutputTokens += u.Output
 					session.CacheReadTokens += u.CacheRead
@@ -118,15 +111,12 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 						session.CostUSD += u.Cost.Total
 					}
 				}
-				blocks := parsePiContent(e.Message.Content)
+				blocks := parsePiContent(msg.Content)
 				for _, b := range blocks {
 					if b.Type == "toolCall" {
 						recentTools = append(recentTools, model.ToolCall{
 							Name: normalizePiToolName(b.Name), Timestamp: ts,
 						})
-						if len(recentTools) > 40 {
-							recentTools = recentTools[len(recentTools)-20:]
-						}
 						if isWriteTool(b.Name) {
 							if fp := extractPiFilePath(b.Arguments); fp != "" {
 								session.LastFileWrite = fp
@@ -139,9 +129,6 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
 				}
 
 			case "toolResult":
@@ -154,8 +141,12 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 		return session, 0, nil
 	}
 
-	session.TotalMessages = session.UserMessages + session.AssistantMessages
+	// Trim slices once at the end instead of per-iteration.
+	if len(entryTimestamps) > 500 {
+		entryTimestamps = entryTimestamps[len(entryTimestamps)-500:]
+	}
 	session.EntryTimestamps = entryTimestamps
+	session.TotalMessages = session.UserMessages + session.AssistantMessages
 
 	if len(recentTools) > 20 {
 		recentTools = recentTools[len(recentTools)-20:]
@@ -174,11 +165,13 @@ func ParsePiJSONL(path string) (*model.Session, int64, error) {
 		if !entryTs.IsZero() {
 			session.LastActivity = entryTs
 		}
-		if session.Status == model.StatusExecutingTool && lastMessageEntry.Message != nil {
-			blocks := parsePiContent(lastMessageEntry.Message.Content)
-			for _, b := range blocks {
-				if b.Type == "toolCall" {
-					session.CurrentTool = normalizePiToolName(b.Name)
+		if session.Status == model.StatusExecutingTool {
+			if msg := lastMessageEntry.parseMessage(); msg != nil {
+				blocks := parsePiContent(msg.Content)
+				for _, b := range blocks {
+					if b.Type == "toolCall" {
+						session.CurrentTool = normalizePiToolName(b.Name)
+					}
 				}
 			}
 		}
@@ -248,37 +241,30 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 				session.Name = e.Name
 			}
 		case "message":
-			if e.Message == nil {
+			msg := e.parseMessage()
+			if msg == nil {
 				continue
 			}
 			if !ts.IsZero() {
 				entryTimestamps = append(entryTimestamps, ts)
-				if len(entryTimestamps) > 500 {
-					trimmed := make([]time.Time, 500)
-					copy(trimmed, entryTimestamps[len(entryTimestamps)-500:])
-					entryTimestamps = trimmed
-				}
 			}
-			switch e.Message.Role {
+			switch msg.Role {
 			case "user":
 				session.UserMessages++
 				lastMessageEntry = copyEntry(&e)
-				if text := firstPiText(e.Message); text != "" {
+				if text := firstPiText(msg); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
 				}
 			case "assistant":
 				session.AssistantMessages++
 				lastMessageEntry = copyEntry(&e)
-				if e.Message.Model != "" {
-					session.Model = e.Message.Model
+				if msg.Model != "" {
+					session.Model = msg.Model
 				}
-				if e.Message.Usage != nil {
-					u := e.Message.Usage
+				if msg.Usage != nil {
+					u := msg.Usage
 					session.InputTokens += u.Input
 					session.OutputTokens += u.Output
 					session.CacheReadTokens += u.CacheRead
@@ -287,15 +273,12 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 						session.CostUSD += u.Cost.Total
 					}
 				}
-				blocks := parsePiContent(e.Message.Content)
+				blocks := parsePiContent(msg.Content)
 				for _, b := range blocks {
 					if b.Type == "toolCall" {
 						recentTools = append(recentTools, model.ToolCall{
 							Name: normalizePiToolName(b.Name), Timestamp: ts,
 						})
-						if len(recentTools) > 40 {
-							recentTools = recentTools[len(recentTools)-20:]
-						}
 						if isWriteTool(b.Name) {
 							if fp := extractPiFilePath(b.Arguments); fp != "" {
 								session.LastFileWrite = fp
@@ -308,9 +291,6 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
-					}
 				}
 			case "toolResult":
 				lastMessageEntry = copyEntry(&e)
@@ -322,8 +302,12 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 		return session, offset, nil
 	}
 
-	session.TotalMessages = session.UserMessages + session.AssistantMessages
+	// Trim slices once at the end.
+	if len(entryTimestamps) > 500 {
+		entryTimestamps = entryTimestamps[len(entryTimestamps)-500:]
+	}
 	session.EntryTimestamps = entryTimestamps
+	session.TotalMessages = session.UserMessages + session.AssistantMessages
 
 	if len(recentTools) > 20 {
 		recentTools = recentTools[len(recentTools)-20:]
@@ -336,19 +320,20 @@ func ParsePiJSONLIncremental(path string, offset int64, base *model.Session) (*m
 	session.RecentMessages = recentMessages
 
 	// Only update status if we saw a message entry in the new tail.
-	// Otherwise keep the status inherited from the base session.
 	if lastMessageEntry != nil {
 		session.Status = determinePiStatus(lastMessageEntry)
-		session.CurrentTool = "" // reset before possibly re-setting below
+		session.CurrentTool = ""
 		entryTs, _ := time.Parse(time.RFC3339Nano, lastMessageEntry.Timestamp)
 		if !entryTs.IsZero() {
 			session.LastActivity = entryTs
 		}
-		if session.Status == model.StatusExecutingTool && lastMessageEntry.Message != nil {
-			blocks := parsePiContent(lastMessageEntry.Message.Content)
-			for _, b := range blocks {
-				if b.Type == "toolCall" {
-					session.CurrentTool = normalizePiToolName(b.Name)
+		if session.Status == model.StatusExecutingTool {
+			if msg := lastMessageEntry.parseMessage(); msg != nil {
+				blocks := parsePiContent(msg.Content)
+				for _, b := range blocks {
+					if b.Type == "toolCall" {
+						session.CurrentTool = normalizePiToolName(b.Name)
+					}
 				}
 			}
 		}
@@ -453,12 +438,16 @@ func extractPiFilePath(raw json.RawMessage) string {
 
 // determinePiStatus infers session status from the last message entry.
 func determinePiStatus(e *piEntry) model.SessionStatus {
-	if e == nil || e.Message == nil {
+	if e == nil {
 		return model.StatusUnknown
 	}
-	switch e.Message.Role {
+	msg := e.parseMessage()
+	if msg == nil {
+		return model.StatusUnknown
+	}
+	switch msg.Role {
 	case "assistant":
-		blocks := parsePiContent(e.Message.Content)
+		blocks := parsePiContent(msg.Content)
 		for _, b := range blocks {
 			if b.Type == "toolCall" {
 				return model.StatusExecutingTool

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/model"
@@ -24,8 +27,27 @@ func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 	return discoverSessionsFromDir(PiSessionsDir(), cache)
 }
 
+type wtInfo struct {
+	isWorktree bool
+	mainRepo   string
+}
+
+type parseJob struct {
+	jsonlFile string
+	dirName   string
+	cached    *model.Session
+	offset    int64
+	mtime     time.Time
+}
+
+type parseResult struct {
+	session   *model.Session
+	jsonlFile string
+	mtime     time.Time
+	newOffset int64
+}
+
 // discoverSessionsFromDir scans a directory for pi session JSONL files.
-// Exported for testing with synthetic directories.
 func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
@@ -39,14 +61,12 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 		return nil, fmt.Errorf("could not read pi sessions dir: %w", err)
 	}
 
-	type wtInfo struct {
-		isWorktree bool
-		mainRepo   string
-	}
 	wtCache := make(map[string]wtInfo)
-
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
+
+	// Phase 1: collect all JSONL files and classify as cache-hit or needs-parse.
+	var jobs []parseJob
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
 			continue
@@ -59,57 +79,97 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
-
 			cached, offset, mtime := cache.GetIncremental(jsonlFile)
-			var session *model.Session
-			switch {
-			case cached != nil && offset == 0:
-				// Full cache hit — file unchanged.
-				session = cached
-			case cached != nil && offset > 0:
-				// Incremental: parse only new tail lines.
-				s, newOffset, err := ParsePiJSONLIncremental(jsonlFile, offset, cached)
-				if err != nil {
-					continue
-				}
-				session = s
 
-				if session.CWD == "" {
-					session.CWD = decodePiDirName(projectEntry.Name())
-				}
-				if _, ok := wtCache[session.CWD]; !ok {
-					isWT, mainRepo := claude.IsWorktree(session.CWD)
-					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
-				}
-				wt := wtCache[session.CWD]
-				session.IsWorktree = wt.isWorktree
-				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, newOffset, session)
-			default:
-				// Full miss: parse entire file.
-				s, size, err := ParsePiJSONL(jsonlFile)
-				if err != nil {
-					continue
-				}
-				session = s
-
-				if session.CWD == "" {
-					session.CWD = decodePiDirName(projectEntry.Name())
-				}
-
-				if _, ok := wtCache[session.CWD]; !ok {
-					isWT, mainRepo := claude.IsWorktree(session.CWD)
-					wtCache[session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
-				}
-				wt := wtCache[session.CWD]
-				session.IsWorktree = wt.isWorktree
-				session.MainRepo = wt.mainRepo
-				cache.Put(jsonlFile, mtime, size, session)
+			if cached != nil && offset == 0 {
+				sessions = append(sessions, cached)
+				continue
 			}
-
-			sessions = append(sessions, session)
+			jobs = append(jobs, parseJob{
+				jsonlFile: jsonlFile,
+				dirName:   projectEntry.Name(),
+				cached:    cached,
+				offset:    offset,
+				mtime:     mtime,
+			})
 		}
 	}
+
+	if len(jobs) > 0 {
+		// Phase 2: parse files in parallel.
+		workers := runtime.GOMAXPROCS(0)
+		if workers > len(jobs) {
+			workers = len(jobs)
+		}
+
+		results := make([]parseResult, len(jobs))
+		var wg sync.WaitGroup
+		jobCh := make(chan int, len(jobs))
+
+		for i := range jobs {
+			jobCh <- i
+		}
+		close(jobCh)
+
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for idx := range jobCh {
+					j := &jobs[idx]
+					var session *model.Session
+					var newOffset int64
+
+					if j.cached != nil && j.offset > 0 {
+						s, off, err := ParsePiJSONLIncremental(j.jsonlFile, j.offset, j.cached)
+						if err != nil {
+							continue
+						}
+						session = s
+						newOffset = off
+					} else {
+						s, size, err := ParsePiJSONL(j.jsonlFile)
+						if err != nil {
+							continue
+						}
+						session = s
+						newOffset = size
+					}
+
+					if session.CWD == "" {
+						session.CWD = decodePiDirName(j.dirName)
+					}
+
+					results[idx] = parseResult{
+						session:   session,
+						jsonlFile: j.jsonlFile,
+						mtime:     j.mtime,
+						newOffset: newOffset,
+					}
+				}
+			}()
+		}
+		wg.Wait()
+
+		// Phase 3: enrich worktree info and update cache (sequential).
+		for _, r := range results {
+			if r.session == nil {
+				continue
+			}
+			if r.session.CWD != "" {
+				if _, ok := wtCache[r.session.CWD]; !ok {
+					isWT, mainRepo := claude.IsWorktree(r.session.CWD)
+					wtCache[r.session.CWD] = wtInfo{isWorktree: isWT, mainRepo: mainRepo}
+				}
+				wt := wtCache[r.session.CWD]
+				r.session.IsWorktree = wt.isWorktree
+				r.session.MainRepo = wt.mainRepo
+			}
+			cache.Put(r.jsonlFile, r.mtime, r.newOffset, r.session)
+			sessions = append(sessions, r.session)
+		}
+	}
+
 	cache.Prune(seen)
 	return sessions, nil
 }

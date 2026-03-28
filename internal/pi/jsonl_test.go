@@ -336,6 +336,48 @@ func TestDiscoverSessions_RealData(t *testing.T) {
 	}
 }
 
+func TestParseMessage_LazyParsing(t *testing.T) {
+	// Non-message entry: RawMsg should not be parsed
+	e := piEntry{Type: "session", CWD: "/tmp"}
+	if e.parseMessage() != nil {
+		t.Error("parseMessage() should return nil for non-message entry with no RawMsg")
+	}
+
+	// Null RawMsg
+	e2 := piEntry{Type: "message", RawMsg: []byte("null")}
+	if e2.parseMessage() != nil {
+		t.Error("parseMessage() should return nil for null RawMsg")
+	}
+
+	// Empty RawMsg
+	e3 := piEntry{Type: "message"}
+	if e3.parseMessage() != nil {
+		t.Error("parseMessage() should return nil for empty RawMsg")
+	}
+
+	// Malformed JSON
+	e4 := piEntry{Type: "message", RawMsg: []byte("{invalid")}
+	if e4.parseMessage() != nil {
+		t.Error("parseMessage() should return nil for malformed JSON")
+	}
+
+	// Valid message
+	e5 := piEntry{Type: "message", RawMsg: []byte(`{"role":"user","content":"hello"}`)}
+	msg := e5.parseMessage()
+	if msg == nil {
+		t.Fatal("parseMessage() should not be nil for valid JSON")
+	}
+	if msg.Role != "user" {
+		t.Errorf("Role = %q, want user", msg.Role)
+	}
+
+	// Cached: calling again returns same pointer
+	msg2 := e5.parseMessage()
+	if msg != msg2 {
+		t.Error("parseMessage() should return cached result on second call")
+	}
+}
+
 func TestParsePiJSONL_CostAndTokens(t *testing.T) {
 	path := writeTempJSONL(t, "test.jsonl",
 		`{"type":"session","version":3,"id":"abc","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/tmp"}
