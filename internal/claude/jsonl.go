@@ -195,7 +195,7 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 							recentTools = recentTools[len(recentTools)-20:]
 						}
 						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
-							if fp := extractFilePathFromRaw(e.Message.RawContent, c.Name); fp != "" {
+							if fp := extractFilePathFromRaw(e.Message.RawContent); fp != "" {
 								session.LastFileWrite = fp
 								session.LastFileWriteAt = ts
 							}
@@ -356,35 +356,42 @@ func firstText(m *jsonlMessage) string {
 	return ""
 }
 
-// extractFilePathFromRaw extracts the "file_path" from the raw content JSON array
-// without deserializing the full content. Uses byte-level scanning to find the
-// file_path value directly, avoiding allocation of large tool Input payloads.
-func extractFilePathFromRaw(rawContent json.RawMessage, _ string) string {
-	if len(rawContent) == 0 {
+// filePathNeedle is used by extractFilePathFromRaw for a quick byte-level pre-check.
+var filePathNeedle = []byte(`"file_path"`)
+
+// extractFilePathFromRaw extracts the "file_path" from a tool_use input inside
+// the raw content JSON array. It parses only the tool_use entries (ignoring text
+// blocks) with a targeted struct that captures just type, name, and input.
+func extractFilePathFromRaw(rawContent json.RawMessage) string {
+	if len(rawContent) == 0 || !bytes.Contains(rawContent, filePathNeedle) {
 		return ""
 	}
-	// Quick check: does the raw content even contain "file_path"?
-	needle := []byte(`"file_path"`)
-	idx := bytes.Index(rawContent, needle)
-	if idx < 0 {
+	// Parse only tool_use items — text blocks have no Input so they stay empty.
+	var items []struct {
+		Type  string          `json:"type"`
+		Name  string          `json:"name"`
+		Input json.RawMessage `json:"input"`
+	}
+	if json.Unmarshal(rawContent, &items) != nil {
 		return ""
 	}
-	// Find the value after "file_path": <optional whitespace> : <optional whitespace> "value"
-	rest := rawContent[idx+len(needle):]
-	// Skip whitespace and colon
-	i := 0
-	for i < len(rest) && (rest[i] == ' ' || rest[i] == '\t' || rest[i] == '\n' || rest[i] == '\r' || rest[i] == ':') {
-		i++
+	// Walk backwards — we want the last Write/Edit/NotebookEdit file_path.
+	for i := len(items) - 1; i >= 0; i-- {
+		item := &items[i]
+		if item.Type != "tool_use" || len(item.Input) == 0 {
+			continue
+		}
+		if item.Name != "Write" && item.Name != "Edit" && item.Name != "NotebookEdit" {
+			continue
+		}
+		var obj struct {
+			FilePath string `json:"file_path"`
+		}
+		if json.Unmarshal(item.Input, &obj) == nil && obj.FilePath != "" {
+			return obj.FilePath
+		}
 	}
-	if i >= len(rest) || rest[i] != '"' {
-		return ""
-	}
-	// Extract the string value
-	var fp string
-	if json.Unmarshal(rest[i:], &fp) != nil {
-		return ""
-	}
-	return fp
+	return ""
 }
 
 // copyEntry returns a shallow copy of a jsonlEntry so we can safely keep
