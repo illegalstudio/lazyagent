@@ -150,9 +150,17 @@ func ToolActivity(tool string) ActivityKind {
 		return ActivityRunning
 	case "find", "lsp":
 		return ActivitySearching
-	case "web_search":
-		return ActivityBrowsing
 	case "subagent", "task":
+		return ActivitySpawning
+	case "exec_command", "write_stdin":
+		return ActivityRunning
+	case "apply_patch":
+		return ActivityWriting
+	case "view_image":
+		return ActivityReading
+	case "web_search", "search_query", "image_query", "open", "click":
+		return ActivityBrowsing
+	case "spawn_agent":
 		return ActivitySpawning
 	default:
 		if tool != "" {
