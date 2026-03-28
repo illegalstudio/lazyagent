@@ -152,6 +152,7 @@ type SessionFull struct {
 	DesktopTitle        string             `json:"desktopTitle,omitempty"`
 	DesktopID           string             `json:"desktopId,omitempty"`
 	PermissionMode      string             `json:"permissionMode,omitempty"`
+	RemoteURL           string             `json:"remoteUrl,omitempty"`
 }
 
 // ToolItem is a tool call for the detail view.
@@ -253,6 +254,7 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		full.DesktopID = sess.Desktop.DesktopID
 		full.PermissionMode = sess.Desktop.PermissionMode
 	}
+	full.RemoteURL = sess.RemoteURL
 	return full
 }
 
