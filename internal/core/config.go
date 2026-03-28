@@ -32,6 +32,7 @@ func DefaultConfig() Config {
 			"pi":       true,
 			"opencode": true,
 			"cursor":   true,
+			"codex":    true,
 		},
 	}
 }
