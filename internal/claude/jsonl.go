@@ -14,30 +14,41 @@ import (
 
 // Raw JSONL entry structures
 
-// jsonlHeader is the lightweight struct used for pre-screening every line.
-// Only cheap fields are decoded; the heavy Message field is skipped.
-type jsonlHeader struct {
-	Type        string  `json:"type"`
-	CWD         string  `json:"cwd"`
-	Version     string  `json:"version"`
-	GitBranch   string  `json:"gitBranch"`
-	Timestamp   string  `json:"timestamp"`
-	IsSidechain bool    `json:"isSidechain"`
-	CostUSD     float64 `json:"costUSD"`
+// jsonlEntry is unmarshaled once per line. The Message field is kept as
+// json.RawMessage so non-user/assistant entries skip the expensive nested
+// struct allocation entirely.
+type jsonlEntry struct {
+	Type        string          `json:"type"`
+	SessionID   string          `json:"sessionId"`
+	CWD         string          `json:"cwd"`
+	Version     string          `json:"version"`
+	GitBranch   string          `json:"gitBranch"`
+	Timestamp   string          `json:"timestamp"`
+	RawMessage  json.RawMessage `json:"message"`
+	UUID        string          `json:"uuid"`
+	IsSidechain bool            `json:"isSidechain"`
+	CostUSD     float64         `json:"costUSD"`
+
+	// Parsed lazily from RawMessage only for user/assistant entries.
+	message *jsonlMessage
 }
 
-// jsonlEntry is the full struct used only for user/assistant entries.
-type jsonlEntry struct {
-	Type        string        `json:"type"`
-	SessionID   string        `json:"sessionId"`
-	CWD         string        `json:"cwd"`
-	Version     string        `json:"version"`
-	GitBranch   string        `json:"gitBranch"`
-	Timestamp   string        `json:"timestamp"`
-	Message     *jsonlMessage `json:"message"`
-	UUID        string        `json:"uuid"`
-	IsSidechain bool          `json:"isSidechain"`
-	CostUSD     float64       `json:"costUSD"`
+// parseMessage deserializes the RawMessage field into a jsonlMessage.
+// Calling it is cheap if RawMessage is nil/empty.
+func (e *jsonlEntry) parseMessage() *jsonlMessage {
+	if e.message != nil {
+		return e.message
+	}
+	if len(e.RawMessage) == 0 || e.RawMessage[0] == 'n' { // null
+		return nil
+	}
+	var m jsonlMessage
+	if json.Unmarshal(e.RawMessage, &m) != nil {
+		return nil
+	}
+	m.parseContent()
+	e.message = &m
+	return e.message
 }
 
 type jsonlMessage struct {
@@ -78,12 +89,9 @@ type jsonlContent struct {
 	IsError   bool   `json:"is_error"`
 }
 
-// needsFullParse returns true if the entry type requires full unmarshal.
-func needsFullParse(typ string) bool {
-	return typ == "user" || typ == "assistant"
-}
-
 // scanEntries is the shared scanning loop used by both ParseJSONL and ParseJSONLIncremental.
+// Each line is unmarshaled once into jsonlEntry (with Message as json.RawMessage).
+// The heavy message parsing is deferred and only done for user/assistant entries.
 func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset int64,
 	recentTools []model.ToolCall, recentMessages []model.ConversationMessage,
 	entryTimestamps []time.Time,
@@ -97,20 +105,19 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 		lineBytes := scanner.Bytes()
 		bytesConsumed += int64(len(lineBytes)) + 1 // +1 for newline
 
-		// Step 1: lightweight pre-screen — only decode cheap fields.
-		var h jsonlHeader
-		if err := json.Unmarshal(lineBytes, &h); err != nil {
+		var e jsonlEntry
+		if err := json.Unmarshal(lineBytes, &e); err != nil {
 			continue
 		}
 		parsed = true
 
-		ts, _ := time.Parse(time.RFC3339Nano, h.Timestamp)
+		ts, _ := time.Parse(time.RFC3339Nano, e.Timestamp)
 
-		if h.IsSidechain {
+		if e.IsSidechain {
 			session.IsSidechain = true
 		}
 
-		if h.Type == "summary" {
+		if e.Type == "summary" {
 			if !prevTimestamp.IsZero() {
 				session.LastSummaryAt = prevTimestamp
 			} else {
@@ -124,47 +131,44 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 		}
 
 		// Extract metadata from whichever entry provides it first.
-		if session.CWD == "" && h.CWD != "" {
-			session.CWD = h.CWD
+		if session.CWD == "" && e.CWD != "" {
+			session.CWD = e.CWD
 		}
-		if session.Version == "" && h.Version != "" {
-			session.Version = h.Version
+		if session.Version == "" && e.Version != "" {
+			session.Version = e.Version
 		}
-		if session.GitBranch == "" && h.GitBranch != "" {
-			session.GitBranch = h.GitBranch
+		if session.GitBranch == "" && e.GitBranch != "" {
+			session.GitBranch = e.GitBranch
 		}
 
-		// Accumulate cost (always available in the header).
-		session.CostUSD += h.CostUSD
+		// Accumulate cost.
+		session.CostUSD += e.CostUSD
 
-		// Step 2: only do full unmarshal for user/assistant entries.
-		if !needsFullParse(h.Type) {
+		// Only parse the heavy Message for user/assistant entries.
+		if e.Type != "user" && e.Type != "assistant" {
 			continue
 		}
 
-		var e jsonlEntry
-		if err := json.Unmarshal(lineBytes, &e); err != nil {
+		msg := e.parseMessage()
+		if msg == nil {
 			continue
 		}
-		if e.Message != nil {
-			e.Message.parseContent()
 
-			// Accumulate tokens from the full entry.
-			if e.Message.Usage != nil {
-				u := e.Message.Usage
-				session.InputTokens += u.InputTokens
-				session.OutputTokens += u.OutputTokens
-				session.CacheCreationTokens += u.CacheCreationTokens
-				session.CacheReadTokens += u.CacheReadTokens
-			}
+		// Accumulate tokens.
+		if msg.Usage != nil {
+			u := msg.Usage
+			session.InputTokens += u.InputTokens
+			session.OutputTokens += u.OutputTokens
+			session.CacheCreationTokens += u.CacheCreationTokens
+			session.CacheReadTokens += u.CacheReadTokens
 		}
 
 		switch e.Type {
 		case "user":
 			lastMeaningful = copyEntry(&e)
-			if e.Message != nil && !isToolResult(e.Message) {
+			if !isToolResult(msg) {
 				session.UserMessages++
-				if text := firstText(e.Message); text != "" {
+				if text := firstText(msg); text != "" {
 					recentMessages = append(recentMessages, model.ConversationMessage{
 						Role: "user", Text: model.Truncate(text, 300), Timestamp: ts,
 					})
@@ -175,30 +179,28 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 			}
 		case "assistant":
 			lastMeaningful = copyEntry(&e)
-			if e.Message != nil {
-				session.AssistantMessages++
-				if e.Message.Model != "" {
-					session.Model = e.Message.Model
+			session.AssistantMessages++
+			if msg.Model != "" {
+				session.Model = msg.Model
+			}
+			if text := firstText(msg); text != "" {
+				recentMessages = append(recentMessages, model.ConversationMessage{
+					Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
+				})
+				if len(recentMessages) > 20 {
+					recentMessages = recentMessages[len(recentMessages)-10:]
 				}
-				if text := firstText(e.Message); text != "" {
-					recentMessages = append(recentMessages, model.ConversationMessage{
-						Role: "assistant", Text: model.Truncate(text, 300), Timestamp: ts,
-					})
-					if len(recentMessages) > 20 {
-						recentMessages = recentMessages[len(recentMessages)-10:]
+			}
+			for _, c := range msg.Content {
+				if c.Type == "tool_use" {
+					recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
+					if len(recentTools) > 40 {
+						recentTools = recentTools[len(recentTools)-20:]
 					}
-				}
-				for _, c := range e.Message.Content {
-					if c.Type == "tool_use" {
-						recentTools = append(recentTools, model.ToolCall{Name: c.Name, Timestamp: ts})
-						if len(recentTools) > 40 {
-							recentTools = recentTools[len(recentTools)-20:]
-						}
-						if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
-							if fp := extractFilePathFromRaw(e.Message.RawContent); fp != "" {
-								session.LastFileWrite = fp
-								session.LastFileWriteAt = ts
-							}
+					if c.Name == "Write" || c.Name == "Edit" || c.Name == "NotebookEdit" {
+						if fp := extractFilePathFromRaw(msg.RawContent); fp != "" {
+							session.LastFileWrite = fp
+							session.LastFileWriteAt = ts
 						}
 					}
 				}
@@ -234,10 +236,12 @@ func applyLastMeaningful(session *model.Session, lastMeaningful *jsonlEntry) {
 		if ts, err := time.Parse(time.RFC3339Nano, lastMeaningful.Timestamp); err == nil {
 			session.LastActivity = ts
 		}
-		if session.Status == model.StatusExecutingTool && lastMeaningful.Message != nil {
-			for _, c := range lastMeaningful.Message.Content {
-				if c.Type == "tool_use" {
-					session.CurrentTool = c.Name
+		if session.Status == model.StatusExecutingTool {
+			if msg := lastMeaningful.parseMessage(); msg != nil {
+				for _, c := range msg.Content {
+					if c.Type == "tool_use" {
+						session.CurrentTool = c.Name
+					}
 				}
 			}
 		}
@@ -407,10 +411,11 @@ func determineStatus(e *jsonlEntry) model.SessionStatus {
 	}
 	switch e.Type {
 	case "assistant":
-		if e.Message == nil {
+		msg := e.parseMessage()
+		if msg == nil {
 			return model.StatusUnknown
 		}
-		for _, c := range e.Message.Content {
+		for _, c := range msg.Content {
 			if c.Type == "tool_use" {
 				return model.StatusExecutingTool
 			}
@@ -418,10 +423,11 @@ func determineStatus(e *jsonlEntry) model.SessionStatus {
 		// Assistant responded with text — waiting for user
 		return model.StatusWaitingForUser
 	case "user":
-		if e.Message == nil {
+		msg := e.parseMessage()
+		if msg == nil {
 			return model.StatusUnknown
 		}
-		if isToolResult(e.Message) {
+		if isToolResult(msg) {
 			// Tool result was written — Claude is now thinking about it
 			return model.StatusProcessingResult
 		}
