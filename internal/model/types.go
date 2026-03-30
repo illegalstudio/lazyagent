@@ -100,6 +100,9 @@ type Session struct {
 
 	// Desktop metadata (non-nil if session was started via Claude Desktop)
 	Desktop *DesktopMeta
+
+	// Remote control (Claude Code only, empty if unavailable)
+	RemoteURL string
 }
 
 // Clone returns a deep copy of the Session suitable for use as a base

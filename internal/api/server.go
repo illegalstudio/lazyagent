@@ -375,6 +375,7 @@ type SessionFull struct {
 	DesktopTitle        string             `json:"desktop_title,omitempty"`
 	DesktopID           string             `json:"desktop_id,omitempty"`
 	PermissionMode      string             `json:"permission_mode,omitempty"`
+	RemoteURL           string             `json:"remote_url,omitempty"`
 }
 
 // ToolItem represents a recent tool call.
@@ -464,6 +465,7 @@ func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 		DesktopTitle:        desktopTitle(sess),
 		DesktopID:           desktopID(sess),
 		PermissionMode:      desktopPermission(sess),
+		RemoteURL:           sess.RemoteURL,
 	}
 }
 

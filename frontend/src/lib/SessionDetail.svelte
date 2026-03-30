@@ -170,6 +170,14 @@
           <dt class="text-subtext">Worktree</dt>
           <dd class="text-accent">yes {#if detail.mainRepo}<span class="text-subtext">({detail.mainRepo})</span>{/if}</dd>
         {/if}
+        {#if detail.remoteUrl}
+          <dt class="text-subtext">Remote</dt>
+          <dd class="text-text truncate">
+            <a href={detail.remoteUrl} target="_blank" rel="noopener" class="text-accent hover:underline">
+              {detail.remoteUrl}
+            </a>
+          </dd>
+        {/if}
         {#if detail.lastFileWrite}
           <dt class="text-subtext">Last file</dt>
           <dd class="text-text truncate">

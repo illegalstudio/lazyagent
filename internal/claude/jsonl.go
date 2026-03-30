@@ -19,6 +19,8 @@ import (
 // struct allocation entirely.
 type jsonlEntry struct {
 	Type        string          `json:"type"`
+	Subtype     string          `json:"subtype"`
+	URL         string          `json:"url"`
 	SessionID   string          `json:"sessionId"`
 	CWD         string          `json:"cwd"`
 	Version     string          `json:"version"`
@@ -123,6 +125,10 @@ func scanEntries(scanner *bufio.Scanner, session *model.Session, initialOffset i
 			} else {
 				session.LastSummaryAt = session.LastActivity
 			}
+		}
+
+		if e.Type == "system" && e.Subtype == "bridge_status" && e.URL != "" {
+			session.RemoteURL = e.URL
 		}
 
 		if !ts.IsZero() {

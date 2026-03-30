@@ -60,6 +60,9 @@ type Model struct {
 	// Flash message (modal popup, dismissed by any key)
 	flashMsg string
 
+	// Inline "copied!" indicator for remote URL
+	copiedAt time.Time
+
 	// Update notification shown in footer
 	updateVersion string
 
@@ -494,6 +497,17 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 			}
 		} else {
 			m.focus = 1
+			// Copy remote URL to clipboard on detail panel click.
+			if m.cursor >= 0 && m.cursor < len(m.visible) {
+				if u := m.visible[m.cursor].RemoteURL; u != "" {
+					if cmd := exec.Command("pbcopy"); cmd != nil {
+						cmd.Stdin = strings.NewReader(u)
+						if cmd.Run() == nil {
+							m.copiedAt = time.Now()
+						}
+					}
+				}
+			}
 		}
 	}
 }
@@ -933,6 +947,13 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	}
 	if s.GitBranch != "" && s.GitBranch != "HEAD" {
 		add(row("Git Branch", s.GitBranch))
+	}
+	if s.RemoteURL != "" {
+		remoteVal := lipgloss.NewStyle().Foreground(colorAccent).Render(s.RemoteURL)
+		if time.Since(m.copiedAt) < 2*time.Second {
+			remoteVal += lipgloss.NewStyle().Foreground(colorMuted).Render("  copied!")
+		}
+		add(row("Remote", remoteVal))
 	}
 
 	wtStr := "no"

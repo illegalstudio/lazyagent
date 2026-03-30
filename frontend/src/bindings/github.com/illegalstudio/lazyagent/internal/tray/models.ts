@@ -77,6 +77,7 @@ export class SessionFull {
     "desktopTitle"?: string;
     "desktopId"?: string;
     "permissionMode"?: string;
+    "remoteUrl"?: string;
 
     /** Creates a new SessionFull instance. */
     constructor($$source: Partial<SessionFull> = {}) {
