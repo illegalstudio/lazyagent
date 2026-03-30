@@ -43,8 +43,8 @@ type ToolCall struct {
 
 // ConversationMessage holds a single human-readable message from the conversation.
 type ConversationMessage struct {
-	Role      string    // "user" or "assistant"
-	Text      string    // first text block, truncated to 300 chars
+	Role      string // "user" or "assistant"
+	Text      string // first text block, truncated to 300 chars
 	Timestamp time.Time
 }
 
@@ -95,7 +95,7 @@ type Session struct {
 	CacheReadTokens     int
 
 	// Agent identity
-	Agent string // "claude" or "pi" — which coding agent produced this session
+	Agent string // e.g. "claude", "pi", "codex" — which coding agent produced this session
 	Name  string // session display name (from pi session_info or custom)
 
 	// Desktop metadata (non-nil if session was started via Claude Desktop)
