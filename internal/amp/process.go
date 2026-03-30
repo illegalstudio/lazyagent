@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/claude"
@@ -35,15 +37,28 @@ func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 	return discoverSessionsFromDir(ThreadsDir(), SessionPath(), cache)
 }
 
+type parseJob struct {
+	path         string
+	lastThreadID string
+	mtime        time.Time
+}
+
+type parseResult struct {
+	session *model.Session
+	path    string
+	mtime   time.Time
+	size    int64
+}
+
 func discoverSessionsFromDir(threadsDir, sessionPath string, cache *model.SessionCache) ([]*model.Session, error) {
 	if threadsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
 
 	lastThreadID := loadLastThreadID(sessionPath)
-	wtCache := make(map[string]wtInfo)
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
+	var jobs []parseJob
 
 	entries, err := os.ReadDir(threadsDir)
 	if err != nil {
@@ -53,6 +68,7 @@ func discoverSessionsFromDir(threadsDir, sessionPath string, cache *model.Sessio
 		return nil, fmt.Errorf("could not read amp threads dir: %w", err)
 	}
 
+	// Phase 1: collect cache hits and jobs for parsing.
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -61,20 +77,66 @@ func discoverSessionsFromDir(threadsDir, sessionPath string, cache *model.Sessio
 		path := filepath.Join(threadsDir, entry.Name())
 		seen[path] = struct{}{}
 
-		cached, offset, mtime := cache.GetIncremental(path)
-		if cached != nil && offset == 0 {
+		cached, _, mtime := cache.GetIncremental(path)
+		if cached != nil {
 			sessions = append(sessions, cached)
 			continue
 		}
 
-		session, size, err := ParseThread(path, lastThreadID)
-		if err != nil {
-			continue
+		jobs = append(jobs, parseJob{
+			path:         path,
+			lastThreadID: lastThreadID,
+			mtime:        mtime,
+		})
+	}
+
+	if len(jobs) > 0 {
+		// Phase 2: parse files in parallel.
+		workers := runtime.GOMAXPROCS(0)
+		if workers > len(jobs) {
+			workers = len(jobs)
 		}
 
-		enrichWorktree(session, wtCache)
-		cache.Put(path, mtime, size, session)
-		sessions = append(sessions, session)
+		results := make([]parseResult, len(jobs))
+		var wg sync.WaitGroup
+		jobCh := make(chan int, len(jobs))
+
+		for i := range jobs {
+			jobCh <- i
+		}
+		close(jobCh)
+
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for idx := range jobCh {
+					j := &jobs[idx]
+					session, size, err := ParseThread(j.path, j.lastThreadID)
+					if err != nil {
+						continue
+					}
+					results[idx] = parseResult{
+						session: session,
+						path:    j.path,
+						mtime:   j.mtime,
+						size:    size,
+					}
+				}
+			}()
+		}
+		wg.Wait()
+
+		// Phase 3: enrich and update cache (sequential).
+		wtCache := make(map[string]wtInfo)
+		for _, r := range results {
+			if r.session == nil {
+				continue
+			}
+			enrichWorktree(r.session, wtCache)
+			cache.Put(r.path, r.mtime, r.size, r.session)
+			sessions = append(sessions, r.session)
+		}
 	}
 
 	cache.Prune(seen)

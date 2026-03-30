@@ -1,6 +1,7 @@
 package amp
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -121,6 +122,52 @@ func TestDiscoverSessions_FromSyntheticDir(t *testing.T) {
 	}
 	if got.InputTokens != 10 || got.OutputTokens != 20 || got.CacheCreationTokens != 30 || got.CacheReadTokens != 40 {
 		t.Fatalf("tokens = (%d,%d,%d,%d), want (10,20,30,40)", got.InputTokens, got.OutputTokens, got.CacheCreationTokens, got.CacheReadTokens)
+	}
+}
+
+func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(sessionPath, []byte(`{"lastThreadId":"T-0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 5; i++ {
+		content := fmt.Sprintf(`{
+  "id": "T-%d",
+  "created": 1774696835566,
+  "title": "Thread %d",
+  "messages": [
+    {"role":"user","content":[{"type":"text","text":"hello %d"}],"meta":{"sentAt":1774696836000}},
+    {"role":"assistant","content":[{"type":"text","text":"hi %d"}],"usage":{"model":"claude-sonnet-4-5","inputTokens":10,"outputTokens":20,"timestamp":"2026-03-28T11:20:38.000Z"}}
+  ],
+  "env": {"initial": {"trees":[{"uri":"file:///tmp/project%d"}], "platform":{"clientVersion":"1.0.0"}}}
+}`, i, i, i, i, i)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("T-%d.json", i)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sessions, err := discoverSessionsFromDir(dir, sessionPath, model.NewSessionCache())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 5 {
+		t.Fatalf("got %d sessions, want 5", len(sessions))
+	}
+
+	ids := make(map[string]bool)
+	for _, s := range sessions {
+		ids[s.SessionID] = true
+		if s.Agent != "amp" {
+			t.Errorf("session %s: Agent = %q, want amp", s.SessionID, s.Agent)
+		}
+		if s.UserMessages != 1 || s.AssistantMessages != 1 {
+			t.Errorf("session %s: messages = (%d,%d), want (1,1)", s.SessionID, s.UserMessages, s.AssistantMessages)
+		}
+	}
+	if len(ids) != 5 {
+		t.Errorf("got %d unique session IDs, want 5", len(ids))
 	}
 }
 
