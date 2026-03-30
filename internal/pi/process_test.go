@@ -1,6 +1,7 @@
 package pi
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -100,6 +101,48 @@ func TestDiscoverSessions_EmptyDir(t *testing.T) {
 	}
 	if len(sessions) != 0 {
 		t.Errorf("got %d sessions, want 0", len(sessions))
+	}
+}
+
+func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create multiple project dirs with sessions to exercise parallel parsing.
+	for i := 0; i < 5; i++ {
+		projectDir := filepath.Join(dir, fmt.Sprintf("--home-user-project%d--", i))
+		if err := os.MkdirAll(projectDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		content := fmt.Sprintf(`{"type":"session","version":3,"id":"sess-%d","timestamp":"2026-03-09T10:00:00.000Z","cwd":"/home/user/project%d"}
+{"type":"message","id":"m1","parentId":null,"timestamp":"2026-03-09T10:00:01.000Z","message":{"role":"user","content":"Hello from %d","timestamp":1741514401000}}
+{"type":"message","id":"m2","parentId":"m1","timestamp":"2026-03-09T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi %d"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"input":0.0003,"output":0.00075,"cacheRead":0,"cacheWrite":0,"total":0.00105}},"stopReason":"stop","timestamp":1741514402000}}
+`, i, i, i, i)
+		if err := os.WriteFile(filepath.Join(projectDir, fmt.Sprintf("sess-%d.jsonl", i)), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sessions, err := discoverSessionsFromDir(dir, model.NewSessionCache())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 5 {
+		t.Fatalf("got %d sessions, want 5", len(sessions))
+	}
+
+	// Verify all sessions were parsed correctly.
+	ids := make(map[string]bool)
+	for _, s := range sessions {
+		ids[s.SessionID] = true
+		if s.Agent != "pi" {
+			t.Errorf("session %s: Agent = %q, want pi", s.SessionID, s.Agent)
+		}
+		if s.UserMessages != 1 || s.AssistantMessages != 1 {
+			t.Errorf("session %s: messages = (%d,%d), want (1,1)", s.SessionID, s.UserMessages, s.AssistantMessages)
+		}
+	}
+	if len(ids) != 5 {
+		t.Errorf("got %d unique session IDs, want 5", len(ids))
 	}
 }
 

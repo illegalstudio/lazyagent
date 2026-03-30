@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -129,14 +130,34 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, con
 	return sessions, nil
 }
 
+// parseJob holds the input for a single JSONL file parse operation.
+type parseJob struct {
+	jsonlFile  string
+	dirName    string // project directory name for CWD fallback
+	cached     *model.Session
+	offset     int64
+	mtime      time.Time
+}
+
+// parseResult holds the output of a single JSONL file parse operation.
+type parseResult struct {
+	session   *model.Session
+	jsonlFile string
+	mtime     time.Time
+	newOffset int64
+}
+
 // discoverInDir scans a single projects directory for JSONL session files
 // and appends discovered sessions to the provided slice.
+// Files that need parsing (cache miss or incremental update) are parsed in parallel.
 func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[string]wtInfo, seen map[string]struct{}, sessions []*model.Session) []*model.Session {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		return sessions // Directory may not exist; skip it
 	}
 
+	// Phase 1: collect all JSONL files and classify as cache-hit or needs-parse.
+	var jobs []parseJob
 	for _, projectEntry := range entries {
 		if !projectEntry.IsDir() {
 			continue
@@ -149,38 +170,91 @@ func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[st
 
 		for _, jsonlFile := range jsonlFiles {
 			seen[jsonlFile] = struct{}{}
-
 			cached, offset, mtime := cache.GetIncremental(jsonlFile)
-			var session *model.Session
-			switch {
-			case cached != nil && offset == 0:
-				session = cached
-			case cached != nil && offset > 0:
-				s, newOffset, err := ParseJSONLIncremental(jsonlFile, offset, cached)
-				if err != nil {
-					continue
-				}
-				session = s
-				if session.CWD == "" {
-					session.CWD = decodeDirName(projectEntry.Name())
-				}
-				enrichWorktree(session, wtCache)
-				cache.Put(jsonlFile, mtime, newOffset, session)
-			default:
-				s, size, err := ParseJSONL(jsonlFile)
-				if err != nil {
-					continue
-				}
-				session = s
-				if session.CWD == "" {
-					session.CWD = decodeDirName(projectEntry.Name())
-				}
-				enrichWorktree(session, wtCache)
-				cache.Put(jsonlFile, mtime, size, session)
-			}
 
-			sessions = append(sessions, session)
+			if cached != nil && offset == 0 {
+				// Full cache hit — no parsing needed.
+				sessions = append(sessions, cached)
+				continue
+			}
+			jobs = append(jobs, parseJob{
+				jsonlFile: jsonlFile,
+				dirName:   projectEntry.Name(),
+				cached:    cached,
+				offset:    offset,
+				mtime:     mtime,
+			})
 		}
+	}
+
+	if len(jobs) == 0 {
+		return sessions
+	}
+
+	// Phase 2: parse files in parallel.
+	workers := runtime.GOMAXPROCS(0)
+	if workers > len(jobs) {
+		workers = len(jobs)
+	}
+
+	results := make([]parseResult, len(jobs))
+	var wg sync.WaitGroup
+	jobCh := make(chan int, len(jobs))
+
+	for i := range jobs {
+		jobCh <- i
+	}
+	close(jobCh)
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobCh {
+				j := &jobs[idx]
+				var session *model.Session
+				var newOffset int64
+
+				if j.cached != nil && j.offset > 0 {
+					s, off, err := ParseJSONLIncremental(j.jsonlFile, j.offset, j.cached)
+					if err != nil {
+						continue
+					}
+					session = s
+					newOffset = off
+				} else {
+					s, size, err := ParseJSONL(j.jsonlFile)
+					if err != nil {
+						continue
+					}
+					session = s
+					newOffset = size
+				}
+
+				if session.CWD == "" {
+					session.CWD = decodeDirName(j.dirName)
+				}
+
+				results[idx] = parseResult{
+					session:   session,
+					jsonlFile: j.jsonlFile,
+					mtime:     j.mtime,
+					newOffset: newOffset,
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Phase 3: enrich worktree info and update cache (sequential — wtCache is not thread-safe
+	// and enrichWorktree may fork git processes).
+	for _, r := range results {
+		if r.session == nil {
+			continue
+		}
+		enrichWorktree(r.session, wtCache)
+		cache.Put(r.jsonlFile, r.mtime, r.newOffset, r.session)
+		sessions = append(sessions, r.session)
 	}
 	return sessions
 }

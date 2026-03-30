@@ -4,12 +4,14 @@ import "encoding/json"
 
 // piEntry is the top-level JSONL line structure for pi sessions.
 // Fields are flat because different entry types use different subsets.
+// The Message field is kept as json.RawMessage so non-message entries
+// skip the expensive nested struct allocation entirely.
 type piEntry struct {
-	Type      string     `json:"type"`
-	ID        string     `json:"id"`
-	ParentID  *string    `json:"parentId"`
-	Timestamp string     `json:"timestamp"`
-	Message   *piMessage `json:"message"`
+	Type      string          `json:"type"`
+	ID        string          `json:"id"`
+	ParentID  *string         `json:"parentId"`
+	Timestamp string          `json:"timestamp"`
+	RawMsg    json.RawMessage `json:"message"`
 
 	// session header fields
 	Version int    `json:"version"`
@@ -29,6 +31,25 @@ type piEntry struct {
 
 	// session_info fields
 	Name string `json:"name"`
+
+	// Parsed lazily from RawMsg only for "message" entries.
+	message *piMessage
+}
+
+// parseMessage deserializes the RawMsg field into a piMessage.
+func (e *piEntry) parseMessage() *piMessage {
+	if e.message != nil {
+		return e.message
+	}
+	if len(e.RawMsg) == 0 || e.RawMsg[0] == 'n' { // null
+		return nil
+	}
+	var m piMessage
+	if json.Unmarshal(e.RawMsg, &m) != nil {
+		return nil
+	}
+	e.message = &m
+	return e.message
 }
 
 // piMessage represents a message within a pi entry.
