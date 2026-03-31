@@ -77,8 +77,9 @@ func discoverSessionsFromDir(threadsDir, sessionPath string, cache *model.Sessio
 		path := filepath.Join(threadsDir, entry.Name())
 		seen[path] = struct{}{}
 
-		cached, _, mtime := cache.GetIncremental(path)
-		if cached != nil {
+		cached, offset, mtime := cache.GetIncremental(path)
+		if cached != nil && offset == 0 {
+			// Full cache hit — file unchanged.
 			sessions = append(sessions, cached)
 			continue
 		}
@@ -355,6 +356,9 @@ func ParseThread(path, lastThreadID string) (*model.Session, int64, error) {
 	}
 
 	session.TotalMessages = session.UserMessages + session.AssistantMessages
+	if session.TotalMessages == 0 {
+		return nil, 0, fmt.Errorf("empty thread (no messages)")
+	}
 	session.LastActivity = lastTs
 	session.Status = ampStatus(lastKind)
 	if session.Status == model.StatusExecutingTool {
