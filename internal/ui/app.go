@@ -35,6 +35,10 @@ type editorFinishedMsg struct{ err error }
 
 // Model is the main bubbletea model.
 type Model struct {
+	theme    Theme
+	sty      styles
+	actColors map[core.ActivityKind]lipgloss.Color
+
 	manager  *core.SessionManager
 	cursor   int
 	selectedID   string // session ID of the currently selected item
@@ -107,11 +111,15 @@ var keys = keyMap{
 
 func NewModel(provider core.SessionProvider) Model {
 	cfg := core.LoadConfig()
+	t := LoadTheme(cfg.TUI.Theme)
 	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
 	_ = mgr.StartWatcher()
 	return Model{
-		loading: true,
-		manager: mgr,
+		theme:     t,
+		sty:       newStyles(t),
+		actColors: activityColorMap(t),
+		loading:   true,
+		manager:   mgr,
 	}
 }
 
@@ -606,44 +614,44 @@ func (m Model) View() string {
 		opt0 := "  " + visual + "  (GUI)"
 		opt1 := "  " + editor + "  (TUI)"
 		if m.editorPickerCursor == 0 {
-			opt0 = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorText).Bold(true).Render("▸ " + visual + "  (GUI)")
-			opt1 = lipgloss.NewStyle().Foreground(colorSubtext).Render(opt1)
+			opt0 = lipgloss.NewStyle().Background(m.theme.SelectionBg).Foreground(m.theme.Text).Bold(true).Render("▸ " + visual + "  (GUI)")
+			opt1 = lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(opt1)
 		} else {
-			opt0 = lipgloss.NewStyle().Foreground(colorSubtext).Render(opt0)
-			opt1 = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorText).Bold(true).Render("▸ " + editor + "  (TUI)")
+			opt0 = lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(opt0)
+			opt1 = lipgloss.NewStyle().Background(m.theme.SelectionBg).Foreground(m.theme.Text).Bold(true).Render("▸ " + editor + "  (TUI)")
 		}
 
-		title := lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Open with:")
-		hint := lipgloss.NewStyle().Foreground(colorMuted).Render("↑/↓ select  enter confirm  esc cancel")
+		title := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render("Open with:")
+		hint := lipgloss.NewStyle().Foreground(m.theme.Muted).Render("↑/↓ select  enter confirm  esc cancel")
 		body := title + "\n\n" + opt0 + "\n" + opt1 + "\n\n" + hint
 
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorderFocus).
-			Background(lipgloss.Color("#1F2937")).
-			Foreground(colorText).
+			BorderForeground(m.theme.BorderFocus).
+			Background(m.theme.ModalBg).
+			Foreground(m.theme.Text).
 			Padding(1, 3).
 			Render(body)
 
 		out = lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
 			box,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+			lipgloss.WithWhitespaceBackground(m.theme.OverlayBg),
 		)
 	}
 
 	// Overlay rename input.
 	if m.renameMode {
-		title := lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Rename session:")
-		input := lipgloss.NewStyle().Foreground(colorAccent).Render(m.renameInput + "█")
-		hint := lipgloss.NewStyle().Foreground(colorMuted).Render("enter confirm  esc cancel  empty = reset")
+		title := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render("Rename session:")
+		input := lipgloss.NewStyle().Foreground(m.theme.Accent).Render(m.renameInput + "█")
+		hint := lipgloss.NewStyle().Foreground(m.theme.Muted).Render("enter confirm  esc cancel  empty = reset")
 		body := title + "\n\n" + input + "\n\n" + hint
 
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorderFocus).
-			Background(lipgloss.Color("#1F2937")).
-			Foreground(colorText).
+			BorderForeground(m.theme.BorderFocus).
+			Background(m.theme.ModalBg).
+			Foreground(m.theme.Text).
 			Padding(1, 3).
 			Width(40).
 			Render(body)
@@ -651,26 +659,26 @@ func (m Model) View() string {
 		out = lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
 			box,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+			lipgloss.WithWhitespaceBackground(m.theme.OverlayBg),
 		)
 	}
 
 	// Overlay flash message centered over the existing UI.
 	if m.flashMsg != "" {
-		dismiss := lipgloss.NewStyle().Foreground(colorMuted).Render("Press any key to continue")
+		dismiss := lipgloss.NewStyle().Foreground(m.theme.Muted).Render("Press any key to continue")
 		body := m.flashMsg + "\n\n" + dismiss
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorWarning).
-			Background(lipgloss.Color("#1F2937")).
-			Foreground(colorText).
+			BorderForeground(m.theme.Warning).
+			Background(m.theme.ModalBg).
+			Foreground(m.theme.Text).
 			Padding(1, 3).
 			Render(body)
 
 		out = lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
 			box,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color("#111827")),
+			lipgloss.WithWhitespaceBackground(m.theme.OverlayBg),
 		)
 	}
 
@@ -682,9 +690,9 @@ func (m Model) renderTitleBar() string {
 	if version.Version != "dev" {
 		title += " v" + version.Version
 	}
-	left := titleStyle.Render(title)
+	left := m.sty.title.Render(title)
 	count := lipgloss.NewStyle().
-		Background(colorPrimary).Foreground(colorSubtext).
+		Background(m.theme.Primary).Foreground(m.theme.TitleSubtext).
 		Padding(0, 1).
 		Render(fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.manager.WindowMinutes()))
 
@@ -692,21 +700,21 @@ func (m Model) renderTitleBar() string {
 
 	if af := m.manager.ActivityFilter(); af != "" {
 		filterBadge := lipgloss.NewStyle().
-			Background(colorPrimary).Foreground(colorWarning).Bold(true).
+			Background(m.theme.Primary).Foreground(m.theme.TitleWarning).Bold(true).
 			Padding(0, 1).
 			Render("▸ " + string(af))
 		parts = append(parts, filterBadge)
 	}
 
 	refresh := lipgloss.NewStyle().
-		Background(colorPrimary).Foreground(colorMuted).
+		Background(m.theme.Primary).Foreground(m.theme.TitleMuted).
 		Padding(0, 1).
 		Render("updated " + core.FormatDuration(time.Since(m.lastRefresh)))
 	parts = append(parts, refresh)
 
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 	return lipgloss.NewStyle().
-		Background(colorPrimary).
+		Background(m.theme.Primary).
 		Width(m.width).
 		Render(bar)
 }
@@ -716,21 +724,21 @@ func (m Model) renderTitleBar() string {
 const statusColW = 11 // "processing" = 10 chars + 1 padding
 
 func (m Model) renderList(listW, innerH int) string {
-	pStyle := panelStyle
+	pStyle := m.sty.panel
 	if m.focus == 0 {
-		pStyle = panelFocusStyle
+		pStyle = m.sty.panelFocus
 	}
 
 	sessions := m.visible
 
 	if m.loading && len(sessions) == 0 {
 		return pStyle.Width(listW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(colorMuted).Render("loading..."),
+			lipgloss.NewStyle().Foreground(m.theme.Muted).Render("loading..."),
 		)
 	}
 	if len(sessions) == 0 && !m.searchMode {
 		return pStyle.Width(listW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(colorMuted).Render("no sessions found"),
+			lipgloss.NewStyle().Foreground(m.theme.Muted).Render("no sessions found"),
 		)
 	}
 
@@ -760,24 +768,24 @@ func (m Model) renderList(listW, innerH int) string {
 
 	var header string
 	if m.searchMode {
-		header = lipgloss.NewStyle().Foreground(colorWarning).Bold(true).
+		header = lipgloss.NewStyle().Foreground(m.theme.Warning).Bold(true).
 			Render("/ " + m.searchQuery + "█")
 	} else {
 		projectLabel := "PROJECT"
 		if af := m.manager.ActivityFilter(); af != "" {
 			projectLabel += " [" + string(af) + "]"
 		}
-		header = lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).
+		header = lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).
 			Render(fmt.Sprintf("%-*s %s", nameW+sparkW, projectLabel, "STATUS"))
 	}
-	divider := lipgloss.NewStyle().Foreground(colorBorder).
+	divider := lipgloss.NewStyle().Foreground(m.theme.Border).
 		Render(strings.Repeat("─", listW))
 
 	var rows []string
 	rows = append(rows, header, divider)
 
 	if len(sessions) == 0 {
-		rows = append(rows, lipgloss.NewStyle().Foreground(colorMuted).Render("no results"))
+		rows = append(rows, lipgloss.NewStyle().Foreground(m.theme.Muted).Render("no results"))
 		return pStyle.Width(listW).Height(innerH).Render(strings.Join(rows, "\n"))
 	}
 
@@ -790,9 +798,9 @@ func (m Model) renderList(listW, innerH int) string {
 
 func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool) string {
 	activity := m.manager.ActivityFor(s.SessionID)
-	actColor, ok := activityColors[activity]
+	actColor, ok := m.actColors[activity]
 	if !ok {
-		actColor = colorMuted
+		actColor = m.theme.Muted
 	}
 
 	actStr := core.PadRight(string(activity), statusColW)
@@ -839,13 +847,13 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 		sparkStr = " " + spark + " "
 	}
 
-	nameStyle := lipgloss.NewStyle().Foreground(colorSubtext)
+	nameStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 	actStyle := lipgloss.NewStyle().Foreground(actColor)
 	sparkStyle := actStyle
 	if selected {
-		nameStyle = nameStyle.Background(colorSelBg).Foreground(colorText).Bold(true)
-		sparkStyle = sparkStyle.Background(colorSelBg)
-		actStyle = actStyle.Background(colorSelBg).Bold(true)
+		nameStyle = nameStyle.Background(m.theme.SelectionBg).Foreground(m.theme.Text).Bold(true)
+		sparkStyle = sparkStyle.Background(m.theme.SelectionBg)
+		actStyle = actStyle.Background(m.theme.SelectionBg).Bold(true)
 	}
 
 	return nameStyle.Render(name) + sparkStyle.Render(sparkStr) + actStyle.Render(actStr)
@@ -854,19 +862,19 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 // ── Detail panel ─────────────────────────────────────────────────────────────
 
 func (m Model) renderDetail(detailW, innerH int) string {
-	pStyle := panelStyle
+	pStyle := m.sty.panel
 	if m.focus == 1 {
-		pStyle = panelFocusStyle
+		pStyle = m.sty.panelFocus
 	}
 
 	if m.err != nil && len(m.visible) == 0 {
 		return pStyle.Width(detailW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(colorWarning).Render("error: "+m.err.Error()),
+			lipgloss.NewStyle().Foreground(m.theme.Warning).Render("error: "+m.err.Error()),
 		)
 	}
 	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
 		return pStyle.Width(detailW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(colorMuted).Render("select a session"),
+			lipgloss.NewStyle().Foreground(m.theme.Muted).Render("select a session"),
 		)
 	}
 
@@ -899,23 +907,23 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	if detailTitle == "" {
 		detailTitle = core.ShortName(s.CWD, width-2)
 	}
-	add(lipgloss.NewStyle().Foreground(colorText).Bold(true).Render(detailTitle))
+	add(lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(detailTitle))
 
 	activity := m.manager.ActivityFor(s.SessionID)
-	actColor := activityColors[activity]
+	actColor := m.actColors[activity]
 	statusLine := lipgloss.NewStyle().Foreground(actColor).Bold(true).Render("● ") +
 		lipgloss.NewStyle().Foreground(actColor).Bold(true).Render(string(activity))
 	if s.CurrentTool != "" {
-		statusLine += "  " + lipgloss.NewStyle().Foreground(colorMuted).
+		statusLine += "  " + lipgloss.NewStyle().Foreground(m.theme.Muted).
 			Render("(" + s.CurrentTool + ")")
 	}
 	add(statusLine)
 	add("")
-	add(lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", width-2)))
+	add(lipgloss.NewStyle().Foreground(m.theme.Border).Render(strings.Repeat("─", width-2)))
 	add("")
 
 	row := func(label, value string) string {
-		return labelStyle.Render(label) + valueStyle.Render(value)
+		return m.sty.label.Render(label) + m.sty.value.Render(value)
 	}
 
 	if s.SessionID != "" {
@@ -949,18 +957,18 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		add(row("Git Branch", s.GitBranch))
 	}
 	if s.RemoteURL != "" {
-		remoteVal := lipgloss.NewStyle().Foreground(colorAccent).Render(s.RemoteURL)
+		remoteVal := lipgloss.NewStyle().Foreground(m.theme.Accent).Render(s.RemoteURL)
 		if time.Since(m.copiedAt) < 2*time.Second {
-			remoteVal += lipgloss.NewStyle().Foreground(colorMuted).Render("  copied!")
+			remoteVal += lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  copied!")
 		}
 		add(row("Remote", remoteVal))
 	}
 
 	wtStr := "no"
 	if s.IsWorktree {
-		wtStr = lipgloss.NewStyle().Foreground(colorAccent).Render("yes")
+		wtStr = lipgloss.NewStyle().Foreground(m.theme.Accent).Render("yes")
 		if s.MainRepo != "" {
-			wtStr += lipgloss.NewStyle().Foreground(colorSubtext).
+			wtStr += lipgloss.NewStyle().Foreground(m.theme.Subtext).
 				Render(" (" + core.ShortName(s.MainRepo, 28) + ")")
 		}
 	}
@@ -973,7 +981,7 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		cost := core.EffectiveCost(s.Model, s.CostUSD, s.InputTokens, s.OutputTokens, s.CacheCreationTokens, s.CacheReadTokens)
 		tokenInfo := core.FormatTokens(s.InputTokens+s.CacheCreationTokens+s.CacheReadTokens) + " in / " + core.FormatTokens(s.OutputTokens) + " out"
 		if cost > 0.001 {
-			tokenInfo += "  " + lipgloss.NewStyle().Foreground(colorAccent).Render(core.FormatCost(cost))
+			tokenInfo += "  " + lipgloss.NewStyle().Foreground(m.theme.Accent).Render(core.FormatCost(cost))
 		}
 		add(row("Tokens", tokenInfo))
 	}
@@ -981,7 +989,7 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	if len(s.RecentTools) > 0 {
 		last := s.RecentTools[len(s.RecentTools)-1]
 		add(row("Last operation", last.Name+"  "+
-			lipgloss.NewStyle().Foreground(colorMuted).Render("("+core.FormatDuration(time.Since(last.Timestamp))+")")))
+			lipgloss.NewStyle().Foreground(m.theme.Muted).Render("("+core.FormatDuration(time.Since(last.Timestamp))+")")))
 	} else {
 		add(row("Last operation", core.FormatDuration(time.Since(s.LastActivity))))
 	}
@@ -993,13 +1001,13 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 			maxFile = 4
 		}
 		filePart := core.ShortName(s.LastFileWrite, maxFile)
-		add(row("Last file", filePart+lipgloss.NewStyle().Foreground(colorMuted).Render(agePart)))
+		add(row("Last file", filePart+lipgloss.NewStyle().Foreground(m.theme.Muted).Render(agePart)))
 	}
 
 	if len(s.RecentMessages) > 0 {
 		add("")
-		add(lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", width-2)))
-		add(lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).Render("Conversation"))
+		add(lipgloss.NewStyle().Foreground(m.theme.Border).Render(strings.Repeat("─", width-2)))
+		add(lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).Render("Conversation"))
 		add("")
 		msgs := s.RecentMessages
 		if len(msgs) > 5 {
@@ -1024,15 +1032,15 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 			if len(text) > msgW {
 				text = text[:msgW-1] + "…"
 			}
-			add(lipgloss.NewStyle().Foreground(colorSubtext).Render("  "+role+"  ") +
-				lipgloss.NewStyle().Foreground(colorText).Render(text))
+			add(lipgloss.NewStyle().Foreground(m.theme.Subtext).Render("  "+role+"  ") +
+				lipgloss.NewStyle().Foreground(m.theme.Text).Render(text))
 		}
 	}
 
 	if len(s.RecentTools) > 0 {
 		add("")
-		add(lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", width-2)))
-		add(lipgloss.NewStyle().Foreground(colorSubtext).Bold(true).Render("Recent Tools"))
+		add(lipgloss.NewStyle().Foreground(m.theme.Border).Render(strings.Repeat("─", width-2)))
+		add(lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).Render("Recent Tools"))
 		add("")
 		tools := s.RecentTools
 		if len(tools) > 20 {
@@ -1041,8 +1049,8 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		for i := len(tools) - 1; i >= 0; i-- {
 			tc := tools[i]
 			ago := core.FormatDuration(time.Since(tc.Timestamp))
-			add(lipgloss.NewStyle().Foreground(colorPrimary).Render("  "+tc.Name) +
-				lipgloss.NewStyle().Foreground(colorMuted).Render("  "+ago))
+			add(lipgloss.NewStyle().Foreground(m.theme.Primary).Render("  "+tc.Name) +
+				lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  "+ago))
 		}
 	}
 
@@ -1055,41 +1063,41 @@ func (m Model) renderHelp() string {
 	var parts []string
 	if m.searchMode {
 		parts = []string{
-			helpKeyStyle.Render("esc") + helpStyle.Render(" clear"),
-			helpKeyStyle.Render("backspace") + helpStyle.Render(" del"),
+			m.sty.helpKey.Render("esc") + m.sty.help.Render(" clear"),
+			m.sty.helpKey.Render("backspace") + m.sty.help.Render(" del"),
 		}
-		return helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
+		return m.sty.help.Width(m.width).Render(strings.Join(parts, "  "))
 	}
 
 	if m.focus == 0 {
 		parts = append(parts,
-			helpKeyStyle.Render("k/↑")+helpStyle.Render(" prev"),
-			helpKeyStyle.Render("j/↓")+helpStyle.Render(" next"),
-			helpKeyStyle.Render("tab")+helpStyle.Render(" detail"),
-			helpKeyStyle.Render("click")+helpStyle.Render(" select"),
+			m.sty.helpKey.Render("k/↑")+m.sty.help.Render(" prev"),
+			m.sty.helpKey.Render("j/↓")+m.sty.help.Render(" next"),
+			m.sty.helpKey.Render("tab")+m.sty.help.Render(" detail"),
+			m.sty.helpKey.Render("click")+m.sty.help.Render(" select"),
 		)
 	} else {
 		parts = append(parts,
-			helpKeyStyle.Render("k/↑")+helpStyle.Render(" scroll up"),
-			helpKeyStyle.Render("j/↓")+helpStyle.Render(" scroll dn"),
-			helpKeyStyle.Render("tab")+helpStyle.Render(" list"),
-			helpKeyStyle.Render("click")+helpStyle.Render(" focus"),
+			m.sty.helpKey.Render("k/↑")+m.sty.help.Render(" scroll up"),
+			m.sty.helpKey.Render("j/↓")+m.sty.help.Render(" scroll dn"),
+			m.sty.helpKey.Render("tab")+m.sty.help.Render(" list"),
+			m.sty.helpKey.Render("click")+m.sty.help.Render(" focus"),
 		)
 	}
 	parts = append(parts,
-		helpKeyStyle.Render("scroll")+helpStyle.Render(" navigate"),
-		helpKeyStyle.Render("+/-")+helpStyle.Render(" mins"),
-		helpKeyStyle.Render("f")+helpStyle.Render(" filter"),
-		helpKeyStyle.Render("/")+helpStyle.Render(" search"),
-		helpKeyStyle.Render("o")+helpStyle.Render(" open"),
-		helpKeyStyle.Render("r")+helpStyle.Render(" rename"),
-		helpKeyStyle.Render("q")+helpStyle.Render(" quit"),
+		m.sty.helpKey.Render("scroll")+m.sty.help.Render(" navigate"),
+		m.sty.helpKey.Render("+/-")+m.sty.help.Render(" mins"),
+		m.sty.helpKey.Render("f")+m.sty.help.Render(" filter"),
+		m.sty.helpKey.Render("/")+m.sty.help.Render(" search"),
+		m.sty.helpKey.Render("o")+m.sty.help.Render(" open"),
+		m.sty.helpKey.Render("r")+m.sty.help.Render(" rename"),
+		m.sty.helpKey.Render("q")+m.sty.help.Render(" quit"),
 	)
-	helpLine := helpStyle.Width(m.width).Render(strings.Join(parts, "  "))
+	helpLine := m.sty.help.Width(m.width).Render(strings.Join(parts, "  "))
 	if m.updateVersion != "" {
 		updateLine := lipgloss.NewStyle().
-			Foreground(colorAccent).
-			Background(lipgloss.Color("#111827")).
+			Foreground(m.theme.Accent).
+			Background(m.theme.HelpBg).
 			Width(m.width).
 			Render(fmt.Sprintf("  ↑ lazyagent %s available — https://github.com/illegalstudio/lazyagent/releases", m.updateVersion))
 		return updateLine + "\n" + helpLine
