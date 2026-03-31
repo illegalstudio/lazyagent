@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/illegalstudio/lazyagent/internal/amp"
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
@@ -131,6 +132,29 @@ func (p *CodexProvider) WatchDirs() []string {
 	return nil
 }
 
+// AmpProvider discovers Amp CLI sessions from local thread JSON files.
+type AmpProvider struct {
+	cache *model.SessionCache
+}
+
+// NewAmpProvider creates an AmpProvider.
+func NewAmpProvider() *AmpProvider {
+	return &AmpProvider{cache: model.NewSessionCache()}
+}
+
+func (p *AmpProvider) DiscoverSessions() ([]*model.Session, error) {
+	return amp.DiscoverSessions(p.cache)
+}
+
+func (p *AmpProvider) UseWatcher() bool               { return false }
+func (p *AmpProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *AmpProvider) WatchDirs() []string {
+	if d := amp.ThreadsDir(); d != "" {
+		return []string{d}
+	}
+	return nil
+}
+
 // BuildProvider creates a SessionProvider based on agent mode and config.
 // When agentMode is "all", it reads the agents config to decide which providers
 // to include. A specific agentMode (e.g. "claude") overrides the config.
@@ -146,6 +170,8 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		return NewCursorProvider()
 	case "codex":
 		return NewCodexProvider()
+	case "amp":
+		return NewAmpProvider()
 	default: // "all"
 		var providers []SessionProvider
 		if cfg.AgentEnabled("claude") {
@@ -162,6 +188,9 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		}
 		if cfg.AgentEnabled("codex") {
 			providers = append(providers, NewCodexProvider())
+		}
+		if cfg.AgentEnabled("amp") {
+			providers = append(providers, NewAmpProvider())
 		}
 		if len(providers) == 0 {
 			// All disabled — return a no-op provider.

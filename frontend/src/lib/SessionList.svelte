@@ -102,6 +102,7 @@
             {:else if session.agent === "opencode"}<span class="text-subtext">O</span>
             {:else if session.agent === "cursor"}<span class="text-subtext">C</span>
             {:else if session.agent === "codex"}<span class="text-subtext">X</span>
+            {:else if session.agent === "amp"}<span class="text-subtext">A</span>
             {:else if session.source === "desktop"}<span class="text-accent">D</span>
             {/if}
             {session.customName || session.agentName || session.shortName}

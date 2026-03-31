@@ -33,6 +33,7 @@ func DefaultConfig() Config {
 			"opencode": true,
 			"cursor":   true,
 			"codex":    true,
+			"amp":      true,
 		},
 	}
 }
