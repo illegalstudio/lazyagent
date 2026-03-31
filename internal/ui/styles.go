@@ -2,49 +2,47 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
-var (
-	// Colors
-	colorPrimary     = lipgloss.Color("#7C3AED")
-	colorAccent      = lipgloss.Color("#10B981")
-	colorWarning     = lipgloss.Color("#F59E0B")
-	colorMuted       = lipgloss.Color("#6B7280")
-	colorText        = lipgloss.Color("#F9FAFB")
-	colorSubtext     = lipgloss.Color("#9CA3AF")
-	colorBorder      = lipgloss.Color("#374151")
-	colorBorderFocus = lipgloss.Color("#7C3AED")
-	colorSelBg       = lipgloss.Color("#3730A3") // visible indigo selection
+// styles holds pre-built lipgloss styles derived from a Theme.
+type styles struct {
+	panel      lipgloss.Style
+	panelFocus lipgloss.Style
+	label      lipgloss.Style
+	value      lipgloss.Style
+	help       lipgloss.Style
+	helpKey    lipgloss.Style
+	title      lipgloss.Style
+}
 
-	// Panels: border only, no padding (avoids width overflow)
-	panelStyle = lipgloss.NewStyle().
+func newStyles(t Theme) styles {
+	return styles{
+		panel: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorder)
+			BorderForeground(t.Border),
 
-	panelFocusStyle = lipgloss.NewStyle().
+		panelFocus: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorderFocus)
+			BorderForeground(t.BorderFocus),
 
-	// Detail panel labels
-	labelStyle = lipgloss.NewStyle().
-			Foreground(colorSubtext).
-			Width(22)
+		label: lipgloss.NewStyle().
+			Foreground(t.Subtext).
+			Width(22),
 
-	valueStyle = lipgloss.NewStyle().
-			Foreground(colorText)
+		value: lipgloss.NewStyle().
+			Foreground(t.Text),
 
-	// Help bar
-	helpStyle = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			Background(lipgloss.Color("#111827"))
+		help: lipgloss.NewStyle().
+			Foreground(t.Muted).
+			Background(t.HelpBg),
 
-	helpKeyStyle = lipgloss.NewStyle().
-			Foreground(colorText).
-			Background(lipgloss.Color("#1F2937")).
-			Padding(0, 1)
+		helpKey: lipgloss.NewStyle().
+			Foreground(t.Text).
+			Background(t.HelpKeyBg).
+			Padding(0, 1),
 
-	// Title bar
-	titleStyle = lipgloss.NewStyle().
-			Foreground(colorText).
-			Background(colorPrimary).
+		title: lipgloss.NewStyle().
+			Foreground(t.TitleText).
+			Background(t.Primary).
 			Bold(true).
-			Padding(0, 1)
-)
+			Padding(0, 1),
+	}
+}

@@ -6,6 +6,11 @@ import (
 	"path/filepath"
 )
 
+// TUIConfig holds TUI-specific settings.
+type TUIConfig struct {
+	Theme string `json:"theme"` // "dark" (default) or "light"
+}
+
 // Config holds application settings shared by TUI and GUI.
 type Config struct {
 	WindowMinutes  int             `json:"window_minutes"`
@@ -16,6 +21,7 @@ type Config struct {
 	NotifyAfterSec int             `json:"notify_after_sec"`
 	Agents         map[string]bool `json:"agents"`
 	ClaudeDirs     []string        `json:"claude_dirs,omitempty"`
+	TUI            TUIConfig       `json:"tui"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -35,6 +41,7 @@ func DefaultConfig() Config {
 			"codex":    true,
 			"amp":      true,
 		},
+		TUI: TUIConfig{Theme: "dark"},
 	}
 }
 
