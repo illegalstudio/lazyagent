@@ -102,13 +102,6 @@ export function IsPinned(): $CancellablePromise<boolean> {
 }
 
 /**
- * TogglePin toggles always-on-top for the detached window.
- */
-export function TogglePin(): $CancellablePromise<void> {
-    return $Call.ByID(2605085233);
-}
-
-/**
  * OpenInEditor opens a directory in the user's editor.
  * For Cursor sessions, it opens Cursor IDE directly.
  * Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
@@ -152,6 +145,13 @@ export function SetSessionName(sessionID: string, name: string): $CancellablePro
  */
 export function SetWindowMinutes(m: number): $CancellablePromise<void> {
     return $Call.ByID(75887259, m);
+}
+
+/**
+ * TogglePin toggles always-on-top for the detached window.
+ */
+export function TogglePin(): $CancellablePromise<void> {
+    return $Call.ByID(2605085233);
 }
 
 // Private type creation functions
