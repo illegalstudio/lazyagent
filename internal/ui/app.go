@@ -64,8 +64,9 @@ type Model struct {
 	// Flash message (modal popup, dismissed by any key)
 	flashMsg string
 
-	// Inline "copied!" indicator for remote URL
-	copiedAt time.Time
+	// Inline "copied!" indicator
+	copiedAt    time.Time
+	copiedField string // "remote" or "resume"
 
 	// Update notification shown in footer
 	updateVersion string
@@ -92,7 +93,8 @@ type keyMap struct {
 	Filter key.Binding
 	Search key.Binding
 	Esc    key.Binding
-	Open   key.Binding
+	Open key.Binding
+	Copy key.Binding
 }
 
 var keys = keyMap{
@@ -107,6 +109,7 @@ var keys = keyMap{
 	Search: key.NewBinding(key.WithKeys("/")),
 	Esc:    key.NewBinding(key.WithKeys("esc")),
 	Open:   key.NewBinding(key.WithKeys("o")),
+	Copy:   key.NewBinding(key.WithKeys("c")),
 }
 
 func NewModel(provider core.SessionProvider) Model {
@@ -426,6 +429,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case key.Matches(msg, keys.Copy):
+			if len(m.visible) > 0 && m.cursor < len(m.visible) {
+				s := m.visible[m.cursor]
+				if cmd := core.ResumeCommand(s.Agent, s.SessionID); cmd != "" {
+					if core.CopyToClipboard(cmd) == nil {
+						m.copiedAt = time.Now()
+						m.copiedField = "resume"
+					}
+				}
+			}
+
 		case key.Matches(msg, keys.Search):
 			m.searchMode = true
 		}
@@ -508,11 +522,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 			// Copy remote URL to clipboard on detail panel click.
 			if m.cursor >= 0 && m.cursor < len(m.visible) {
 				if u := m.visible[m.cursor].RemoteURL; u != "" {
-					if cmd := exec.Command("pbcopy"); cmd != nil {
-						cmd.Stdin = strings.NewReader(u)
-						if cmd.Run() == nil {
-							m.copiedAt = time.Now()
-						}
+					if core.CopyToClipboard(u) == nil {
+						m.copiedAt = time.Now()
+						m.copiedField = "remote"
 					}
 				}
 			}
@@ -958,10 +970,17 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 	}
 	if s.RemoteURL != "" {
 		remoteVal := lipgloss.NewStyle().Foreground(m.theme.Accent).Render(s.RemoteURL)
-		if time.Since(m.copiedAt) < 2*time.Second {
+		if m.copiedField == "remote" && time.Since(m.copiedAt) < 2*time.Second {
 			remoteVal += lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  copied!")
 		}
 		add(row("Remote", remoteVal))
+	}
+	if cmd := core.ResumeCommand(s.Agent, s.SessionID); cmd != "" {
+		resumeVal := lipgloss.NewStyle().Foreground(m.theme.Accent).Render(cmd)
+		if m.copiedField == "resume" && time.Since(m.copiedAt) < 2*time.Second {
+			resumeVal += lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  copied!")
+		}
+		add(row("Resume", resumeVal))
 	}
 
 	wtStr := "no"
@@ -1090,6 +1109,7 @@ func (m Model) renderHelp() string {
 		m.sty.helpKey.Render("f")+m.sty.help.Render(" filter"),
 		m.sty.helpKey.Render("/")+m.sty.help.Render(" search"),
 		m.sty.helpKey.Render("o")+m.sty.help.Render(" open"),
+		m.sty.helpKey.Render("c")+m.sty.help.Render(" copy cmd"),
 		m.sty.helpKey.Render("r")+m.sty.help.Render(" rename"),
 		m.sty.helpKey.Render("q")+m.sty.help.Render(" quit"),
 	)
