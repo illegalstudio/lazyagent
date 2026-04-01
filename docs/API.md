@@ -101,7 +101,8 @@ Get full details for a specific session.
   "recent_messages": [
     {"role": "user", "text": "Add the API endpoint", "timestamp": "2026-03-08T15:28:00Z"},
     {"role": "assistant", "text": "I'll create the endpoint...", "timestamp": "2026-03-08T15:28:05Z"}
-  ]
+  ],
+  "resume_command": "claude --resume abc123"
 }
 ```
 

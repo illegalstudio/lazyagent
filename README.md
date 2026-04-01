@@ -68,6 +68,7 @@ It also surfaces:
 | Session source (CLI / Desktop) | Desktop metadata |
 | Desktop session title | Desktop metadata |
 | Permission mode (Desktop) | Desktop metadata |
+| Resume command | Computed per agent |
 | Custom session name | `~/.config/lazyagent/session-names.json` |
 
 ## Three interfaces, one binary
@@ -146,6 +147,7 @@ lazyagent --help                 Show help
 | `f` | Cycle activity filter |
 | `/` | Search sessions by project path |
 | `o` | Open session CWD in editor (see below) |
+| `c` | Copy resume command to clipboard |
 | `r` | Rename session (empty name resets) |
 | `q` / `ctrl+c` | Quit |
 
