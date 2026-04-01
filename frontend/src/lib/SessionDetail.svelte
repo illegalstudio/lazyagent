@@ -181,6 +181,19 @@
             </a>
           </dd>
         {/if}
+        {#if detail.resumeCommand}
+          <dt class="text-subtext">Resume</dt>
+          <dd class="text-text truncate flex items-center gap-1">
+            <code class="text-accent text-[11px]">{detail.resumeCommand}</code>
+            <button
+              class="rounded px-1.5 py-0.5 text-[10px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
+              onclick={() => navigator.clipboard.writeText(detail.resumeCommand)}
+              title="Copy resume command"
+            >
+              Copy
+            </button>
+          </dd>
+        {/if}
         {#if detail.lastFileWrite}
           <dt class="text-subtext">Last file</dt>
           <dd class="text-text truncate">

@@ -16,6 +16,8 @@ export class Config {
     "notifications": boolean;
     "notify_after_sec": number;
     "agents": { [_ in string]?: boolean };
+    "claude_dirs"?: string[];
+    "tui": TUIConfig;
 
     /** Creates a new Config instance. */
     constructor($$source: Partial<Config> = {}) {
@@ -40,6 +42,9 @@ export class Config {
         if (!("agents" in $$source)) {
             this["agents"] = {};
         }
+        if (!("tui" in $$source)) {
+            this["tui"] = (new TUIConfig());
+        }
 
         Object.assign(this, $$source);
     }
@@ -49,13 +54,50 @@ export class Config {
      */
     static createFrom($$source: any = {}): Config {
         const $$createField6_0 = $$createType0;
+        const $$createField7_0 = $$createType1;
+        const $$createField8_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField6_0($$parsedSource["agents"]);
+        }
+        if ("claude_dirs" in $$parsedSource) {
+            $$parsedSource["claude_dirs"] = $$createField7_0($$parsedSource["claude_dirs"]);
+        }
+        if ("tui" in $$parsedSource) {
+            $$parsedSource["tui"] = $$createField8_0($$parsedSource["tui"]);
         }
         return new Config($$parsedSource as Partial<Config>);
     }
 }
 
+/**
+ * TUIConfig holds TUI-specific settings.
+ */
+export class TUIConfig {
+    /**
+     * "dark" (default) or "light"
+     */
+    "theme": string;
+
+    /** Creates a new TUIConfig instance. */
+    constructor($$source: Partial<TUIConfig> = {}) {
+        if (!("theme" in $$source)) {
+            this["theme"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TUIConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): TUIConfig {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TUIConfig($$parsedSource as Partial<TUIConfig>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Map($Create.Any, $Create.Any);
+const $$createType1 = $Create.Array($Create.Any);
+const $$createType2 = TUIConfig.createFrom;
