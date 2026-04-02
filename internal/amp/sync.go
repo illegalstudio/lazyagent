@@ -150,26 +150,38 @@ func localMessageCount(path string) int {
 	return strings.Count(string(data), `"messageId"`)
 }
 
-// exportThread runs `amp threads export <id>` and writes the output to path.
+// exportThread runs `amp threads export <id>` and writes stdout directly to path.
+// Writing directly to a file avoids pipe buffer limits that truncate cmd.Output().
 func exportThread(ampPath, threadID, path string) {
-	cmd := exec.Command(ampPath, "threads", "export", threadID, "--no-color")
-	cmd.Env = append(os.Environ(), "NO_COLOR=1")
-	out, err := cmd.Output()
-	if err != nil || len(out) == 0 {
-		return
-	}
-
 	// Ensure directory exists.
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
 	}
 
-	// Write atomically via temp file.
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+	f, err := os.Create(tmp)
+	if err != nil {
+		return
+	}
+
+	cmd := exec.Command(ampPath, "threads", "export", threadID, "--no-color")
+	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	cmd.Stdout = f
+	err = cmd.Run()
+	f.Close()
+
+	if err != nil {
 		os.Remove(tmp)
 		return
 	}
+
+	// Verify we got something non-empty.
+	info, err := os.Stat(tmp)
+	if err != nil || info.Size() == 0 {
+		os.Remove(tmp)
+		return
+	}
+
 	os.Rename(tmp, path)
 }
