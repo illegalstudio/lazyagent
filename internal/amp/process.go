@@ -33,7 +33,11 @@ func SessionPath() string {
 }
 
 // DiscoverSessions scans Amp's local thread store for session files.
+// It also syncs remote threads via `amp threads export` for newer Amp versions
+// that no longer write local JSON files.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
+	// Sync remote threads to local files (throttled, runs at most every 30s).
+	SyncRemoteThreads()
 	return discoverSessionsFromDir(ThreadsDir(), SessionPath(), cache)
 }
 
