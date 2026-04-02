@@ -34,7 +34,7 @@ lazyagent watches session data from coding agents to determine what each session
 - **Claude Code Desktop** — same JSONL files, enriched with session metadata (title, permissions) from `~/Library/Application Support/Claude/claude-code-sessions/`
 - **Cursor** — reads SQLite from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
 - **Codex CLI** — reads JSONL from `~/.codex/sessions/YYYY/MM/DD/*.jsonl`
-- **Amp CLI** — reads thread JSON from `~/.local/share/amp/threads/*.json`
+- **Amp CLI** — reads thread JSON from `~/.local/share/amp/threads/*.json` (newer versions that no longer write local files are supported via periodic `amp threads export` sync)
 - **pi coding agent** — reads JSONL from `~/.pi/agent/sessions/*/`
 - **OpenCode** — reads SQLite from `~/.local/share/opencode/opencode.db`
 
