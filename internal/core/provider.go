@@ -147,7 +147,7 @@ func (p *AmpProvider) DiscoverSessions() ([]*model.Session, error) {
 }
 
 func (p *AmpProvider) UseWatcher() bool               { return false }
-func (p *AmpProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *AmpProvider) RefreshInterval() time.Duration { return 60 * time.Second }
 func (p *AmpProvider) WatchDirs() []string {
 	if d := amp.ThreadsDir(); d != "" {
 		return []string{d}

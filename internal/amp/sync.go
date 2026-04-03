@@ -19,7 +19,7 @@ var syncState struct {
 	knownCounts map[string]int
 }
 
-const syncInterval = 15 * time.Second
+const syncInterval = 60 * time.Second
 
 // SyncRemoteThreads checks for new or updated threads via `amp threads list`
 // and exports any that have changed to the local threads directory.
