@@ -102,7 +102,7 @@ Supported agents: %s
 	}
 
 	if len(candidates) == 0 {
-		fmt.Println("No matching chat sessions found.")
+		printNothingToPrune()
 		return 0
 	}
 
@@ -115,10 +115,11 @@ Supported agents: %s
 		return 0
 	}
 
-	// Real delete: show summary, ask for confirmation, then delete.
+	// Real delete: show summary, disclaimer, ask for confirmation, then delete.
 	printSummaryTable(candidates)
 	if !opts.yes {
-		if !confirm(fmt.Sprintf("\nDelete %d session(s)?", len(candidates))) {
+		printDestructiveDisclaimer()
+		if !confirm(fmt.Sprintf("Delete %d session(s)?", len(candidates))) {
 			fmt.Println("Aborted.")
 			return 0
 		}
