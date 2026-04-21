@@ -131,8 +131,27 @@ lazyagent --tui --api            Launch TUI + API server
 lazyagent --gui                  Launch as macOS menu bar app (detaches)
 lazyagent --gui --api            Launch GUI + API server (foreground)
 lazyagent --tui --gui --api      Launch everything
+lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent --help                 Show help
 ```
+
+### Prune
+
+Over time, each agent accumulates chat transcripts for projects you no longer touch — or for folders you deleted entirely. `lazyagent prune` sweeps them up.
+
+```
+lazyagent prune --days 30                      # delete sessions older than 30 days
+lazyagent prune --orphaned                     # delete sessions whose project folder is gone
+lazyagent prune --days 30 --orphaned           # both filters (OR)
+lazyagent prune --days 30 --dry-run            # preview: one row per (agent, project)
+lazyagent prune --days 30 --dry-run-verbose    # preview: one row per file
+lazyagent prune --days 30 --agent claude,codex # limit to specific agents
+lazyagent prune --days 30 --yes                # skip the confirmation prompt
+```
+
+If `--agent` is omitted, an interactive checkbox picker appears (space to toggle, enter to confirm).
+
+Supported agents: **claude**, **pi**, **codex**. Amp is skipped because its local files are re-synced from the remote; Cursor and OpenCode store sessions inside third-party SQLite databases and are not yet supported.
 
 ### TUI
 

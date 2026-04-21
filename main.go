@@ -15,6 +15,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/api"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/prune"
 	"github.com/illegalstudio/lazyagent/internal/tray"
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
@@ -23,6 +24,12 @@ import (
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
 func main() {
+	// Subcommands are parsed before the global flag set so they get their own
+	// FlagSet and don't collide with lazyagent's mode flags.
+	if len(os.Args) > 1 && os.Args[1] == "prune" {
+		os.Exit(prune.Run(os.Args[2:]))
+	}
+
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	guiMode := flag.Bool("gui", false, "Launch as macOS menu bar app")
 	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app (deprecated: use --gui)")
@@ -51,6 +58,10 @@ Usage:
   lazyagent --gui --api         Launch GUI + API server (foreground)
   lazyagent --tui --gui --api   Launch everything
   lazyagent --demo              Launch with fake data (for screenshots)
+
+Subcommands:
+  lazyagent prune --days N      Delete chat sessions older than N days
+  lazyagent prune --help        Show prune options (--orphaned, --dry-run, ...)
 
 Flags:
 `, version.String())
