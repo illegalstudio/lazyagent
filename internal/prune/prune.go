@@ -8,7 +8,6 @@
 package prune
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/illegalstudio/lazyagent/internal/chatops"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
@@ -119,7 +119,7 @@ Supported agents: %s
 	printSummaryTable(candidates)
 	if !opts.yes {
 		printDestructiveDisclaimer()
-		if !confirm(fmt.Sprintf("Delete %d session(s)?", len(candidates))) {
+		if !chatops.Confirm(fmt.Sprintf("Delete %d session(s)?", len(candidates))) {
 			fmt.Println("Aborted.")
 			return 0
 		}
@@ -247,15 +247,3 @@ func isOrphan(cwd string) bool {
 	return !info.IsDir()
 }
 
-// confirm reads a y/N answer from stdin. Returns false on any other input
-// or on read error.
-func confirm(prompt string) bool {
-	fmt.Printf("%s [y/N]: ", prompt)
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
-}

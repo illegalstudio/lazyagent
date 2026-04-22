@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/illegalstudio/lazyagent/internal/chatops"
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -77,7 +78,7 @@ func executeDelete(candidates []Candidate) (int, int) {
 }
 
 func deleteClaudeSession(s *model.Session, roots []string, desktopRoot string) error {
-	if err := ensureWithin(s.JSONLPath, roots); err != nil {
+	if err := chatops.EnsureWithin(s.JSONLPath, roots); err != nil {
 		return err
 	}
 	if err := os.Remove(s.JSONLPath); err != nil {
@@ -95,7 +96,7 @@ func deletePiSession(s *model.Session, root string) error {
 	if root == "" {
 		return fmt.Errorf("pi sessions directory not found")
 	}
-	if err := ensureWithin(s.JSONLPath, []string{root}); err != nil {
+	if err := chatops.EnsureWithin(s.JSONLPath, []string{root}); err != nil {
 		return err
 	}
 	return os.Remove(s.JSONLPath)
@@ -105,40 +106,10 @@ func deleteCodexSession(s *model.Session, root string) error {
 	if root == "" {
 		return fmt.Errorf("codex sessions directory not found")
 	}
-	if err := ensureWithin(s.JSONLPath, []string{root}); err != nil {
+	if err := chatops.EnsureWithin(s.JSONLPath, []string{root}); err != nil {
 		return err
 	}
 	return os.Remove(s.JSONLPath)
-}
-
-// ensureWithin guards against deleting files outside the known agent roots.
-// It resolves both the target and each root via filepath.Abs and checks that
-// the target sits inside one of them.
-func ensureWithin(target string, roots []string) error {
-	if target == "" {
-		return fmt.Errorf("empty file path")
-	}
-	absTarget, err := filepath.Abs(target)
-	if err != nil {
-		return fmt.Errorf("resolve target: %w", err)
-	}
-	for _, r := range roots {
-		if r == "" {
-			continue
-		}
-		absRoot, err := filepath.Abs(r)
-		if err != nil {
-			continue
-		}
-		rel, err := filepath.Rel(absRoot, absTarget)
-		if err != nil {
-			continue
-		}
-		if rel == "." || (!strings.HasPrefix(rel, "..") && !strings.HasPrefix(rel, string(filepath.Separator))) {
-			return nil
-		}
-	}
-	return fmt.Errorf("refusing to delete %s: outside expected agent directories", target)
 }
 
 // removeDesktopSidecar scans the desktop sessions directory for JSON files
@@ -255,7 +226,7 @@ func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, cod
 		if err != nil {
 			continue
 		}
-		if !isBelowAny(absDir, roots) {
+		if !chatops.IsBelowAny(absDir, roots) {
 			continue
 		}
 		entries, err := os.ReadDir(absDir)
@@ -264,25 +235,4 @@ func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, cod
 		}
 		_ = os.Remove(absDir)
 	}
-}
-
-func isBelowAny(path string, roots []string) bool {
-	for _, r := range roots {
-		absRoot, err := filepath.Abs(r)
-		if err != nil {
-			continue
-		}
-		if path == absRoot {
-			// Never delete the root itself.
-			return false
-		}
-		rel, err := filepath.Rel(absRoot, path)
-		if err != nil {
-			continue
-		}
-		if !strings.HasPrefix(rel, "..") && !strings.HasPrefix(rel, string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
 }
