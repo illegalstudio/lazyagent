@@ -14,6 +14,15 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 >
 > 💛 Loving it? Consider [becoming a sponsor](https://github.com/sponsors/nahime0) to keep the project alive and growing.
 
+## News
+
+📢 **Chat maintenance is here!** Two new subcommands keep your agent transcripts under control:
+
+- **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
+- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
+
+Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
+
 ## Why lazyagent?
 
 Unlike other tools, lazyagent doesn't replace your workflow — it watches it. Launch agents wherever you want (terminal, IDE, desktop app), lazyagent just observes. No lock-in, no server, no account required.
