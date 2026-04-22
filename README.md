@@ -132,6 +132,7 @@ lazyagent --gui                  Launch as macOS menu bar app (detaches)
 lazyagent --gui --api            Launch GUI + API server (foreground)
 lazyagent --tui --gui --api      Launch everything
 lazyagent prune --days N         Delete chat sessions older than N days
+lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent --help                 Show help
 ```
 
@@ -152,6 +153,32 @@ lazyagent prune --days 30 --yes                # skip the confirmation prompt
 If `--agent` is omitted, an interactive checkbox picker appears (space to toggle, enter to confirm).
 
 Supported agents: **claude**, **pi**, **codex**. Amp is skipped because its local files are re-synced from the remote; Cursor and OpenCode store sessions inside third-party SQLite databases and are not yet supported.
+
+### Compact
+
+Old conversations are mostly dead weight: tool outputs, file-backup snapshots, embedded screenshots and multi-megabyte thinking blocks add up fast while contributing little to the conversation. `compact` rewrites each JSONL in place, truncating values above a threshold while keeping the message graph intact — sessions remain resumable with the originating agent.
+
+```
+lazyagent compact                              # interactive agent picker + dry-run summary first
+lazyagent compact --agent claude --dry-run     # preview group totals before/after
+lazyagent compact --agent claude --dry-run-verbose  # one row per file
+lazyagent compact --agent claude --days 14     # only sessions idle ≥14 days
+lazyagent compact --threshold-kb 20            # looser cut (default 10 KiB)
+lazyagent compact --min-size-kb 2048           # only files ≥2 MiB (default 512 KiB)
+lazyagent compact --no-backup                  # skip the .bak sidecar (default writes one)
+lazyagent compact --yes                        # skip the destructive-op disclaimer
+```
+
+What gets truncated (Claude Code): `toolUseResult.stdout`, `originalFile`, `file.content`, tool `content[].text`, `message.content[].thinking` (2× threshold), nested `source.data` (base64 images). Codex: `payload.output`, `payload.result`, `payload.content[].text`, `payload.arguments`.
+
+Safety:
+
+- Every rewrite validates its line count against the original — any mismatch aborts and leaves the file untouched.
+- A `.bak` sidecar is written before each rewrite unless `--no-backup` is passed.
+- Active sessions (touched in the last 5 minutes) and sub-agent transcripts are skipped.
+- File permissions are preserved.
+
+Supported agents: **claude**, **codex**.
 
 ### TUI
 

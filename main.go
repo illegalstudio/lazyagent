@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
+	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/prune"
@@ -26,8 +27,13 @@ var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 func main() {
 	// Subcommands are parsed before the global flag set so they get their own
 	// FlagSet and don't collide with lazyagent's mode flags.
-	if len(os.Args) > 1 && os.Args[1] == "prune" {
-		os.Exit(prune.Run(os.Args[2:]))
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "prune":
+			os.Exit(prune.Run(os.Args[2:]))
+		case "compact":
+			os.Exit(compact.Run(os.Args[2:]))
+		}
 	}
 
 	showVersion := flag.Bool("version", false, "Print version and exit")
@@ -62,6 +68,8 @@ Usage:
 Subcommands:
   lazyagent prune --days N      Delete chat sessions older than N days
   lazyagent prune --help        Show prune options (--orphaned, --dry-run, ...)
+  lazyagent compact             Shrink sessions by truncating bulky tool outputs
+  lazyagent compact --help      Show compact options (--threshold-kb, --dry-run, ...)
 
 Flags:
 `, version.String())
