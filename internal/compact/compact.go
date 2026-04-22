@@ -23,6 +23,7 @@ import (
 // JSONL schema.
 var supportedAgents = []chatops.Agent{
 	{Key: "claude", Label: "Claude Code", Color: "#E7A15E"},
+	{Key: "pi", Label: "pi coding agent", Color: "#F38BA8"},
 	{Key: "codex", Label: "Codex CLI", Color: "#A6E3A1"},
 }
 

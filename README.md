@@ -169,7 +169,11 @@ lazyagent compact --no-backup                  # skip the .bak sidecar (default 
 lazyagent compact --yes                        # skip the destructive-op disclaimer
 ```
 
-What gets truncated (Claude Code): `toolUseResult.stdout`, `originalFile`, `file.content`, tool `content[].text`, `message.content[].thinking` (2× threshold), nested `source.data` (base64 images). Codex: `payload.output`, `payload.result`, `payload.content[].text`, `payload.arguments`.
+What gets truncated:
+
+- **Claude Code** — `toolUseResult.stdout`, `originalFile`, `file.content`, tool `content[].text`, `message.content[].thinking` (2× threshold), nested `source.data` (base64 images)
+- **pi** — `message.content[]` text/thinking/thinkingSignature/arguments, `message.details.truncation.content`, oversized `summary`
+- **Codex** — `payload.output`, `payload.result`, `payload.content[].text`, `payload.arguments`, `payload.message`
 
 Safety:
 
@@ -178,7 +182,7 @@ Safety:
 - Active sessions (touched in the last 5 minutes) and sub-agent transcripts are skipped.
 - File permissions are preserved.
 
-Supported agents: **claude**, **codex**.
+Supported agents: **claude**, **pi**, **codex**.
 
 ### TUI
 

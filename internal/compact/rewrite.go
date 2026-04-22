@@ -29,6 +29,8 @@ func mutatorFor(agent string) lineMutator {
 		return compactClaudeLine
 	case "codex":
 		return compactCodexLine
+	case "pi":
+		return compactPiLine
 	default:
 		return func(map[string]any, int64) int64 { return 0 }
 	}
