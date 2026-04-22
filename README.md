@@ -73,9 +73,13 @@ lazyagent --help                 Show full help
 
 Full documentation — supported agents, activity states, keybindings, configuration, the HTTP API, the `prune` and `compact` maintenance commands, and architecture — lives at:
 
-- **[lazyagent.dev/docs](https://lazyagent.dev/docs)** — rendered documentation
-- [`docs/`](docs/) — source in this repository
-- [`docs/API.md`](docs/API.md) — full HTTP API reference
+- **[lazyagent.dev/docs](https://lazyagent.dev/docs)** — rendered website
+- [`docs/`](docs/) — Markdown sources in this repository, organized by topic:
+  - [Getting started](docs/getting-started/) — install, quickstart
+  - [Concepts](docs/concepts/) — how it works, supported agents, activity states, session info
+  - [Interfaces](docs/interfaces/) — terminal UI, macOS GUI, HTTP API
+  - [Maintenance](docs/maintenance/) — `prune` and `compact` commands
+  - [Reference](docs/reference/) — configuration, architecture, development, roadmap
 
 ## License
 

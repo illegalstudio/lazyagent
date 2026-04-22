@@ -1,42 +1,41 @@
-# lazyagent docs
+---
+title: "lazyagent Documentation"
+description: "A terminal UI, macOS menu bar app, and HTTP API for monitoring every coding agent on your machine — plus maintenance commands to keep their transcripts under control."
+sidebar:
+  order: 0
+---
 
-This folder holds the public-facing documentation for lazyagent. It has two kinds of files:
+lazyagent watches session data from coding agents — [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — and shows what each one is doing in real time. No modifications to any agent are needed; it's purely observational.
 
-- **`index.astro`** — the Astro source for the [lazyagent.dev/docs](https://lazyagent.dev/docs) page. This is the single source of truth for the public docs.
-- **`API.md`** — developer-facing reference for the HTTP API, linked from the root README. Plain Markdown, lives only here.
+Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, and an HTTP API. They share the same engine and can all run at once. Two maintenance subcommands, `prune` and `compact`, clean up old or oversized transcripts.
 
-## Why keep the Astro source inside the lazyagent repo?
+## Getting Started
 
-The website repo (`lazyagent.dev`) tracks this one upstream. Whenever a feature lands here we update `docs/index.astro` in the same commit so docs never drift from behavior. The website build then picks up the latest page from here instead of being edited independently.
+- [Installation](getting-started/installation.md) — Homebrew, Go, or build from source
+- [Quickstart](getting-started/quickstart.md) — first launch, flags, and combining interfaces
 
-## Syncing to lazyagent.dev
+## Concepts
 
-When you want to publish an update, copy `docs/index.astro` from this repo into the website repo:
+- [How it works](concepts/how-it-works.md) — the observational model and the shared core
+- [Supported agents](concepts/supported-agents.md) — paths, prefixes, and per-agent quirks
+- [Activity states](concepts/activity-states.md) — the state machine behind the color-coded labels
+- [Session info](concepts/session-info.md) — every field lazyagent surfaces, and where it comes from
 
-```bash
-# From the root of illegal.studio workspace
-cp lazyagent/docs/index.astro lazyagent.dev/src/pages/docs/index.astro
+## Interfaces
 
-# Update the upstream pointer so the website records the synced commit
-cd lazyagent.dev
-git log -1 --pretty=format:'%H' ../lazyagent > /tmp/synced-sha
-sed -i '' "s/Last synced commit:.*/Last synced commit: \`$(cat /tmp/synced-sha)\` ($(date +%Y-%m-%d))/" UPSTREAM.md
-git add src/pages/docs/index.astro UPSTREAM.md
-git commit -m "docs: sync from lazyagent"
-```
+- [Terminal UI](interfaces/terminal-ui.md) — the default, bubbletea-powered TUI
+- [macOS GUI](interfaces/macos-gui.md) — the detachable menu bar panel
+- [HTTP API](interfaces/http-api.md) — REST + Server-Sent Events, with the interactive playground
 
-## Layout dependencies
+## Maintenance
 
-`index.astro` imports `DocsLayout`, `DocsNav`, and `Footer` from the website repo's `src/layouts/` and `src/components/`. Those are site-wide chrome and live only in `lazyagent.dev` — the import paths (`../../layouts/…`, `../../components/…`) are written to resolve from `lazyagent.dev/src/pages/docs/index.astro`, so copying the file straight in keeps everything wired up.
+- [Prune old sessions](maintenance/prune.md) — delete chat files by age or orphaned-project filter
+- [Compact session files](maintenance/compact.md) — truncate bulky tool outputs and thinking blocks in place
 
-If those layout files change in a way that breaks the page (new required props, etc.), update `index.astro` in this repo to match, then sync.
+## Reference
 
-## Local preview
-
-To preview changes you made here:
-
-```bash
-cp lazyagent/docs/index.astro lazyagent.dev/src/pages/docs/index.astro
-cd lazyagent.dev
-npm run dev  # Astro dev server, usually http://localhost:4321
-```
+- [Editor support](reference/editor-support.md) — how `$VISUAL` / `$EDITOR` are resolved
+- [Configuration](reference/configuration.md) — `~/.config/lazyagent/config.json` field by field
+- [Architecture](reference/architecture.md) — module map of the codebase
+- [Development](reference/development.md) — build targets and dependencies
+- [Roadmap](reference/roadmap.md) — shipped features and what's next
