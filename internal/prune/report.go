@@ -17,22 +17,31 @@ var reasonStyles = map[string]lipgloss.Style{
 	"old":      lipgloss.NewStyle().Foreground(lipgloss.Color("#FAB387")),
 }
 
-// printSummaryTable groups candidates by (agent, project) and prints one row
-// per group with count and oldest/newest activity.
-func printSummaryTable(candidates []Candidate) {
-	type key struct {
-		agent   string
-		project string
-	}
+// summaryGroup is one row of the grouped dry-run / pre-confirmation table.
+// RawCWD is kept separate from the displayed project so the index selection
+// can filter candidates back by the original value.
+type summaryGroup struct {
+	Agent   string
+	RawCWD  string
+	Project string
+	Count   int
+	Oldest  time.Time
+	Newest  time.Time
+}
+
+// buildSummaryGroups collapses candidates into one entry per (agent, CWD).
+// Groups are sorted by agent then project so the numbering is stable
+// across runs on the same data.
+func buildSummaryGroups(candidates []Candidate) []summaryGroup {
+	type key struct{ agent, cwd string }
 	type bucket struct {
 		count  int
 		oldest time.Time
 		newest time.Time
 	}
-
 	buckets := make(map[key]*bucket)
 	for _, c := range candidates {
-		k := key{agent: c.Session.Agent, project: displayProject(c.Session.CWD)}
+		k := key{agent: c.Session.Agent, cwd: c.Session.CWD}
 		b, ok := buckets[k]
 		if !ok {
 			b = &bucket{}
@@ -56,25 +65,53 @@ func printSummaryTable(candidates []Candidate) {
 		if keys[i].agent != keys[j].agent {
 			return keys[i].agent < keys[j].agent
 		}
-		return keys[i].project < keys[j].project
+		return keys[i].cwd < keys[j].cwd
 	})
 
-	t := chatops.NewTable().Headers("AGENT", "PROJECT", "COUNT", "OLDEST", "NEWEST")
+	groups := make([]summaryGroup, 0, len(keys))
 	for _, k := range keys {
 		b := buckets[k]
+		groups = append(groups, summaryGroup{
+			Agent:   k.agent,
+			RawCWD:  k.cwd,
+			Project: displayProject(k.cwd),
+			Count:   b.count,
+			Oldest:  b.oldest,
+			Newest:  b.newest,
+		})
+	}
+	return groups
+}
+
+// filterByGroup keeps only candidates that belong to the chosen group.
+func filterByGroup(candidates []Candidate, g summaryGroup) []Candidate {
+	out := make([]Candidate, 0, g.Count)
+	for _, c := range candidates {
+		if c.Session.Agent == g.Agent && c.Session.CWD == g.RawCWD {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// printSummaryTable prints the (agent, project) grouped table with a 1-based
+// `#` column so the user can pick a single row at the confirmation prompt.
+func printSummaryTable(candidates []Candidate, groups []summaryGroup) {
+	t := chatops.NewTable().Headers("#", "AGENT", "PROJECT", "COUNT", "OLDEST", "NEWEST")
+	for i, g := range groups {
 		t.Row(
-			chatops.StyleAgent.Render(k.agent),
-			k.project,
-			chatops.StyleCount.Render(fmt.Sprintf("%d", b.count)),
-			chatops.StyleMuted.Render(formatWhen(b.oldest)),
-			chatops.StyleMuted.Render(formatWhen(b.newest)),
+			chatops.StyleMuted.Render(fmt.Sprintf("%d", i+1)),
+			chatops.StyleAgent.Render(g.Agent),
+			g.Project,
+			chatops.StyleCount.Render(fmt.Sprintf("%d", g.Count)),
+			chatops.StyleMuted.Render(formatWhen(g.Oldest)),
+			chatops.StyleMuted.Render(formatWhen(g.Newest)),
 		)
 	}
-
 	fmt.Println(t)
 	fmt.Println(chatops.StyleFooter.Render(fmt.Sprintf(
 		"Total: %d session(s) across %d project group(s) — %s on disk.",
-		len(candidates), len(buckets), chatops.HumanBytes(totalBytes(candidates)),
+		len(candidates), len(groups), chatops.HumanBytes(totalBytes(candidates)),
 	)))
 }
 

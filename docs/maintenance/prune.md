@@ -103,11 +103,23 @@ Total: 26 session(s) — 3.9 MiB on disk.
 
 The two flags are mutually exclusive.
 
-## Confirmation and safety
+## Confirmation
 
-Real runs print the summary first, then a red disclaimer box, then a `y/N` prompt. Answering anything other than `y`/`yes` aborts.
+Real runs print the summary (with a numbered `#` column next to every project group), then the red disclaimer box, then a prompt that accepts three forms:
 
-The disclaimer can be skipped with `--yes` for scripted runs.
+```
+Delete N session(s)? Enter y for all, a row # to target a single project, or N to abort [y/N/#]:
+```
+
+| Input | Effect |
+|-------|--------|
+| `y` / `yes` | Delete every candidate in the table |
+| Row number (1-based, from the `#` column) | Delete only the sessions in that group, leave the rest |
+| `n` / empty / anything else / EOF | Abort without deleting anything |
+
+Out-of-range numbers are treated as abort — the command is never run with an ambiguous intent. When you pick a row, lazyagent prints a one-line confirmation (`Selected row 3: claude  /path/to/project  (4 session(s))`) before it starts deleting.
+
+The disclaimer and prompt are both skipped when `--yes` is passed, which is the right behavior for scripted runs (`--yes` always acts on every candidate — the per-row picker is interactive only).
 
 ### What's safe
 

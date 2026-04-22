@@ -122,6 +122,24 @@ pi       /Users/me/projects/pi-exp               2      2.1 MiB    1.0 MiB   1.1
 Total: 41 file(s) — 307.5 MiB → 220.9 MiB (86.6 MiB reclaimed).
 ```
 
+## Confirmation
+
+Real runs print the summary (with a numbered `#` column next to every project group), then the disclaimer box, then a prompt that accepts three forms:
+
+```
+Compact N file(s)? Enter y for all, a row # to target a single project, or N to abort [y/N/#]:
+```
+
+| Input | Effect |
+|-------|--------|
+| `y` / `yes` | Compact every candidate in the table |
+| Row number (1-based, from the `#` column) | Compact only the files in that group |
+| `n` / empty / anything else / EOF | Abort without rewriting anything |
+
+Out-of-range numbers abort. When you pick a row, lazyagent prints a one-line confirmation (`Selected row 3: claude  /path/to/project  (4 file(s))`) before the rewrite starts.
+
+The disclaimer and prompt are both skipped with `--yes`, which always acts on every candidate — the per-row picker is interactive only.
+
 ## Safety
 
 - **Line-count validation** — the rewrite is aborted if the line count changes, leaving the original file untouched.

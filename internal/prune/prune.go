@@ -106,22 +106,37 @@ Supported agents: %s
 		return 0
 	}
 
+	groups := buildSummaryGroups(candidates)
+
 	if opts.dryVerbose {
 		printVerboseTable(candidates)
 		return 0
 	}
 	if opts.dryRun {
-		printSummaryTable(candidates)
+		printSummaryTable(candidates, groups)
 		return 0
 	}
 
 	// Real delete: show summary, disclaimer, ask for confirmation, then delete.
-	printSummaryTable(candidates)
+	printSummaryTable(candidates, groups)
 	if !opts.yes {
 		printDestructiveDisclaimer()
-		if !chatops.Confirm(fmt.Sprintf("Delete %d session(s)?", len(candidates))) {
+		choice := chatops.ConfirmOrPick(
+			fmt.Sprintf("Delete %d session(s)? Enter y for all, a row # to target a single project, or N to abort",
+				len(candidates)),
+			len(groups),
+		)
+		switch choice.Kind {
+		case chatops.ChoiceAbort:
 			fmt.Println("Aborted.")
 			return 0
+		case chatops.ChoiceIndex:
+			g := groups[choice.Index-1]
+			candidates = filterByGroup(candidates, g)
+			fmt.Printf("\nSelected row %d: %s  %s  (%d session(s))\n",
+				choice.Index, g.Agent, g.Project, g.Count)
+		case chatops.ChoiceAll:
+			// proceed with every candidate
 		}
 	}
 
