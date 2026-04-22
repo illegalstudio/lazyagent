@@ -1,0 +1,721 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import Footer from '../../components/Footer.astro';
+
+const toc = [
+  { id: "how-it-works", label: "How it works", depth: 0 },
+  { id: "supported-agents", label: "Supported agents", depth: 1 },
+  { id: "activity-states", label: "Activity states", depth: 1 },
+  { id: "session-info", label: "Session info", depth: 1 },
+  { id: "interfaces", label: "Interfaces", depth: 0 },
+  { id: "install", label: "Install", depth: 0 },
+  { id: "homebrew", label: "Homebrew", depth: 1 },
+  { id: "go", label: "Go", depth: 1 },
+  { id: "from-source", label: "From source", depth: 1 },
+  { id: "usage", label: "Usage", depth: 0 },
+  { id: "tui", label: "Terminal UI", depth: 1 },
+  { id: "gui", label: "macOS GUI", depth: 1 },
+  { id: "api", label: "HTTP API", depth: 1 },
+  { id: "editor", label: "Editor support", depth: 1 },
+  { id: "maintenance", label: "Maintenance", depth: 0 },
+  { id: "prune", label: "Prune old sessions", depth: 1 },
+  { id: "compact", label: "Compact session files", depth: 1 },
+  { id: "configuration", label: "Configuration", depth: 0 },
+  { id: "architecture", label: "Architecture", depth: 0 },
+  { id: "development", label: "Development", depth: 0 },
+  { id: "roadmap", label: "Roadmap", depth: 0 },
+];
+---
+
+<DocsLayout title="Docs - lazyagent">
+  <DocsNav />
+
+  <div class="pt-16 mx-auto max-w-7xl px-6 lg:px-10">
+    <div class="grid lg:grid-cols-[220px_1fr] gap-10 lg:gap-16 py-12 lg:py-16">
+
+      {/* ── Sidebar TOC ── */}
+      <aside class="hidden lg:block">
+        <div class="sticky top-24">
+          <p class="text-[11px] font-mono uppercase tracking-[0.2em] text-overlay0 mb-4">On this page</p>
+          <nav class="flex flex-col gap-0.5">
+            {toc.map((item) => (
+              <a
+                href={`#${item.id}`}
+                class:list={[
+                  "toc-link text-[13px] py-1 transition-colors border-l",
+                  item.depth === 0
+                    ? "pl-3 font-medium text-subtext0 hover:text-bright border-surface0 hover:border-mauve"
+                    : "pl-6 text-overlay0 hover:text-subtext0 border-surface0/50 hover:border-surface1",
+                ]}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+      </aside>
+
+      {/* ── Content ── */}
+      <main class="min-w-0">
+        <div class="mb-12">
+          <h1 class="font-display text-3xl md:text-4xl font-800 tracking-tight text-bright mb-4">Documentation</h1>
+          <p class="text-subtext0 text-[15px] leading-relaxed max-w-2xl">
+            Everything you need to install, configure, use, and maintain lazyagent — monitor your coding agent sessions (<a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">Claude Code</a> CLI &amp; Desktop, <a href="https://cursor.com/" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">Cursor</a>, <a href="https://developers.openai.com/codex/" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">Codex</a>, <a href="https://ampcode.com/" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">Amp</a>, <a href="https://pi.dev" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">pi</a>, <a href="https://opencode.ai/" target="_blank" rel="noopener noreferrer" class="text-mauve hover:underline">OpenCode</a>) and prune or compact their transcripts when they grow out of hand.
+          </p>
+        </div>
+
+        <div class="docs-content space-y-16">
+
+          {/* ══ HOW IT WORKS ══ */}
+          <section>
+            <h2 id="how-it-works">How it works</h2>
+            <p>
+              lazyagent watches session data (JSONL transcripts and SQLite databases) from coding agents to determine what each session is doing. No modifications to any agent are needed — it's purely observational.
+            </p>
+
+            <h3 id="supported-agents">Supported agents</h3>
+            <div class="grid sm:grid-cols-3 gap-2 my-4">
+              {[
+                { name: "Claude Code CLI", href: "https://claude.ai/code", path: "~/.claude/projects/*/", prefix: null, desc: "Terminal coding agent" },
+                { name: "Claude Code Desktop", href: "https://claude.ai/code", path: "~/.claude/projects/*/", prefix: "D", prefixColor: "text-sapphire bg-sapphire/10 border-sapphire/20", desc: "GUI app — enriched with title & permissions" },
+                { name: "Cursor", href: "https://cursor.com/", path: "~/Library/.../state.vscdb", prefix: "C", prefixColor: "text-green bg-green/10 border-green/20", desc: "Reads from SQLite state database" },
+                { name: "Codex CLI", href: "https://developers.openai.com/codex/", path: "~/.codex/sessions/", prefix: "X", prefixColor: "text-yellow bg-yellow/10 border-yellow/20", desc: "Reads JSONL session files" },
+                { name: "Amp CLI", href: "https://ampcode.com/", path: "~/.local/share/amp/threads/", prefix: "A", prefixColor: "text-teal bg-teal/10 border-teal/20", desc: "Reads thread JSON files (supports remote sync via amp threads export)" },
+                { name: "pi coding agent", href: "https://pi.dev", path: "~/.pi/agent/sessions/*/", prefix: "π", prefixColor: "text-mauve bg-mauve/10 border-mauve/20", desc: "Sessions shown with π prefix" },
+                { name: "OpenCode", href: "https://opencode.ai/", path: "~/.local/share/opencode/", prefix: "O", prefixColor: "text-peach bg-peach/10 border-peach/20", desc: "Reads from SQLite database" },
+              ].map((a) => (
+                <div class="flex items-start gap-3 rounded-lg border border-surface0/50 bg-surface0/20 px-3.5 py-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5">
+                      <a href={a.href} target="_blank" rel="noopener noreferrer" class="text-[13px] font-semibold text-bright hover:text-mauve transition-colors">{a.name}</a>
+                      {a.prefix && <span class={`text-[12px] font-mono border rounded px-1.5 py-0.5 ${a.prefixColor}`}>{a.prefix}</span>}
+                    </div>
+                    <code class="text-[11px] text-overlay0 block">{a.path}</code>
+                    <span class="text-[12px] text-subtext0">{a.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p>Use <code>--agent claude</code>, <code>--agent cursor</code>, <code>--agent codex</code>, <code>--agent amp</code>, <code>--agent pi</code>, <code>--agent opencode</code>, or <code>--agent all</code> (default) to control which agents are monitored. Agents can also be enabled/disabled in the config file.</p>
+
+            <h3 id="activity-states">Activity states</h3>
+            <p>From the JSONL stream, lazyagent detects activity states with color-coded labels:</p>
+            <div class="grid sm:grid-cols-2 gap-2 my-4">
+              {[
+                { state: "idle", desc: "Session file exists but no recent activity", color: "bg-overlay0" },
+                { state: "waiting", desc: "Claude responded, waiting for input", color: "bg-yellow" },
+                { state: "thinking", desc: "Claude is generating a response", color: "bg-mauve" },
+                { state: "compacting", desc: "Context compaction in progress", color: "bg-peach" },
+                { state: "reading", desc: "Reading files", color: "bg-sapphire" },
+                { state: "writing", desc: "Writing files", color: "bg-green" },
+                { state: "running", desc: "Executing commands", color: "bg-blue" },
+                { state: "searching", desc: "Searching codebase", color: "bg-lavender" },
+                { state: "browsing", desc: "Web browsing", color: "bg-sky" },
+                { state: "spawning", desc: "Spawning subagents", color: "bg-pink" },
+              ].map((s) => (
+                <div class="flex items-center gap-3 rounded-lg border border-surface0/50 bg-surface0/20 px-3.5 py-2.5">
+                  <span class={`w-2 h-2 rounded-full ${s.color} shrink-0`}></span>
+                  <div>
+                    <span class="text-[13px] font-mono font-medium text-bright">{s.state}</span>
+                    <span class="text-[12px] text-overlay0 ml-1.5">{s.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <h3 id="session-info">Session info</h3>
+            <p>For each session, lazyagent surfaces:</p>
+            <div class="overflow-x-auto">
+              <table>
+                <thead>
+                  <tr><th>Info</th><th>Source</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Working directory</td><td>JSONL</td></tr>
+                  <tr><td>Git branch</td><td>JSONL</td></tr>
+                  <tr><td>Claude version</td><td>JSONL</td></tr>
+                  <tr><td>Model used</td><td>JSONL</td></tr>
+                  <tr><td>Is git worktree</td><td>git rev-parse</td></tr>
+                  <tr><td>Main repo path (if worktree)</td><td>git worktree</td></tr>
+                  <tr><td>Message count (user/assistant)</td><td>JSONL</td></tr>
+                  <tr><td>Token usage & estimated cost</td><td>JSONL</td></tr>
+                  <tr><td>Activity sparkline (last N minutes)</td><td>JSONL</td></tr>
+                  <tr><td>Last file written</td><td>JSONL</td></tr>
+                  <tr><td>Recent conversation (last 5 messages)</td><td>JSONL</td></tr>
+                  <tr><td>Last 20 tools used</td><td>JSONL</td></tr>
+                  <tr><td>Last activity timestamp</td><td>JSONL</td></tr>
+                  <tr><td>Custom session name</td><td><code>~/.config/lazyagent/session-names.json</code></td></tr>
+                  <tr><td>Session source (CLI / Desktop)</td><td>Desktop metadata</td></tr>
+                  <tr><td>Desktop session title</td><td>Desktop metadata</td></tr>
+                  <tr><td>Permission mode (Desktop)</td><td>Desktop metadata</td></tr>
+                  <tr><td>Remote control URL</td><td>JSONL (bridge_status)</td></tr>
+                  <tr><td>Resume command</td><td>Computed per agent</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* ══ INTERFACES ══ */}
+          <section>
+            <h2 id="interfaces">Three interfaces, one binary</h2>
+            <p>lazyagent ships as a single binary with three interfaces that all share the same core engine:</p>
+            <div class="overflow-x-auto">
+              <table>
+                <thead>
+                  <tr><th></th><th>TUI</th><th>macOS GUI</th><th>HTTP API</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Interface</td><td>Terminal (bubbletea)</td><td>Native panel (Wails v3 + Svelte 5)</td><td>REST + SSE</td></tr>
+                  <tr><td>Launch</td><td><code>lazyagent</code></td><td><code>lazyagent --gui</code></td><td><code>lazyagent --api</code></td></tr>
+                  <tr><td>Dock icon</td><td>N/A</td><td>Hidden (accessory)</td><td>N/A</td></tr>
+                  <tr><td>Sparkline</td><td>Unicode braille</td><td>SVG area chart</td><td>JSON data</td></tr>
+                  <tr><td>Theme</td><td>Dark / Light (configurable)</td><td>Catppuccin Mocha</td><td>N/A</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>You can combine them freely:</p>
+            <pre><code>lazyagent --tui --gui --api</code></pre>
+          </section>
+
+          {/* ══ INSTALL ══ */}
+          <section>
+            <h2 id="install">Install</h2>
+
+            <h3 id="homebrew">Homebrew</h3>
+            <pre><code>brew tap illegalstudio/tap
+brew install lazyagent</code></pre>
+
+            <h3 id="go">Go (TUI only)</h3>
+            <pre><code>go install github.com/illegalstudio/lazyagent@latest</code></pre>
+
+            <h3 id="from-source">Build from source</h3>
+            <pre><code>git clone https://github.com/illegalstudio/lazyagent
+cd lazyagent
+
+# TUI only (no Wails/Node.js needed)
+make tui
+
+# Full build with menu bar app (requires Node.js)
+make install   # npm install (first time only)
+make build</code></pre>
+          </section>
+
+          {/* ══ USAGE ══ */}
+          <section>
+            <h2 id="usage">Usage</h2>
+            <pre><code>lazyagent                        # Terminal UI (monitors all agents)
+lazyagent --agent claude         # Monitor only Claude Code sessions
+lazyagent --agent cursor         # Monitor only Cursor sessions
+lazyagent --agent codex          # Monitor only Codex CLI sessions
+lazyagent --agent amp            # Monitor only Amp CLI sessions
+lazyagent --agent pi             # Monitor only pi coding agent sessions
+lazyagent --agent opencode       # Monitor only OpenCode sessions
+lazyagent --agent all            # Monitor all agents (default)
+lazyagent --api                  # HTTP API on 127.0.0.1:7421
+lazyagent --api --host :8080     # API on custom address
+lazyagent --tui --api            # TUI + API server
+lazyagent --gui                  # macOS GUI app (detaches)
+lazyagent --gui --api            # GUI + API (foreground)
+lazyagent --tui --gui --api      # Everything
+lazyagent prune --days N         # Delete old or orphaned chat files (see Maintenance)
+lazyagent compact                # Shrink chat files in place (see Maintenance)
+lazyagent --help                 # Show help</code></pre>
+
+            <h3 id="tui">Terminal UI</h3>
+            <p>The default interface. Full-featured TUI built with bubbletea and lipgloss.</p>
+            <div class="my-4">
+              <img src="/assets/tui.png" alt="lazyagent terminal UI" class="w-full block rounded-xl" loading="lazy" />
+            </div>
+
+            <h4>Keybindings</h4>
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Key</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><kbd>&uarr;</kbd> / <kbd>k</kbd></td><td>Move up / scroll up</td></tr>
+                  <tr><td><kbd>&darr;</kbd> / <kbd>j</kbd></td><td>Move down / scroll down</td></tr>
+                  <tr><td><kbd>tab</kbd></td><td>Switch focus between panels</td></tr>
+                  <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Adjust time window (&plusmn;10 minutes)</td></tr>
+                  <tr><td><kbd>f</kbd></td><td>Cycle activity filter</td></tr>
+                  <tr><td><kbd>/</kbd></td><td>Search sessions by project path</td></tr>
+                  <tr><td><kbd>o</kbd></td><td>Open session CWD in editor</td></tr>
+                  <tr><td><kbd>c</kbd></td><td>Copy resume command to clipboard</td></tr>
+                  <tr><td><kbd>r</kbd></td><td>Rename session (empty resets)</td></tr>
+                  <tr><td><kbd>q</kbd> / <kbd>ctrl+c</kbd></td><td>Quit</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 id="gui">macOS GUI</h3>
+            <pre><code>lazyagent --gui</code></pre>
+            <p>
+              The GUI process detaches automatically — your terminal returns immediately. The app lives in your menu bar with no Dock icon. Click the tray icon to toggle the panel.
+            </p>
+            <p>
+              The panel can be <strong>detached</strong> from the menu bar and moved freely around the screen. Once detached, it can also be <strong>pinned on top</strong> of other windows so it stays visible while you work.
+            </p>
+
+            <div class="my-4">
+              <img src="/assets/tray.png" alt="lazyagent macOS menu bar app" class="w-full block rounded-xl" loading="lazy" />
+            </div>
+
+            <h4>Keybindings</h4>
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Key</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><kbd>&uarr;</kbd> / <kbd>k</kbd></td><td>Move up</td></tr>
+                  <tr><td><kbd>&darr;</kbd> / <kbd>j</kbd></td><td>Move down</td></tr>
+                  <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Adjust time window</td></tr>
+                  <tr><td><kbd>f</kbd></td><td>Cycle activity filter</td></tr>
+                  <tr><td><kbd>/</kbd></td><td>Search sessions</td></tr>
+                  <tr><td><kbd>r</kbd></td><td>Rename session</td></tr>
+                  <tr><td><kbd>d</kbd></td><td>Detach / reattach panel</td></tr>
+                  <tr><td><kbd>esc</kbd></td><td>Close detail / dismiss search</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Right-click menu</h4>
+            <ul>
+              <li><strong>Show Panel</strong> — open the session panel</li>
+              <li><strong>Refresh Now</strong> — force reload all sessions</li>
+              <li><strong>Quit</strong> — exit the app</li>
+            </ul>
+
+            <h3 id="api">HTTP API</h3>
+            <pre><code>lazyagent --api</code></pre>
+            <p>
+              Starts a read-only HTTP API server on <code>http://127.0.0.1:7421</code> (default port, with automatic fallback to 7422&ndash;7431 if busy).
+            </p>
+
+            <div class="my-4">
+              <img src="/assets/api.png" alt="lazyagent API playground" class="w-full block rounded-xl" loading="lazy" />
+            </div>
+
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>GET /api</code></td><td>Interactive playground (open in browser)</td></tr>
+                  <tr><td><code>GET /api/sessions</code></td><td>List visible sessions (<code>?search=</code>, <code>?filter=</code>)</td></tr>
+                  <tr><td><code>GET /api/sessions/&#123;id&#125;</code></td><td>Full session detail</td></tr>
+                  <tr><td><code>PUT /api/sessions/&#123;id&#125;/name</code></td><td>Rename session (<code>&#123;"name": "..."&#125;</code>, empty resets)</td></tr>
+                  <tr><td><code>DELETE /api/sessions/&#123;id&#125;/name</code></td><td>Remove custom name</td></tr>
+                  <tr><td><code>GET /api/stats</code></td><td>Summary stats (total, active, window)</td></tr>
+                  <tr><td><code>GET /api/config</code></td><td>Current configuration</td></tr>
+                  <tr><td><code>GET /api/events</code></td><td>SSE stream for real-time updates</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>To expose on the network (e.g. for a mobile app):</p>
+            <pre><code>lazyagent --api --host 0.0.0.0:7421</code></pre>
+
+            <h3 id="editor">Editor support</h3>
+            <p>
+              Pressing <kbd>o</kbd> (TUI) or the <strong>Open</strong> button (menu bar) opens the selected session's working directory in your editor.
+            </p>
+            <p>
+              <strong>Cursor sessions</strong> automatically open in Cursor IDE (if the <code>cursor</code> CLI is installed). If not installed, the standard editor flow below is used.
+            </p>
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Configuration</th><th>Behavior</th></tr></thead>
+                <tbody>
+                  <tr><td>Both <code>$VISUAL</code> and <code>$EDITOR</code> set</td><td>Picker popup (TUI only)</td></tr>
+                  <tr><td>Only <code>$VISUAL</code> set</td><td>Opens as GUI editor</td></tr>
+                  <tr><td>Only <code>$EDITOR</code> set</td><td>Opens as TUI editor (suspends TUI)</td></tr>
+                  <tr><td>Neither set</td><td>Shows a hint to configure</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <pre><code># Add to ~/.zshrc or ~/.bashrc
+export VISUAL="code"   # GUI editor (VS Code, Cursor, Zed, ...)
+export EDITOR="nvim"   # TUI editor (vim, nvim, nano, ...)</code></pre>
+          </section>
+
+          {/* ══ MAINTENANCE ══ */}
+          <section>
+            <h2 id="maintenance">Maintenance</h2>
+            <p>
+              Chat transcripts pile up fast: after a few weeks of daily work each agent can hoard hundreds of megabytes of prompts, tool outputs, and file-backup snapshots. lazyagent ships two subcommands to keep things tidy — <code>prune</code> to delete whole sessions you no longer care about, and <code>compact</code> to shrink the ones you want to keep.
+            </p>
+
+            <h3 id="prune">Prune old sessions</h3>
+            <p>
+              <code>lazyagent prune</code> deletes chat files that match at least one filter. Filters are combined with OR, so a session is removed if it's <em>either</em> older than the cutoff <em>or</em> orphaned (its project folder no longer exists on disk).
+            </p>
+
+            <pre><code>lazyagent prune --days 30                      # delete sessions idle &gt;30 days
+lazyagent prune --orphaned                     # delete sessions whose project folder is gone
+lazyagent prune --days 30 --orphaned           # both filters (OR)
+lazyagent prune --days 30 --dry-run            # preview: one row per (agent, project)
+lazyagent prune --days 30 --dry-run-verbose    # preview: one row per file
+lazyagent prune --days 30 --agent claude,codex # limit to specific agents
+lazyagent prune --days 30 --yes                # skip the confirmation prompt</code></pre>
+
+            <p>
+              If <code>--agent</code> is omitted, an interactive checkbox picker appears (space to toggle, enter to confirm).
+            </p>
+
+            <h4>Supported agents</h4>
+            <p>
+              <strong>claude</strong>, <strong>pi</strong>, <strong>codex</strong>. Amp is skipped because its local files are re-synced from the remote; Cursor and OpenCode store sessions inside third-party SQLite databases and are not yet supported.
+            </p>
+
+            <h4>Safety</h4>
+            <ul>
+              <li>Active sessions (touched in the last 5 minutes) and sub-agent transcripts are skipped.</li>
+              <li>A destructive-op disclaimer is printed before the <kbd>y/N</kbd> confirmation (skipped with <code>--yes</code>).</li>
+              <li>A path guard refuses to delete anything outside the known agent directories.</li>
+              <li>For Codex, the session name index (<code>~/.codex/session_index.jsonl</code>) is rewritten atomically so no dangling names remain.</li>
+              <li>For Claude Desktop, the sidecar metadata JSON is cleaned up alongside the CLI JSONL.</li>
+            </ul>
+
+            <h3 id="compact">Compact session files</h3>
+            <p>
+              <code>lazyagent compact</code> rewrites session JSONLs in place, truncating tool outputs, thinking blocks, and base64 image data above a configurable threshold. The message graph is preserved so every compacted session stays resumable with the originating agent.
+            </p>
+
+            <pre><code>lazyagent compact                                   # interactive agent picker + dry-run summary
+lazyagent compact --agent claude --dry-run          # preview group totals before/after
+lazyagent compact --agent claude --dry-run-verbose  # one row per file
+lazyagent compact --agent claude --days 14          # only sessions idle &ge;14 days
+lazyagent compact --threshold-kb 20                 # looser cut (default 10 KiB)
+lazyagent compact --min-size-kb 2048                # only files &ge;2 MiB (default 512 KiB)
+lazyagent compact --no-backup                       # skip the .bak sidecar (default: write one)
+lazyagent compact --yes                             # skip the destructive-op disclaimer</code></pre>
+
+            <h4>What gets truncated</h4>
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Agent</th><th>Field paths targeted</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Claude Code</strong></td>
+                    <td>
+                      <code>toolUseResult.stdout</code>, <code>stderr</code>, <code>originalFile</code>, <code>file.content</code>, tool <code>content[].text</code>;
+                      <code>message.content[].thinking</code> (2&times; threshold), <code>message.content[].text</code>, nested <code>message.content[].content</code>;
+                      <code>message.content[].source.data</code> (base64 images).
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>pi</strong></td>
+                    <td>
+                      <code>message.content[].text</code>, <code>thinking</code> (2&times; threshold), <code>thinkingSignature</code>, <code>arguments</code>;
+                      <code>message.details.truncation.content</code>; oversized <code>summary</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Codex</strong></td>
+                    <td>
+                      <code>payload.output</code>, <code>payload.result</code>, <code>payload.message</code>, <code>payload.arguments</code>, and <code>payload.content[].text</code> / <code>input_text</code> / <code>output_text</code>.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Thresholds</h4>
+            <p>
+              The default threshold is <strong>10 KiB</strong> per JSON string value. When a value exceeds the threshold, lazyagent keeps the first tenth (minimum 256 bytes) plus a marker like <code>[truncated by lazyagent compact — was 47123 bytes, kept first 4096]</code>. Thinking blocks use a 2&times; budget because they carry genuine model reasoning. You can raise <code>--threshold-kb</code> for a gentler cut or lower it for an aggressive one.
+            </p>
+
+            <h4>Safety</h4>
+            <ul>
+              <li>Every rewrite validates that the line count before and after matches. If it doesn't, the rewrite is aborted and the original file is left untouched.</li>
+              <li>A <code>.bak</code> sidecar is written before each rewrite unless <code>--no-backup</code> is passed.</li>
+              <li>Active sessions (touched in the last 5 minutes) and sub-agent transcripts are skipped.</li>
+              <li>File permissions are preserved — a 0600 transcript stays 0600 after compaction.</li>
+              <li>A path guard refuses to rewrite anything outside the known agent directories.</li>
+              <li>Files where the rewrite wouldn't actually shrink the file (e.g. pure JSON key re-ordering) are silently left alone.</li>
+            </ul>
+
+            <h4>Supported agents</h4>
+            <p>
+              <strong>claude</strong>, <strong>pi</strong>, <strong>codex</strong>. Cursor and OpenCode are not yet supported because their sessions live inside third-party SQLite databases; Amp is not supported because its local files are re-synced from the remote.
+            </p>
+          </section>
+
+          {/* ══ CONFIGURATION ══ */}
+          <section>
+            <h2 id="configuration">Configuration</h2>
+            <p>
+              lazyagent reads <code>~/.config/lazyagent/config.json</code>, created automatically with defaults on first run:
+            </p>
+            <pre><code>&#123;
+  "window_minutes": 30,
+  "default_filter": "",
+  "editor": "",
+  "launch_at_login": false,
+  "notifications": false,
+  "notify_after_sec": 30,
+  "agents": &#123;
+    "amp": true,
+    "claude": true,
+    "codex": true,
+    "cursor": true,
+    "opencode": true,
+    "pi": true
+  &#125;,
+  "claude_dirs": [],
+  "tui": &#123;
+    "theme": "dark"
+  &#125;
+&#125;</code></pre>
+
+            <div class="overflow-x-auto">
+              <table>
+                <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>window_minutes</code></td><td><code>30</code></td><td>Time window for session visibility (minutes)</td></tr>
+                  <tr><td><code>default_filter</code></td><td><code>""</code></td><td>Default activity filter (empty = show all)</td></tr>
+                  <tr><td><code>editor</code></td><td><code>""</code></td><td>Override for <code>$VISUAL</code>/<code>$EDITOR</code></td></tr>
+                  <tr><td><code>launch_at_login</code></td><td><code>false</code></td><td>Auto-start the menu bar app at login</td></tr>
+                  <tr><td><code>notifications</code></td><td><code>false</code></td><td>macOS notifications when a session needs input</td></tr>
+                  <tr><td><code>notify_after_sec</code></td><td><code>30</code></td><td>Seconds before triggering a "waiting" notification</td></tr>
+                  <tr><td><code>agents</code></td><td>all <code>true</code></td><td>Enable/disable individual agent providers</td></tr>
+                  <tr><td><code>claude_dirs</code></td><td><code>[]</code></td><td>Extra Claude base directories to scan (each must contain a <code>projects/</code> subfolder). When empty, auto-detects from <code>CLAUDE_CONFIG_DIR</code> env var with <code>~/.claude</code> fallback</td></tr>
+                  <tr><td><code>tui.theme</code></td><td><code>"dark"</code></td><td>TUI color theme. Supported values: <code>"dark"</code> (default) or <code>"light"</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* ══ ARCHITECTURE ══ */}
+          <section>
+            <h2 id="architecture">Architecture</h2>
+            <pre><code>lazyagent/
+├── main.go                     # Entry point: --tui / --gui / --api / --agent + prune / compact subcommands
+├── internal/
+│   ├── core/                   # Shared: watcher, activity, session, config
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Codex/Amp providers
+│   ├── model/                  # Shared types (Session, ToolCall, etc.)
+│   ├── amp/                    # Amp CLI thread parsing and session discovery
+│   ├── claude/                 # Claude Code JSONL parsing, session discovery
+│   ├── codex/                  # Codex CLI JSONL parsing and session discovery
+│   ├── cursor/                 # Cursor IDE session discovery from state.vscdb
+│   ├── pi/                     # pi coding agent JSONL parsing, session discovery
+│   ├── opencode/               # OpenCode SQLite parsing, session discovery
+│   ├── api/                    # HTTP API server (REST + SSE)
+│   ├── ui/                     # TUI rendering (bubbletea + lipgloss, dark/light themes)
+│   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
+│   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
+│   ├── prune/                  # `lazyagent prune` — delete old or orphaned chat files
+│   ├── compact/                # `lazyagent compact` — truncate oversized JSONL payloads
+│   └── assets/                 # Embedded frontend dist (go:embed)
+├── frontend/                   # Svelte 5 + Tailwind 4 (menu bar UI)
+│   ├── src/
+│   │   ├── App.svelte
+│   │   ├── lib/                # SessionList, SessionDetail, Sparkline
+│   │   └── bindings/           # Auto-generated Wails TS bindings
+│   └── app.css                 # Tailwind 4 @theme (Catppuccin Mocha)
+├── docs/                       # Documentation (synced into lazyagent.dev)
+│   ├── index.astro             # Public docs page
+│   └── API.md                  # Full HTTP API reference
+└── Makefile</code></pre>
+          </section>
+
+          {/* ══ DEVELOPMENT ══ */}
+          <section>
+            <h2 id="development">Development</h2>
+            <pre><code># Install frontend deps (first time)
+make install
+
+# Full build (TUI + tray)
+make build
+
+# Build TUI only (no Wails/Node.js needed)
+make tui
+
+# Quick dev cycle (rebuild + run tray)
+make dev
+
+# Clean all artifacts
+make clean</code></pre>
+
+            <h4>Requirements</h4>
+            <ul>
+              <li>Go 1.25+</li>
+              <li>Node.js 18+ (for frontend build)</li>
+              <li>macOS (for the menu bar app — TUI works on any platform)</li>
+            </ul>
+          </section>
+
+          {/* ══ ROADMAP ══ */}
+          <section>
+            <h2 id="roadmap">Roadmap</h2>
+
+            <h4>v0.1 — Core TUI</h4>
+            <ul class="checklist">
+              <li class="done">Discover all Claude Code sessions from <code>~/.claude/projects/</code></li>
+              <li class="done">Parse JSONL to determine session status</li>
+              <li class="done">Detect worktrees</li>
+              <li class="done">Show tool history</li>
+              <li class="done">FSEvents-based file watcher with debouncing</li>
+              <li class="done">Fallback 30s polling</li>
+            </ul>
+
+            <h4>v0.2 — Richer session info</h4>
+            <ul class="checklist">
+              <li class="done">Conversation preview (last 5 messages)</li>
+              <li class="done">Last file written with age</li>
+              <li class="done">Filter by activity type</li>
+              <li class="done">Search by project path</li>
+              <li class="done">Time window control</li>
+              <li class="done">Color-coded activity states</li>
+              <li class="done">Memory-efficient single-pass JSONL parsing</li>
+              <li class="done">Activity sparkline graph</li>
+              <li class="done">Token usage and cost estimation</li>
+              <li class="done">Animated braille spinner</li>
+              <li class="done">Open CWD in editor (<kbd>o</kbd> key)</li>
+              <li class="done">Rename sessions (<kbd>r</kbd> key)</li>
+              <li class="todo">Display file diff for last written file</li>
+            </ul>
+
+            <h4>v0.3 — macOS menu bar app</h4>
+            <ul class="checklist">
+              <li class="done">Core library extraction</li>
+              <li class="done">Shared config system</li>
+              <li class="done">Wails v3 + Svelte 5 + Tailwind 4 frontend</li>
+              <li class="done">System tray with attached panel</li>
+              <li class="done">Real-time session updates</li>
+              <li class="done">SVG sparkline, activity badges</li>
+              <li class="done">Keyboard shortcuts</li>
+              <li class="done">Open in editor</li>
+              <li class="todo">Dynamic tray icon (active count)</li>
+              <li class="todo">macOS notifications</li>
+              <li class="todo">Launch at Login</li>
+              <li class="todo">Code signing & notarization</li>
+              <li class="todo">DMG distribution</li>
+              <li class="todo">Homebrew cask</li>
+            </ul>
+
+            <h4>v0.4 — HTTP API</h4>
+            <ul class="checklist">
+              <li class="done">REST API server</li>
+              <li class="done">Session list, detail, stats, config endpoints</li>
+              <li class="done">Server-Sent Events (SSE)</li>
+              <li class="done">Interactive API playground</li>
+              <li class="done">Default port with fallback (7421&ndash;7431)</li>
+              <li class="done">Custom bind address</li>
+              <li class="done">Combinable with TUI and GUI</li>
+              <li class="done">Session rename endpoints</li>
+            </ul>
+
+            <h4>v0.5 — Multi-agent support</h4>
+            <ul class="checklist">
+              <li class="done">pi coding agent session discovery (<code>~/.pi/agent/sessions/</code>)</li>
+              <li class="done">Pi JSONL parser (tree-structured format → shared Session struct)</li>
+              <li class="done"><code>--agent</code> flag (<code>claude</code>, <code>cursor</code>, <code>codex</code>, <code>amp</code>, <code>pi</code>, <code>opencode</code>, <code>all</code>)</li>
+              <li class="done">MultiProvider merging sessions from multiple agents</li>
+              <li class="done">Agent type indicator (π prefix in list, Agent row in detail)</li>
+              <li class="done">Pi tool name normalization (snake_case → PascalCase)</li>
+              <li class="done">Multi-directory file watcher</li>
+              <li class="done">Cost estimation for Gemini and GPT model families</li>
+              <li class="done">Claude Code Desktop support (title, permissions, source badge)</li>
+              <li class="done">Shared session types extracted to <code>internal/model</code></li>
+            </ul>
+
+            <h4>v0.6 — OpenCode support</h4>
+            <ul class="checklist">
+              <li class="done">OpenCode session discovery from SQLite</li>
+              <li class="done"><code>--agent opencode</code> flag</li>
+              <li class="done">Polling-based refresh (5s interval)</li>
+              <li class="done">Tool name normalization and activity mapping</li>
+              <li class="done">Subagent detection via <code>parent_id</code></li>
+            </ul>
+
+            <h4>v0.7 — Cursor support</h4>
+            <ul class="checklist">
+              <li class="done">Cursor session discovery from <code>state.vscdb</code></li>
+              <li class="done"><code>--agent cursor</code> flag</li>
+              <li class="done">WAL-based cache invalidation for real-time updates</li>
+              <li class="done">CWD inference from file URIs</li>
+              <li class="done">Cursor tool name normalization</li>
+              <li class="done">Open in Cursor IDE (with fallback)</li>
+              <li class="done">Per-agent enable/disable in config</li>
+            </ul>
+
+            <h4>v0.7.9 — Codex support</h4>
+            <ul class="checklist">
+              <li class="done">Codex CLI session discovery from <code>~/.codex/sessions/</code></li>
+              <li class="done">Codex JSONL parser with incremental reading</li>
+              <li class="done"><code>--agent codex</code> flag</li>
+              <li class="done">Session name index support</li>
+              <li class="done">X prefix in session list</li>
+            </ul>
+
+            <h4>v0.7.10 — Remote control &amp; performance</h4>
+            <ul class="checklist">
+              <li class="done">Extract and display remote control URL from Claude Code sessions</li>
+              <li class="done">Remote URL shown in TUI detail, GUI detail panel, and REST API</li>
+              <li class="done">Lazy JSONL message parsing (skip expensive deserialization for non-user/assistant entries)</li>
+              <li class="done">Parallel session discovery for Codex and Pi providers</li>
+            </ul>
+
+            <h4>v0.8 — Amp support</h4>
+            <ul class="checklist">
+              <li class="done">Amp CLI session discovery from <code>~/.local/share/amp/threads/*.json</code></li>
+              <li class="done">Amp thread JSON parser with incremental parsing</li>
+              <li class="done"><code>--agent amp</code> flag</li>
+              <li class="done">Parallel session discovery for Amp provider</li>
+              <li class="done">A prefix in session list</li>
+            </ul>
+
+            <h4>v0.8.1 — TUI themes</h4>
+            <ul class="checklist">
+              <li class="done">Dark and light theme support for the TUI</li>
+              <li class="done">Theme selection via <code>tui.theme</code> in config (<code>"dark"</code> or <code>"light"</code>)</li>
+              <li class="done">All TUI colors driven by theme (panels, activity states, help bar, overlays)</li>
+            </ul>
+
+            <h4>v0.8.2 — Resume command</h4>
+            <ul class="checklist">
+              <li class="done">Resume command builder for all supported agents</li>
+              <li class="done">Cross-platform clipboard support (macOS, Wayland, X11)</li>
+              <li class="done"><kbd>c</kbd> key in TUI to copy resume command to clipboard</li>
+              <li class="done">Resume command shown in GUI session detail with copy button</li>
+              <li class="done"><code>resume_command</code> field in REST API session detail response</li>
+            </ul>
+
+            <h4>v0.8.3 — Amp remote sync</h4>
+            <ul class="checklist">
+              <li class="done">Sync remote Amp threads via <code>amp threads export</code> for newer Amp versions</li>
+              <li class="done">Throttled sync (every 15 seconds) with smart change detection</li>
+              <li class="done">Direct file writing to avoid pipe buffer truncation</li>
+            </ul>
+
+            <h4>v0.9 — Maintenance commands</h4>
+            <ul class="checklist">
+              <li class="done"><code>lazyagent prune</code> — delete chat files older than N days or whose project folder no longer exists</li>
+              <li class="done">Interactive agent picker with colored checkboxes when <code>--agent</code> is omitted</li>
+              <li class="done">Dry-run summary and verbose tables with before/after disk sizes</li>
+              <li class="done">Destructive-op disclaimer box before the y/N confirmation</li>
+              <li class="done"><code>lazyagent compact</code> — rewrite JSONL sessions in place, truncating bulky tool outputs, thinking blocks, and embedded images</li>
+              <li class="done">Per-agent field-path mutators for Claude Code, pi, and Codex</li>
+              <li class="done">Line-count validation, <code>.bak</code> sidecars, preserved file permissions, path guards</li>
+              <li class="done">Shared <code>chatops</code> package powering the interactive UI for both subcommands</li>
+            </ul>
+
+            <h4>Future ideas</h4>
+            <ul class="checklist">
+              <li class="todo">Outbound webhooks on status changes</li>
+              <li class="todo">Multi-machine support</li>
+              <li class="todo">TUI actions: kill session, attach terminal</li>
+              <li class="todo">Session history browser</li>
+              <li class="todo"><code>prune</code>: per-project y/N/number prompts</li>
+              <li class="todo"><code>prune</code>: soft delete to a trash area, with restore</li>
+              <li class="todo"><code>prune</code>/<code>compact</code>: content-based search before selection</li>
+            </ul>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <Footer />
+</DocsLayout>
