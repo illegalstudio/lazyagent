@@ -9,6 +9,28 @@ sidebar:
 
 For *shrinking* sessions you want to keep, see [Compact](compact.md) instead.
 
+## Synopsis
+
+```
+lazyagent prune  [--days N] [--orphaned]
+                 [--agent LIST]
+                 [--dry-run | --dry-run-verbose]
+                 [--yes]
+```
+
+At least one of `--days` or `--orphaned` is required.
+
+## Flags
+
+| Flag | Type | Default | Summary |
+|------|------|---------|---------|
+| `--days N` | int | *unset* | Include sessions idle more than N days |
+| `--orphaned` | bool | `false` | Include sessions whose project folder is gone |
+| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex`. Empty opens the picker |
+| `--dry-run` | bool | `false` | Print a grouped summary, delete nothing |
+| `--dry-run-verbose` | bool | `false` | Print one row per file, delete nothing |
+| `--yes` | bool | `false` | Skip the destructive-op disclaimer |
+
 ## Quick reference
 
 ```bash
@@ -106,6 +128,28 @@ Not supported:
 
 - **Amp** — its local files are re-synced from the remote. Deleting them just triggers a re-download on the next sync.
 - **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Deletion would require mutating those databases, which is deferred to a future version.
+
+## Examples
+
+```bash
+# Delete anything idle for more than a quarter
+lazyagent prune --days 90
+
+# Kill orphans across every supported agent, but preview first
+lazyagent prune --orphaned --dry-run-verbose
+
+# Scheduled weekly sweep (script-safe)
+lazyagent prune --days 30 --orphaned --agent claude,codex,pi --yes
+
+# Target a single noisy agent
+lazyagent prune --agent codex --days 14
+
+# See per-file details before committing
+lazyagent prune --days 30 --dry-run-verbose
+lazyagent prune --days 30                          # the real run
+```
+
+See [Recipes](../usage/recipes.md) for automation tips, including cron examples.
 
 ## Exit codes
 

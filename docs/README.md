@@ -27,6 +27,11 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 - [macOS GUI](interfaces/macos-gui.md) — the detachable menu bar panel
 - [HTTP API](interfaces/http-api.md) — REST + Server-Sent Events, with the interactive playground
 
+## Usage
+
+- [CLI reference](usage/cli.md) — every `lazyagent` flag, with syntax and examples
+- [Recipes](usage/recipes.md) — end-to-end walkthroughs for common workflows
+
 ## Maintenance
 
 - [Prune old sessions](maintenance/prune.md) — delete chat files by age or orphaned-project filter

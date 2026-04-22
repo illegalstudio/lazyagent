@@ -9,6 +9,30 @@ sidebar:
 
 For *deleting* entire sessions, see [Prune](prune.md) instead.
 
+## Synopsis
+
+```
+lazyagent compact  [--days N] [--agent LIST]
+                   [--threshold-kb N] [--min-size-kb N]
+                   [--dry-run | --dry-run-verbose]
+                   [--no-backup] [--yes]
+```
+
+All flags are optional. With no flags, compact opens the interactive agent picker, scans every supported agent, and prompts for confirmation before rewriting anything.
+
+## Flags
+
+| Flag | Type | Default | Summary |
+|------|------|---------|---------|
+| `--days N` | int | `0` (unset) | Only compact sessions idle more than N days |
+| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex`. Empty opens the picker |
+| `--threshold-kb N` | int | `10` | Truncate JSON string values larger than N KiB |
+| `--min-size-kb N` | int | `512` | Skip files smaller than N KiB |
+| `--dry-run` | bool | `false` | Print a grouped summary, rewrite nothing |
+| `--dry-run-verbose` | bool | `false` | Print one row per file, rewrite nothing |
+| `--no-backup` | bool | `false` | Do not write `.bak` sidecars before rewriting |
+| `--yes` | bool | `false` | Skip the destructive-op disclaimer |
+
 ## Quick reference
 
 ```bash
@@ -126,6 +150,30 @@ Not supported:
 
 - **Amp** — local files are re-synced from the remote; rewriting them gets overwritten on the next sync.
 - **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
+
+## Examples
+
+```bash
+# Default sweep with an interactive picker
+lazyagent compact
+
+# Preview what would happen for Claude only — no writes
+lazyagent compact --agent claude --dry-run-verbose
+
+# Aggressive cut: everything ≥100 KiB, with a tight 5 KiB threshold
+lazyagent compact --min-size-kb 100 --threshold-kb 5 --agent claude
+
+# Conservative cut: only old, only big, keep everything resumable
+lazyagent compact --days 14 --min-size-kb 2048 --threshold-kb 20
+
+# Script-friendly run: no prompt, no .bak, log the summary
+lazyagent compact --agent claude --days 7 --yes --no-backup > ~/.local/state/la-compact.log 2>&1
+
+# Undo a specific compaction
+mv path/to/session.jsonl.bak path/to/session.jsonl
+```
+
+See [Recipes](../usage/recipes.md) for the full "weekly tidy-up" and "reclaim disk space aggressively" walkthroughs.
 
 ## Exit codes
 
