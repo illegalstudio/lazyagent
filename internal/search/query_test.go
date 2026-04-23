@@ -76,3 +76,21 @@ func TestNormalizeArgsAllowsFlagsAfterQuery(t *testing.T) {
 		t.Fatalf("normalizeArgs() = %q, want %q", got, want)
 	}
 }
+
+func TestResumeCommand(t *testing.T) {
+	cmd, display := resumeCommand("codex", "abc123")
+	if cmd == nil {
+		t.Fatal("resumeCommand returned nil")
+	}
+	if filepath.Base(cmd.Path) != "codex" {
+		t.Fatalf("cmd.Path = %q, want codex executable", cmd.Path)
+	}
+	got := strings.Join(cmd.Args, " ")
+	want := "codex resume abc123"
+	if got != want {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+	if display != want {
+		t.Fatalf("display = %q, want %q", display, want)
+	}
+}

@@ -151,6 +151,8 @@ See [`prune`](../maintenance/prune.md) and [`compact`](../maintenance/compact.md
 
 Search indexes local transcript files incrementally into a SQLite FTS database under the user cache directory, then prints matching sessions with highlighted snippets. It intentionally excludes agents backed by third-party SQLite databases such as Cursor and OpenCode.
 
+After printing results in an interactive terminal, `search` prompts for a result number. Entering one opens that chat with the originating agent's resume command; pressing Enter exits without opening anything. Piped output stays non-interactive.
+
 ```bash
 lazyagent search "race condition"
 lazyagent search --agent codex "parser"
