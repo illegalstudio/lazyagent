@@ -20,6 +20,7 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
+- **`lazyagent search`** — search transcript-file agents (Claude, Codex, pi, Amp) with highlighted snippets and an incremental local index.
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 
@@ -75,6 +76,7 @@ lazyagent --gui                  Launch the macOS menu bar app
 lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
+lazyagent search "query"         Search chat transcripts with snippets
 lazyagent --help                 Show full help
 ```
 

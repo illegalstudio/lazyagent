@@ -5,10 +5,11 @@ sidebar:
   order: 1
 ---
 
-This page documents the root `lazyagent` command — the one you run to monitor agents. The two maintenance subcommands live on their own pages:
+This page documents the root `lazyagent` command — the one you run to monitor agents. Maintenance and search subcommands live alongside it:
 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
+- `lazyagent search` — search transcript-file agents with highlighted snippets
 
 ## Synopsis
 
@@ -135,14 +136,35 @@ Prints the full usage text, including short keybinding reference.
 ## Subcommand dispatch
 
 When the first positional argument is `prune` or `compact`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set:
+The same is true for `search`.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
+lazyagent search --agent codex api # search subcommand
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
 See [`prune`](../maintenance/prune.md) and [`compact`](../maintenance/compact.md) for their flag tables.
+
+### `search`
+
+Search indexes local transcript files incrementally into a SQLite FTS database under the user cache directory, then prints matching sessions with highlighted snippets. It intentionally excludes agents backed by third-party SQLite databases such as Cursor and OpenCode.
+
+```bash
+lazyagent search "race condition"
+lazyagent search --agent codex "parser"
+lazyagent search --reindex "config"
+```
+
+Useful flags:
+
+| Flag | Default | Summary |
+|------|---------|---------|
+| `--agent NAME` | `all` | Search one transcript-file agent or a comma-separated subset (`claude,codex,pi,amp`) |
+| `--limit N` | `20` | Maximum chat sessions to show |
+| `--snippets N` | `2` | Maximum snippets per chat session |
+| `--reindex` | `false` | Rebuild the local search index before searching |
 
 ## Common invocations
 
@@ -167,6 +189,9 @@ lazyagent --tui --gui --api
 
 # Demo mode for screenshots
 lazyagent --demo --gui
+
+# Search chat history
+lazyagent search "api server"
 ```
 
 ## Exit codes

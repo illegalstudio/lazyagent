@@ -17,6 +17,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/prune"
+	"github.com/illegalstudio/lazyagent/internal/search"
 	"github.com/illegalstudio/lazyagent/internal/tray"
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
@@ -33,6 +34,8 @@ func main() {
 			os.Exit(prune.Run(os.Args[2:]))
 		case "compact":
 			os.Exit(compact.Run(os.Args[2:]))
+		case "search":
+			os.Exit(search.Run(os.Args[2:]))
 		}
 	}
 
@@ -70,6 +73,7 @@ Subcommands:
   lazyagent prune --help        Show prune options (--orphaned, --dry-run, ...)
   lazyagent compact             Shrink sessions by truncating bulky tool outputs
   lazyagent compact --help      Show compact options (--threshold-kb, --dry-run, ...)
+  lazyagent search "query"      Search chat transcripts with highlighted snippets
 
 Flags:
 `, version.String())
