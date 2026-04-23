@@ -3,6 +3,9 @@
 ![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?v=1)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
+[![Follow @nahime0 on X](https://img.shields.io/badge/Follow%20%40nahime0-000000?logo=x&logoColor=white)](https://x.com/nahime0)
+
+> 🐦 **[Follow me on X (@nahime0)](https://x.com/nahime0) for updates, new features, and behind-the-scenes development.**
 
 **A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
 
@@ -20,6 +23,7 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
+- **`lazyagent search`** — search transcript-file agents (Claude, Codex, pi, Amp) with highlighted snippets and an incremental local index.
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 
@@ -75,6 +79,7 @@ lazyagent --gui                  Launch the macOS menu bar app
 lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
+lazyagent search "query"         Search chat transcripts with snippets
 lazyagent --help                 Show full help
 ```
 
