@@ -36,6 +36,7 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 
 - [Prune old sessions](maintenance/prune.md) — delete chat files by age or orphaned-project filter
 - [Compact session files](maintenance/compact.md) — truncate bulky tool outputs and thinking blocks in place
+- [Search chat transcripts](maintenance/search.md) — full-text search with highlighted snippets and an incremental SQLite index
 - [Show rate-limit usage](maintenance/limits.md) — on-demand 5-hour and weekly window snapshot for Claude Code and Codex, with a pace indicator
 
 ## Reference

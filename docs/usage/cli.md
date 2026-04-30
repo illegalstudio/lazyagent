@@ -9,7 +9,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
-- `lazyagent search` — search transcript-file agents with highlighted snippets
+- [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
 - [`lazyagent limits`](../maintenance/limits.md) — show 5-hour and weekly rate-limit usage with a pace indicator
 
 ## Synopsis
@@ -150,9 +150,7 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 
 ### `search`
 
-Search indexes local transcript files incrementally into a SQLite FTS database under the user cache directory, then prints matching sessions with highlighted snippets. It intentionally excludes agents backed by third-party SQLite databases such as Cursor and OpenCode.
-
-After printing results in an interactive terminal, `search` prompts for a result number. Entering one opens that chat with the originating agent's resume command; pressing Enter exits without opening anything. Piped output stays non-interactive.
+`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
 
 ```bash
 lazyagent search "race condition"
@@ -160,14 +158,9 @@ lazyagent search --agent codex "parser"
 lazyagent search --reindex "config"
 ```
 
-Useful flags:
+After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command. Piped output stays non-interactive.
 
-| Flag | Default | Summary |
-|------|---------|---------|
-| `--agent NAME` | `all` | Search one transcript-file agent or a comma-separated subset (`claude,codex,pi,amp`) |
-| `--limit N` | `20` | Maximum chat sessions to show |
-| `--snippets N` | `2` | Maximum snippets per chat session |
-| `--reindex` | `false` | Rebuild the local search index before searching |
+Full reference, including the index location, ranking, and resume commands: [`search`](../maintenance/search.md).
 
 ### `limits`
 
