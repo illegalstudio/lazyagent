@@ -109,7 +109,9 @@ func fetchCodexReport() (Report, error) {
 		return Report{}, fmt.Errorf("scan ~/.codex/sessions: %w", err)
 	}
 	if len(rollouts) == 0 {
-		return Report{}, fmt.Errorf("no Codex sessions found under ~/.codex/sessions. Run a Codex session first")
+		// No rollouts at all: either Codex isn't installed or it's never been run.
+		// In both cases there's nothing useful we can show.
+		return Report{}, errAgentNotInstalled
 	}
 
 	// The newest rollout may not yet have any rate_limits events (very new session

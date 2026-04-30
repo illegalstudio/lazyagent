@@ -16,12 +16,20 @@ package limits
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 )
+
+// errAgentNotInstalled is returned by an agent's fetcher when there's no sign of
+// the agent on this machine (no OAuth token / no session data). It's distinct from
+// real errors (network failure, malformed response, expired token, …) so the
+// dispatcher can quietly skip missing agents in `--agent all` mode while still
+// surfacing them as helpful messages when the user explicitly asked for one.
+var errAgentNotInstalled = errors.New("agent not installed")
 
 type options struct {
 	agent string
@@ -89,21 +97,56 @@ Flags:
 	now := time.Now()
 	var out strings.Builder
 	exitCode := 0
-	for i, a := range agents {
-		if i > 0 {
-			out.WriteString("\n")
-		}
+	printed := 0
+	missing := 0
+	explicit := len(agents) == 1
+	for _, a := range agents {
 		report, err := fetchReport(ctx, a)
 		if err != nil {
+			if errors.Is(err, errAgentNotInstalled) {
+				missing++
+				if explicit {
+					fmt.Fprintln(os.Stderr, notInstalledMessage(a))
+					exitCode = 1
+				}
+				// In `all` mode, silently skip — we'll print a single combined
+				// message at the end if nothing was shown.
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "Error (%s): %v\n", a, err)
 			exitCode = 1
 			continue
 		}
+		if printed > 0 {
+			out.WriteString("\n")
+		}
 		renderReport(&out, report, now)
+		printed++
+	}
+
+	// All agents were missing AND no real errors fired: tell the user once,
+	// rather than letting them stare at an empty stdout and wonder what happened.
+	if printed == 0 && !explicit && missing == len(agents) {
+		fmt.Fprintln(os.Stderr, "No supported agents are installed (neither Claude Code nor Codex was detected).")
+		fmt.Fprintln(os.Stderr, "Run `claude` to log in, or run a Codex CLI session first.")
+		exitCode = 1
 	}
 
 	fmt.Print(out.String())
 	return exitCode
+}
+
+// notInstalledMessage returns the user-facing string when --agent X is explicit
+// and X has no detectable installation footprint on this machine.
+func notInstalledMessage(agent string) string {
+	switch agent {
+	case "claude":
+		return "Claude Code is not installed or not logged in. Run `claude` to log in, or set CLAUDE_CODE_OAUTH_TOKEN."
+	case "codex":
+		return "Codex is not installed (no sessions under ~/.codex/sessions). Run a Codex CLI session first."
+	default:
+		return fmt.Sprintf("%s is not installed.", agent)
+	}
 }
 
 func fetchReport(ctx context.Context, agent string) (Report, error) {

@@ -3,6 +3,7 @@ package limits
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,6 +45,9 @@ type claudeWindow struct {
 func fetchClaudeReport(ctx context.Context) (Report, error) {
 	token, err := readClaudeToken()
 	if err != nil {
+		if errors.Is(err, errAgentNotInstalled) {
+			return Report{}, err
+		}
 		return Report{}, fmt.Errorf("read Claude OAuth token: %w", err)
 	}
 
@@ -124,7 +128,9 @@ func readClaudeToken() (string, error) {
 	if tok, err := readClaudeTokenFile(); err == nil && tok != "" {
 		return tok, nil
 	}
-	return "", fmt.Errorf("no Claude OAuth token found (tried CLAUDE_CODE_OAUTH_TOKEN, keychain, ~/.claude/.credentials.json). Run `claude` to log in")
+	// No source produced a token. From the command's perspective, Claude is either
+	// not installed or not logged in — both look identical from here.
+	return "", errAgentNotInstalled
 }
 
 func readClaudeTokenKeychain() (string, error) {
