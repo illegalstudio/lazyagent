@@ -76,20 +76,25 @@ func TestHumanDuration(t *testing.T) {
 }
 
 func TestBar(t *testing.T) {
-	if got := bar(0, 10); got != "░░░░░░░░░░" {
-		t.Errorf("bar(0): %q", got)
+	cases := []struct {
+		name       string
+		percent    float64
+		width      int
+		wantFilled string
+		wantEmpty  string
+	}{
+		{"empty", 0, 10, "", "░░░░░░░░░░"},
+		{"full", 100, 10, "██████████", ""},
+		{"half", 50, 10, "█████", "░░░░░"},
+		{"over 100 clamps to full", 150, 10, "██████████", ""},
+		{"negative clamps to empty", -5, 10, "", "░░░░░░░░░░"},
 	}
-	if got := bar(100, 10); got != "██████████" {
-		t.Errorf("bar(100): %q", got)
-	}
-	if got := bar(50, 10); got != "█████░░░░░" {
-		t.Errorf("bar(50): %q", got)
-	}
-	if got := bar(150, 10); got != "██████████" {
-		t.Errorf("bar(over 100): %q", got)
-	}
-	if got := bar(-5, 10); got != "░░░░░░░░░░" {
-		t.Errorf("bar(negative): %q", got)
+	for _, c := range cases {
+		gotFilled, gotEmpty := bar(c.percent, c.width)
+		if gotFilled != c.wantFilled || gotEmpty != c.wantEmpty {
+			t.Errorf("%s: got (%q, %q), want (%q, %q)",
+				c.name, gotFilled, gotEmpty, c.wantFilled, c.wantEmpty)
+		}
 	}
 }
 

@@ -56,7 +56,7 @@ Authentication:
             1. CLAUDE_CODE_OAUTH_TOKEN env var
             2. macOS Keychain (service "Claude Code-credentials")
             3. ~/.claude/.credentials.json
-          If none is found, run ` + "`claude`" + ` to log in.
+          If none is found, run `+"`claude`"+` to log in.
   Codex   reads ~/.codex/sessions/<date>/rollout-*.jsonl (no network call).
 
 Disclaimer (Claude):
