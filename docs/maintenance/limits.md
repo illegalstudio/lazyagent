@@ -119,6 +119,19 @@ If the most recent rollout has no `rate_limits` event yet (a brand-new session t
 
 The `Source:` line in the output points to the rollout actually read — useful when you notice the data is stale and want to confirm whether you've simply not used Codex recently.
 
+## When an agent isn't installed
+
+Both providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`.
+
+| State | Default (`--agent all`) | `--agent claude` | `--agent codex` |
+|-------|-------------------------|------------------|-----------------|
+| Both installed | Both reports printed | Claude printed | Codex printed |
+| Only Claude | Claude printed, Codex silently skipped | Claude printed | Friendly error, exit 1 |
+| Only Codex | Codex printed, Claude silently skipped | Friendly error, exit 1 | Codex printed |
+| Neither | Single guidance message on stderr, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 |
+
+The default `--agent all` mode is forgiving: a missing agent is not an error, it just doesn't show up. Explicit `--agent X` is strict: if you asked for it, missing it is an error worth surfacing.
+
 ## Disclaimer (Claude Code)
 
 `/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` UI and is subject to:
