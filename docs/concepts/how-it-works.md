@@ -23,7 +23,7 @@ Each agent has a **provider** that knows where its session data lives and how to
 
 ## The shared core
 
-Everything useful — the activity state machine, the file watcher, session caching, cost estimation, configuration — lives in one place (`internal/core`). The three interfaces (TUI, GUI, API) and the maintenance subcommands (`prune`, `compact`) all import it, so there's no behavioral drift between them.
+Everything useful — the activity state machine, the file watcher, session caching, cost estimation, configuration — lives in one place (`internal/core`). The three interfaces (TUI, GUI, API) and the maintenance subcommands (`prune`, `compact`, `limits`) all import it, so there's no behavioral drift between them.
 
 Sessions are cached by file path + mtime + size, so subsequent scans only re-parse what changed. For large JSONL transcripts the parser resumes from the last byte offset rather than re-reading the whole file.
 
@@ -33,7 +33,7 @@ lazyagent classifies each session into a state (`idle`, `thinking`, `writing`, `
 
 ## What lazyagent never does
 
-- It doesn't talk to any LLM, so there's no API key to configure and no network calls to Anthropic / OpenAI / etc.
+- It doesn't talk to any LLM. The one outbound network call lazyagent ever makes is `lazyagent limits --agent claude`, which queries Anthropic's `/api/oauth/usage` for the user's own rate-limit numbers — and only when explicitly invoked. Everything else (monitoring, prune, compact, Codex limits) is purely local.
 - It doesn't interrupt or control agents. You can't kill a session from lazyagent; it only watches.
 - It doesn't move or copy session files — except when you explicitly run `prune` or `compact`, which operate on the same files the agents read.
 - It doesn't send telemetry. No analytics, no crash reporter, no phone-home.

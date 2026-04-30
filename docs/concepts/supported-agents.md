@@ -69,3 +69,4 @@ OpenCode uses SQLite with relational tables (`session`, `message`, `part`). lazy
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
 - The two maintenance commands (`prune`, `compact`) intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
+- The [`limits`](../maintenance/limits.md) command supports only Claude Code and Codex — they're the only agents lazyagent observes that expose stable 5-hour and weekly windows.

@@ -21,11 +21,12 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 
 ## News
 
-📢 **Chat maintenance is here!** Two new subcommands keep your agent transcripts under control:
+📢 **Chat maintenance is here!** Subcommands that keep your agent transcripts (and your rate limits) under control:
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
 - **`lazyagent search`** — search transcript-file agents (Claude, Codex, pi, Amp) with highlighted snippets and an incremental local index.
+- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand 5-hour and weekly rate-limit snapshot for Claude Code and Codex, with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 
@@ -82,6 +83,7 @@ lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent search "query"         Search chat transcripts with snippets
+lazyagent limits                 Show 5h / weekly rate-limit usage and pace
 lazyagent --help                 Show full help
 ```
 
@@ -94,7 +96,7 @@ Full documentation — supported agents, activity states, keybindings, configura
   - [Getting started](docs/getting-started/) — install, quickstart
   - [Concepts](docs/concepts/) — how it works, supported agents, activity states, session info
   - [Interfaces](docs/interfaces/) — terminal UI, macOS GUI, HTTP API
-  - [Maintenance](docs/maintenance/) — `prune` and `compact` commands
+  - [Maintenance](docs/maintenance/) — `prune`, `compact`, and `limits` commands
   - [Reference](docs/reference/) — configuration, architecture, development, roadmap
 
 ## License

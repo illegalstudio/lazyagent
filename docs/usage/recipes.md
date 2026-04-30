@@ -46,6 +46,19 @@ The API exposes an SSE stream that updates in real time. See the [React Native e
 
 > ⚠️ **No authentication**. Only expose the API on networks you trust.
 
+## Check rate-limit usage before a long run
+
+Before starting an agent task that might burn through quota, snapshot where you stand on the 5-hour and weekly windows:
+
+```bash
+lazyagent limits                 # both Claude Code and Codex
+lazyagent limits --agent claude  # just Claude
+```
+
+The `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
+
+Claude data comes from an undocumented endpoint Anthropic uses for `/status` — the command is on-demand only and never polled. Codex data is read locally from the latest session rollout, no network call. See [`limits`](../maintenance/limits.md) for the full disclaimer.
+
 ## Quick status check from the shell
 
 When you just want to see active sessions without opening a full UI:
