@@ -143,6 +143,14 @@ sidebar:
 - ✅ Line-count validation, `.bak` sidecars, preserved file permissions, path guards
 - ✅ Shared `chatops` package powering the interactive UI for both subcommands
 
+## v0.9.x — Rate-limit visibility
+
+- ✅ `lazyagent limits` — on-demand snapshot of 5-hour and weekly rate-limit windows
+- ✅ Pace indicator comparing actual consumption to a perfectly linear pace (under / on track / over)
+- ✅ Claude Code via `/api/oauth/usage` (the same endpoint Claude Code's `/status` uses), token resolved from env / macOS keychain / `~/.claude/.credentials.json`
+- ✅ Codex via the latest rollout JSONL under `~/.codex/sessions/` — no network call, fallback to older rollouts when the most recent has no `rate_limits` event yet
+- ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
+
 ## Future ideas
 
 - ⬜ Outbound webhooks on status changes

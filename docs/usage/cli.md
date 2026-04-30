@@ -10,6 +10,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - `lazyagent search` — search transcript-file agents with highlighted snippets
+- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour and weekly rate-limit usage with a pace indicator
 
 ## Synopsis
 
@@ -135,17 +136,17 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune` or `compact`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set:
-The same is true for `search`.
+When the first positional argument is `prune`, `compact`, `search`, or `limits`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
 lazyagent search --agent codex api # search subcommand
+lazyagent limits --agent claude    # limits subcommand
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
-See [`prune`](../maintenance/prune.md) and [`compact`](../maintenance/compact.md) for their flag tables.
+See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), and [`limits`](../maintenance/limits.md) for their flag tables.
 
 ### `search`
 
@@ -167,6 +168,20 @@ Useful flags:
 | `--limit N` | `20` | Maximum chat sessions to show |
 | `--snippets N` | `2` | Maximum snippets per chat session |
 | `--reindex` | `false` | Rebuild the local search index before searching |
+
+### `limits`
+
+`limits` prints a one-shot snapshot of the 5-hour and weekly rate-limit windows for Claude Code and Codex, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`).
+
+```bash
+lazyagent limits                 # both agents
+lazyagent limits --agent claude  # only Claude Code
+lazyagent limits --agent codex   # only Codex
+```
+
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call).
+
+Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
 ## Common invocations
 
@@ -210,6 +225,7 @@ The maintenance subcommands define their own exit codes; see their respective pa
 | Variable | Effect |
 |----------|--------|
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |
