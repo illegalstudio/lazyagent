@@ -71,7 +71,7 @@ lazyagent --api --host :8080 # custom port, localhost only
 lazyagent --api --host 0.0.0.0:7421   # expose on the network
 ```
 
-On the very first run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr. On subsequent runs it just prints the token. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
+On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
 
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 
@@ -184,13 +184,13 @@ Full reference, including disclaimers and token-resolution order: [`limits`](../
 `passphrase` sets or rotates the passphrase that protects the [HTTP API](../interfaces/http-api.md). It runs without starting the server, so you can change credentials at any time and let any future `lazyagent --api` pick up the new value.
 
 ```bash
-lazyagent passphrase             # interactive prompt, save, print new bearer token
+lazyagent passphrase             # interactive prompt and save
 lazyagent passphrase --show      # print the bearer token for the current passphrase
 ```
 
-`passphrase` (no flags) always prompts (double-entry confirmation), even if a passphrase is already configured — it's a rotation, not a setup. `--show` is read-only: it derives the token from the env var if `LAZYAGENT_API_PASSPHRASE` is set, otherwise from the configured value, and exits without writing.
+`passphrase` (no flags) always prompts (double-entry confirmation), even if a passphrase is already configured — it's a rotation, not a setup. `--show` derives the token from the env var if `LAZYAGENT_API_PASSPHRASE` is set, otherwise from the configured value, without prompting or changing the passphrase.
 
-`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Every other invocation of the subcommand keeps all output on stderr.
+`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Other invocations do not print the token.
 
 Restart any running `lazyagent --api` after rotating: the server reads the passphrase at startup, so it keeps using the old token until restarted.
 

@@ -15,7 +15,7 @@ Starts an HTTP API on `http://127.0.0.1:7421`. If the port is busy the server tr
 
 ## Authentication
 
-All endpoints under `/api/*` require a Bearer token. The token is **derived from a passphrase** with PBKDF2-SHA256 — you set the passphrase once, and any client (mobile app, browser, curl) that knows the passphrase can compute the same token locally.
+All data endpoints under `/api/*` require a Bearer token. The token is **derived from a passphrase** with PBKDF2-SHA256 plus a public per-install salt. `GET /api` and `GET /api/auth` are public so browsers and clients can load the playground and fetch the KDF parameters before deriving the token locally.
 
 ### First run
 
@@ -23,7 +23,7 @@ All endpoints under `/api/*` require a Bearer token. The token is **derived from
 lazyagent --api
 ```
 
-If no passphrase is configured, lazyagent prompts for one (twice, for confirmation), saves it to `~/.config/lazyagent/config.json` under `api_passphrase`, and prints the derived bearer token to stderr:
+If no passphrase is configured, lazyagent prompts for one (twice, for confirmation), requires at least 12 characters, saves it to `~/.config/lazyagent/config.json` under `api_passphrase`, and prints the derived bearer token to stderr once for the interactive setup:
 
 ```
 API authentication enabled.
@@ -31,7 +31,7 @@ Bearer token: zqh9_r0QeYpLiLSQGZMYriIWqNZgZOu3Qc_l7wtraV4
 Use header:   Authorization: Bearer <token>
 ```
 
-The token is printed on every subsequent startup too — copy it into clients as needed.
+On later startups the token is not printed to avoid leaking it into service logs. Use `lazyagent passphrase --show` when you explicitly need the raw token.
 
 ### Non-interactive setup
 
@@ -46,8 +46,8 @@ The env var takes precedence over the config file value and is never written to 
 ### Rotating the passphrase
 
 ```bash
-lazyagent passphrase             # prompt for a new one, save, print new bearer token
-lazyagent passphrase --show      # print the current bearer token without changing anything
+lazyagent passphrase             # prompt for a new one and save it
+lazyagent passphrase --show      # print the current bearer token without prompting
 ```
 
 The `passphrase` subcommand is independent of the server — change credentials any time. Any running `lazyagent --api` keeps the old token until you restart it.
@@ -55,30 +55,35 @@ The `passphrase` subcommand is independent of the server — change credentials 
 ### Token derivation algorithm
 
 ```
-salt        = "lazyagent-api-v1"     # public, fixed, domain-separating
+salt        = value from GET /api/auth, also stored as api_salt in config
 iterations  = 600_000
 hash        = SHA-256
 key length  = 32 bytes
 encoding    = base64url, no padding  → 43-char token
 ```
 
-**Test vector** — every client implementation must produce this exact value:
+**Test vector** — every client implementation must produce this exact value for the sample salt:
 
-| Passphrase | Bearer token                                  |
-|------------|-----------------------------------------------|
-| `pippo`    | `zqh9_r0QeYpLiLSQGZMYriIWqNZgZOu3Qc_l7wtraV4` |
+| Passphrase | Salt                 | Bearer token                                  |
+|------------|----------------------|-----------------------------------------------|
+| `pippo`    | `lazyagent-api-v1`   | `zqh9_r0QeYpLiLSQGZMYriIWqNZgZOu3Qc_l7wtraV4` |
 
 #### JavaScript (browser, Web Crypto)
 
 ```javascript
-async function deriveToken(passphrase) {
+async function getAuthInfo(baseURL = "") {
+  const res = await fetch(`${baseURL}/api/auth`);
+  return await res.json();
+}
+
+async function deriveToken(passphrase, salt) {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     "raw", enc.encode(passphrase.trim()), { name: "PBKDF2" }, false, ["deriveBits"]
   );
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256",
-      salt: enc.encode("lazyagent-api-v1"), iterations: 600_000 },
+      salt: enc.encode(salt), iterations: 600_000 },
     baseKey, 32 * 8
   );
   const bytes = new Uint8Array(bits);
@@ -92,15 +97,15 @@ async function deriveToken(passphrase) {
 ```swift
 import CommonCrypto
 
-func deriveToken(_ passphrase: String) -> String {
+func deriveToken(_ passphrase: String, salt: String) -> String {
     let pp = passphrase.trimmingCharacters(in: .whitespaces)
-    let salt = Array("lazyagent-api-v1".utf8)
+    let saltBytes = Array(salt.utf8)
     var key = [UInt8](repeating: 0, count: 32)
     _ = pp.withCString { ppPtr in
         CCKeyDerivationPBKDF(
             CCPBKDFAlgorithm(kCCPBKDF2),
             ppPtr, strlen(ppPtr),
-            salt, salt.count,
+            saltBytes, saltBytes.count,
             CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
             600_000, &key, 32)
     }
@@ -118,10 +123,10 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import android.util.Base64
 
-fun deriveToken(passphrase: String): String {
+fun deriveToken(passphrase: String, salt: String): String {
     val spec = PBEKeySpec(
         passphrase.trim().toCharArray(),
-        "lazyagent-api-v1".toByteArray(Charsets.UTF_8),
+        salt.toByteArray(Charsets.UTF_8),
         600_000, 32 * 8)
     val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         .generateSecret(spec).encoded
@@ -132,12 +137,18 @@ fun deriveToken(passphrase: String): String {
 #### curl / shell
 
 ```bash
-PASSPHRASE='pippo'
-TOKEN=$(printf '%s' "$PASSPHRASE" | python3 -c '
-import sys, hashlib, base64
-pp = sys.stdin.read().strip().encode()
-key = hashlib.pbkdf2_hmac("sha256", pp, b"lazyagent-api-v1", 600_000, dklen=32)
-print(base64.urlsafe_b64encode(key).rstrip(b"=").decode())')
+PASSPHRASE='your-configured-passphrase'
+SALT=$(curl -s http://127.0.0.1:7421/api/auth | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["salt"])')
+TOKEN=$(PASSPHRASE="$PASSPHRASE" SALT="$SALT" python3 - <<'PY'
+import os, hashlib, base64
+salt = os.environ["SALT"].encode()
+pp = os.environ["PASSPHRASE"].strip().encode()
+key = hashlib.pbkdf2_hmac("sha256", pp, salt, 600_000, dklen=32)
+print(base64.urlsafe_b64encode(key).rstrip(b"=").decode())
+PY
+)
 
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7421/api/sessions
 ```
@@ -149,7 +160,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7421/api/sessions
 | Regular fetch / curl              | `Authorization: Bearer <token>` header           |
 | Browser `EventSource` (SSE)       | `?token=<token>` query string (header not supported) |
 
-The query-string fallback is **only** documented for SSE clients that cannot set custom headers. Avoid it elsewhere — query strings appear in server logs and shell history.
+The query-string fallback is **only accepted** on `/api/events` for SSE clients that cannot set custom headers. Use the `Authorization` header everywhere else; query strings appear in server logs and shell history.
 
 ## Interactive playground
 
@@ -303,9 +314,25 @@ Summary statistics.
 }
 ```
 
+### `GET /api/auth`
+
+Public KDF metadata needed to derive the Bearer token from a passphrase. This endpoint is intentionally unauthenticated; the salt is public and not a secret.
+
+**Response: `200 OK`**
+
+```json
+{
+  "salt": "lazyagent-api-v1-2CwLr3D6GKbVv5m0Pu1nHQ",
+  "iterations": 600000,
+  "key_length": 32,
+  "hash": "SHA-256",
+  "encoding": "base64url-no-padding"
+}
+```
+
 ### `GET /api/config`
 
-Current lazyagent configuration. The `api_passphrase` field is always omitted from the response — the server never echoes the secret back to clients, even authenticated ones.
+Current lazyagent configuration. The `api_passphrase` and `api_salt` fields are omitted from this response; use `GET /api/auth` for public auth metadata. The server never echoes the passphrase back to clients, even authenticated ones.
 
 **Response: `200 OK`**
 
@@ -344,7 +371,8 @@ The `data` JSON contains:
 
 ```javascript
 // EventSource cannot set headers — pass the token in the query string.
-const token = await deriveToken(passphrase);   // see "Token derivation algorithm"
+const { salt } = await getAuthInfo('http://127.0.0.1:7421');
+const token = await deriveToken(passphrase, salt);   // see "Token derivation algorithm"
 const evtSource = new EventSource(
   `http://127.0.0.1:7421/api/events?token=${encodeURIComponent(token)}`
 );
@@ -366,7 +394,9 @@ const res = await fetch('http://127.0.0.1:7421/api/sessions', {
 ```typescript
 import EventSource from 'react-native-sse';
 
-const token = await deriveToken(passphrase);   // see "Token derivation algorithm"
+const auth = await fetch('http://YOUR_HOST:7421/api/auth').then(r => r.json());
+const salt = auth.salt;
+const token = await deriveToken(passphrase, salt);   // see "Token derivation algorithm"
 
 // react-native-sse supports Authorization headers natively.
 const es = new EventSource('http://YOUR_HOST:7421/api/events', {

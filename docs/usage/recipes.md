@@ -44,7 +44,7 @@ lazyagent --api --host 0.0.0.0:7421
 
 The API exposes an SSE stream that updates in real time. See the [React Native example](../interfaces/http-api.md#react-native) for a full client snippet.
 
-The mobile app derives the bearer token from the same passphrase you configured on the laptop, so pairing is just "type the passphrase once". Traffic is plain HTTP — keep it on a trusted network or front it with HTTPS.
+The mobile app fetches the public salt from `/api/auth`, then derives the bearer token from the same passphrase you configured on the laptop, so pairing is just "type the passphrase once". Traffic is plain HTTP — keep it on a trusted network or front it with HTTPS.
 
 ## Check rate-limit usage before a long run
 
@@ -64,13 +64,8 @@ Claude data comes from an undocumented endpoint Anthropic uses for `/status` —
 When you just want to see active sessions without opening a full UI:
 
 ```bash
-# Derive the bearer token once, reuse it. See "Token derivation algorithm"
-# in the HTTP API reference for other languages.
-TOKEN=$(printf '%s' "$LAZYAGENT_API_PASSPHRASE" | python3 -c '
-import sys, hashlib, base64
-pp = sys.stdin.read().strip().encode()
-key = hashlib.pbkdf2_hmac("sha256", pp, b"lazyagent-api-v1", 600_000, dklen=32)
-print(base64.urlsafe_b64encode(key).rstrip(b"=").decode())')
+# Print the bearer token explicitly, then reuse it.
+TOKEN=$(lazyagent passphrase --show)
 
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7421/api/stats
 # → {"total_sessions":5,"active_sessions":2,"window_minutes":30}

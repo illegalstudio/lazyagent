@@ -35,7 +35,7 @@ lazyagent --gui --api
 
 runs the menu bar app and the API side by side from a single process. See [Recipes](../usage/recipes.md) for more combinations.
 
-The first time you launch `--api`, lazyagent prompts for a passphrase, derives a Bearer token from it (PBKDF2-SHA256), and prints the token to stderr. Any client that knows the passphrase can derive the same token locally — see [HTTP API → Authentication](../interfaces/http-api.md#authentication).
+The first time you launch `--api`, lazyagent prompts for a passphrase, derives a Bearer token from it (PBKDF2-SHA256), and prints the token to stderr once. Clients can fetch the public salt from `/api/auth` and derive the same token locally — see [HTTP API → Authentication](../interfaces/http-api.md#authentication).
 
 ## Scope to one agent
 
