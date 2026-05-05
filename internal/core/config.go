@@ -22,6 +22,10 @@ type Config struct {
 	Agents         map[string]bool `json:"agents"`
 	ClaudeDirs     []string        `json:"claude_dirs,omitempty"`
 	TUI            TUIConfig       `json:"tui"`
+	// APIPassphrase is the secret used to derive the bearer token that
+	// protects the HTTP API. Empty means the API has not been configured yet
+	// — `lazyagent --api` will prompt for one on first run.
+	APIPassphrase string `json:"api_passphrase,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

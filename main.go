@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
@@ -158,7 +159,13 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	var apiDone chan struct{}
 
 	if runAPI {
-		srv, err := api.New(*apiHost, provider)
+		bearerToken, err := setupAPIAuth(&cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		srv, err := api.New(*apiHost, provider, bearerToken)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -201,6 +208,41 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			<-apiDone
 		}
 	}
+}
+
+// setupAPIAuth resolves the API passphrase (env var, configured value, or
+// interactive prompt), persists it if the user just chose one, and returns
+// the bearer token derived from it. It also prints the bearer token to
+// stderr so the user can copy it into clients (mobile app, curl).
+//
+// Returns an error when no passphrase is configured and stdin is not a
+// terminal — in that case the API server cannot start.
+func setupAPIAuth(cfg *core.Config) (string, error) {
+	passphrase, fromPrompt, err := apiauth.ResolvePassphrase(cfg.APIPassphrase)
+	if err != nil {
+		if err == apiauth.ErrNoTTY {
+			fmt.Fprintln(os.Stderr, "Error: API passphrase not configured.")
+			fmt.Fprintln(os.Stderr, "Run `lazyagent --api` from a terminal to set one,")
+			fmt.Fprintf(os.Stderr, "or set the %s environment variable.\n", apiauth.EnvVar)
+			return "", fmt.Errorf("no passphrase available")
+		}
+		return "", err
+	}
+
+	if fromPrompt {
+		cfg.APIPassphrase = passphrase
+		if err := core.SaveConfig(*cfg); err != nil {
+			return "", fmt.Errorf("save config: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n\n", core.ConfigPath())
+	}
+
+	token := apiauth.DeriveToken(passphrase)
+	fmt.Fprintln(os.Stderr, "API authentication enabled.")
+	fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
+	fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
+	fmt.Fprintln(os.Stderr)
+	return token, nil
 }
 
 // forkTray launches the tray as a detached background process with its own main thread.

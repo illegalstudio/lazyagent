@@ -19,6 +19,13 @@ export class Config {
     "claude_dirs"?: string[];
     "tui": TUIConfig;
 
+    /**
+     * APIPassphrase is the secret used to derive the bearer token that
+     * protects the HTTP API. Empty means the API has not been configured yet
+     * — `lazyagent --api` will prompt for one on first run.
+     */
+    "api_passphrase"?: string;
+
     /** Creates a new Config instance. */
     constructor($$source: Partial<Config> = {}) {
         if (!("window_minutes" in $$source)) {

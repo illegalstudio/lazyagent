@@ -17,29 +17,50 @@ import (
 type testProvider struct{}
 
 func (testProvider) DiscoverSessions() ([]*model.Session, error) { return nil, nil }
-func (testProvider) UseWatcher() bool                             { return false }
-func (testProvider) RefreshInterval() time.Duration               { return 0 }
-func (testProvider) WatchDirs() []string                          { return nil }
+func (testProvider) UseWatcher() bool                            { return false }
+func (testProvider) RefreshInterval() time.Duration              { return 0 }
+func (testProvider) WatchDirs() []string                         { return nil }
 
+// testToken is the bearer token used by the test helper. Tests authenticate
+// by sending Authorization: Bearer <testToken>. The token value itself is
+// arbitrary — we don't exercise the PBKDF2 derivation here, only the
+// middleware enforcement.
+const testToken = "test-token"
+
+// newTestServer spins up an httptest server with the same handler chain
+// the production server uses (CORS + auth middleware + routes), so tests
+// genuinely exercise the auth middleware.
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
-	srv, err := New(":0", testProvider{})
+	srv, err := New(":0", testProvider{}, testToken)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	srv.ln.Close()
-	ts := httptest.NewServer(srv.mux)
+	ts := httptest.NewServer(srv.srv.Handler)
 	return srv, ts
+}
+
+// authedGet performs a GET with the test bearer token attached.
+func authedGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
 }
 
 func TestGetSessions(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/sessions")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := authedGet(t, ts.URL+"/api/sessions")
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -57,10 +78,7 @@ func TestGetSessionNotFound(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/sessions/nonexistent")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := authedGet(t, ts.URL+"/api/sessions/nonexistent")
 	defer resp.Body.Close()
 	if resp.StatusCode != 404 {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
@@ -71,10 +89,7 @@ func TestGetStats(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/stats")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := authedGet(t, ts.URL+"/api/stats")
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -92,20 +107,26 @@ func TestGetConfig(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/config")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := authedGet(t, ts.URL+"/api/config")
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
+	// /api/config must not echo the passphrase even to an authenticated caller.
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v, ok := body["api_passphrase"]; ok && v != "" {
+		t.Fatalf("api_passphrase should not be returned, got %v", v)
+	}
 }
 
-func TestPlayground(t *testing.T) {
+func TestPlaygroundIsPublic(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
 
+	// No Authorization header — must still succeed.
 	resp, err := http.Get(ts.URL + "/api")
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +140,38 @@ func TestPlayground(t *testing.T) {
 	}
 }
 
+func TestEndpointsRejectMissingToken(t *testing.T) {
+	_, ts := newTestServer(t)
+	defer ts.Close()
+
+	for _, path := range []string{"/api/sessions", "/api/stats", "/api/config", "/api/events"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s: status = %d, want 401", path, resp.StatusCode)
+		}
+	}
+}
+
+func TestEndpointsRejectWrongToken(t *testing.T) {
+	_, ts := newTestServer(t)
+	defer ts.Close()
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/sessions", nil)
+	req.Header.Set("Authorization", "Bearer not-the-right-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
 func TestSSE(t *testing.T) {
 	srv, ts := newTestServer(t)
 	defer ts.Close()
@@ -126,7 +179,9 @@ func TestSSE(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/events", nil)
+	// SSE clients (EventSource) cannot send custom headers — verify the
+	// query-string fallback works.
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/events?token="+testToken, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +193,6 @@ func TestSSE(t *testing.T) {
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	// Read initial snapshot: expect "event: update" line.
 	gotEvent := false
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -150,7 +204,6 @@ func TestSSE(t *testing.T) {
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &payload); err != nil {
 				t.Fatalf("decode SSE data: %v", err)
 			}
-			// Got valid initial frame, success.
 			break
 		}
 	}
@@ -158,7 +211,6 @@ func TestSSE(t *testing.T) {
 		t.Fatal("never received SSE update event")
 	}
 
-	// Trigger a notification and verify a second frame arrives.
 	srv.notifySSE()
 
 	gotSecond := false

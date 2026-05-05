@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -36,7 +37,14 @@ type Server struct {
 // New creates a new API server.
 // If host is non-empty it binds to that address (e.g. ":7421" or "0.0.0.0:7421").
 // If host is empty it binds to 127.0.0.1 on DefaultPort with fallback.
-func New(host string, provider core.SessionProvider) (*Server, error) {
+//
+// bearerToken is the expected Bearer token. When non-empty, every request to
+// /api/* is rejected with 401 unless it carries Authorization: Bearer <token>
+// (or ?token=<token> as a fallback for SSE EventSource clients). The
+// playground HTML at GET /api is exempt so a browser can load it and ask the
+// user for the passphrase. An empty token disables auth entirely (used only
+// by tests and by callers that explicitly opt out).
+func New(host string, provider core.SessionProvider, bearerToken string) (*Server, error) {
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 
@@ -46,8 +54,14 @@ func New(host string, provider core.SessionProvider) (*Server, error) {
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
+
+	var handler http.Handler = s.mux
+	if bearerToken != "" {
+		auth := apiauth.Middleware(bearerToken, map[string]bool{"/api": true})
+		handler = auth(handler)
+	}
 	s.srv = &http.Server{
-		Handler:           corsMiddleware(s.mux),
+		Handler:           corsMiddleware(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB
@@ -273,7 +287,12 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, core.LoadConfig())
+	cfg := core.LoadConfig()
+	// Never expose the passphrase: even a holder of the bearer token has no
+	// reason to need it back, and clients shouldn't be able to round-trip it
+	// through a write to /api/config either (we don't accept writes today).
+	cfg.APIPassphrase = ""
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
