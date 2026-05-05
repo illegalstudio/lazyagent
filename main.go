@@ -13,10 +13,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
+	"github.com/illegalstudio/lazyagent/internal/passphrase"
 	"github.com/illegalstudio/lazyagent/internal/prune"
 	"github.com/illegalstudio/lazyagent/internal/search"
 	"github.com/illegalstudio/lazyagent/internal/tray"
@@ -39,6 +41,8 @@ func main() {
 			os.Exit(search.Run(os.Args[2:]))
 		case "limits":
 			os.Exit(limits.Run(os.Args[2:]))
+		case "passphrase":
+			os.Exit(passphrase.Run(os.Args[2:]))
 		}
 	}
 
@@ -79,6 +83,8 @@ Subcommands:
   lazyagent search "query"      Search chat transcripts with highlighted snippets
   lazyagent limits              Show 5h / weekly rate-limit usage and pace
   lazyagent limits --help       Show limits options (--agent claude|codex|all)
+  lazyagent passphrase          Set or rotate the HTTP API passphrase
+  lazyagent passphrase --show   Print the current bearer token without prompting
 
 Flags:
 `, version.String())
@@ -158,7 +164,13 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	var apiDone chan struct{}
 
 	if runAPI {
-		srv, err := api.New(*apiHost, provider)
+		bearerToken, err := setupAPIAuth(&cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -201,6 +213,49 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			<-apiDone
 		}
 	}
+}
+
+// setupAPIAuth resolves the API passphrase (env var, configured value, or
+// interactive prompt), persists it if the user just chose one, and returns
+// the bearer token derived from it.
+//
+// Returns an error when no passphrase is configured and stdin is not a
+// terminal — in that case the API server cannot start.
+func setupAPIAuth(cfg *core.Config) (string, error) {
+	passphrase, fromPrompt, err := apiauth.ResolvePassphrase(cfg.APIPassphrase)
+	if err != nil {
+		if err == apiauth.ErrNoTTY {
+			fmt.Fprintln(os.Stderr, "Error: API passphrase not configured.")
+			fmt.Fprintln(os.Stderr, "Run `lazyagent --api` from a terminal to set one,")
+			fmt.Fprintf(os.Stderr, "or set the %s environment variable.\n", apiauth.EnvVar)
+			return "", fmt.Errorf("no passphrase available")
+		}
+		return "", err
+	}
+
+	saltChanged := core.EnsureAPISalt(cfg)
+	if fromPrompt {
+		cfg.APIPassphrase = passphrase
+	}
+	if fromPrompt || saltChanged {
+		if err := core.SaveConfig(*cfg); err != nil {
+			return "", fmt.Errorf("save config: %w", err)
+		}
+	}
+	if fromPrompt {
+		fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n\n", core.ConfigPath())
+	}
+
+	token := apiauth.DeriveToken(passphrase, cfg.APISalt)
+	fmt.Fprintln(os.Stderr, "API authentication enabled.")
+	if fromPrompt {
+		fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
+		fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
+	} else {
+		fmt.Fprintln(os.Stderr, "Use `lazyagent passphrase --show` to print the bearer token.")
+	}
+	fmt.Fprintln(os.Stderr)
+	return token, nil
 }
 
 // forkTray launches the tray as a detached background process with its own main thread.

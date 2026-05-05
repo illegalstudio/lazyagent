@@ -63,13 +63,15 @@ On non-macOS systems `--gui` prints an error. See [macOS GUI](../interfaces/maco
 
 ### `--api`
 
-Start the read-only HTTP API server.
+Start the HTTP API server.
 
 ```bash
 lazyagent --api              # default bind: 127.0.0.1:7421
 lazyagent --api --host :8080 # custom port, localhost only
 lazyagent --api --host 0.0.0.0:7421   # expose on the network
 ```
+
+On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
 
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 
@@ -136,13 +138,14 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune`, `compact`, `search`, or `limits`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
+When the first positional argument is `prune`, `compact`, `search`, `limits`, or `passphrase`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
 lazyagent search --agent codex api # search subcommand
 lazyagent limits --agent claude    # limits subcommand
+lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
@@ -175,6 +178,21 @@ lazyagent limits --agent codex   # only Codex
 Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call).
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
+
+### `passphrase`
+
+`passphrase` sets or rotates the passphrase that protects the [HTTP API](../interfaces/http-api.md). It runs without starting the server, so you can change credentials at any time and let any future `lazyagent --api` pick up the new value.
+
+```bash
+lazyagent passphrase             # interactive prompt and save
+lazyagent passphrase --show      # print the bearer token for the current passphrase
+```
+
+`passphrase` (no flags) always prompts (double-entry confirmation), even if a passphrase is already configured — it's a rotation, not a setup. `--show` derives the token from the env var if `LAZYAGENT_API_PASSPHRASE` is set, otherwise from the configured value, without prompting or changing the passphrase.
+
+`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Other invocations do not print the token.
+
+Restart any running `lazyagent --api` after rotating: the server reads the passphrase at startup, so it keeps using the old token until restarted.
 
 ## Common invocations
 

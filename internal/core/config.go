@@ -2,8 +2,13 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 )
 
 // TUIConfig holds TUI-specific settings.
@@ -22,6 +27,14 @@ type Config struct {
 	Agents         map[string]bool `json:"agents"`
 	ClaudeDirs     []string        `json:"claude_dirs,omitempty"`
 	TUI            TUIConfig       `json:"tui"`
+	// APIPassphrase is the secret used to derive the bearer token that
+	// protects the HTTP API. Empty means the API has not been configured yet
+	// — `lazyagent --api` will prompt for one on first run.
+	APIPassphrase string `json:"api_passphrase,omitempty"`
+	// APISalt is a public, per-install salt used with APIPassphrase when
+	// deriving the bearer token. It is not secret, but must stay stable so
+	// clients can derive the same token from the same passphrase.
+	APISalt string `json:"api_salt,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -90,33 +103,65 @@ func LoadConfig() Config {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// File doesn't exist — create it with defaults.
+		ensureAPISalt(&cfg)
 		_ = SaveConfig(cfg)
 		return cfg
 	}
 
 	_ = json.Unmarshal(data, &cfg)
 
-	// Backfill any missing agent keys so the file stays complete.
+	// Backfill any missing generated/config keys so the file stays complete.
+	changed := ensureAPISalt(&cfg)
 	defaults := DefaultConfig()
 	if cfg.Agents == nil {
 		cfg.Agents = defaults.Agents
+		changed = true
 	} else {
-		changed := false
 		for k, v := range defaults.Agents {
 			if _, ok := cfg.Agents[k]; !ok {
 				cfg.Agents[k] = v
 				changed = true
 			}
 		}
-		if changed {
-			_ = SaveConfig(cfg)
-		}
+	}
+	if changed {
+		_ = SaveConfig(cfg)
 	}
 
 	return cfg
 }
 
-// SaveConfig writes the config to disk.
+// EnsureAPISalt backfills the public per-install API salt when missing.
+// It returns true when cfg was changed.
+func EnsureAPISalt(cfg *Config) bool {
+	salt := strings.TrimSpace(cfg.APISalt)
+	if salt != "" {
+		if salt == cfg.APISalt {
+			return false
+		}
+		cfg.APISalt = salt
+		return true
+	}
+	generated, err := apiauth.NewSalt()
+	if err != nil {
+		// The salt is public and only needs uniqueness, not secrecy. crypto/rand
+		// failure is extremely unlikely; this fallback avoids silently reverting
+		// to the global legacy salt in constrained environments.
+		generated = fmt.Sprintf("%s-%d-%d", apiauth.SaltPrefix, os.Getpid(), time.Now().UnixNano())
+	}
+	cfg.APISalt = generated
+	return true
+}
+
+func ensureAPISalt(cfg *Config) bool {
+	return EnsureAPISalt(cfg)
+}
+
+// SaveConfig writes the config to disk. The file is created with mode 0o600
+// because it carries the API passphrase: anyone who can read it can derive
+// the bearer token. Existing files are chmod'ed back to 0o600 on every save
+// so that historical files (originally 0o644) get tightened on first write
+// after upgrading.
 func SaveConfig(cfg Config) error {
 	path := ConfigPath()
 	if path == "" {
@@ -124,7 +169,7 @@ func SaveConfig(cfg Config) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
@@ -133,5 +178,10 @@ func SaveConfig(cfg Config) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	// os.WriteFile only honors the mode at file creation; force-tighten any
+	// pre-existing file that may have been created before this change.
+	return os.Chmod(path, 0o600)
 }

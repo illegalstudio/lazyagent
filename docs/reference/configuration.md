@@ -26,6 +26,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (or `$XDG_CONFIG_HOME/lazyagen
     "pi": true
   },
   "claude_dirs": [],
+  "api_salt": "lazyagent-api-v1-2CwLr3D6GKbVv5m0Pu1nHQ",
   "tui": {
     "theme": "dark"
   }
@@ -89,6 +90,18 @@ Default: `[]`. Extra Claude base directories to scan. Each entry must be a direc
 ```
 
 When empty, lazyagent auto-detects from the `CLAUDE_CONFIG_DIR` environment variable, falling back to `~/.claude`. Use this field if you keep Claude sessions somewhere non-standard and want lazyagent to pick them up without setting env vars every time.
+
+### `api_passphrase`
+
+Default: `""` (empty — auth not yet configured). The passphrase used with `api_salt` to derive the bearer token that protects the [HTTP API](../interfaces/http-api.md). Created interactively on the first run of `lazyagent --api`; values shorter than 12 characters are rejected. You can edit it manually here at any time, and the next API server startup will derive a new token from it.
+
+Anyone who can read this file can talk to your API. lazyagent writes the config file with `0600` permissions and the config directory with `0700`, but you should still protect your home directory the same way you protect any other secret-bearing config (`~/.ssh`, `~/.aws`, etc).
+
+The `LAZYAGENT_API_PASSPHRASE` environment variable overrides this field at startup and is never persisted to disk — useful for CI or service-managed deployments.
+
+### `api_salt`
+
+Default: generated once per install. Public salt used with `api_passphrase` for PBKDF2 token derivation. It is also available from `GET /api/auth` so clients can derive tokens without reading this file. It is not secret, but keep it stable; changing it invalidates previously derived tokens until clients fetch the new salt.
 
 ### `tui.theme`
 

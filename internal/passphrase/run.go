@@ -1,0 +1,128 @@
+// Package passphrase implements the `lazyagent passphrase` subcommand:
+// a small interactive utility to set or rotate the API passphrase without
+// having to start the server. Useful when the user wants to change their
+// passphrase, share the bearer token with a new device, or recover the
+// token they forgot from a configured passphrase.
+package passphrase
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
+	"github.com/illegalstudio/lazyagent/internal/core"
+)
+
+// Run is the entry point invoked by main.go for `lazyagent passphrase ...`.
+func Run(args []string) int {
+	fs := flag.NewFlagSet("passphrase", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	var showOnly bool
+	fs.BoolVar(&showOnly, "show", false, "Print the bearer token for the current passphrase and exit (no prompt)")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `lazyagent passphrase — set or rotate the HTTP API passphrase
+
+Usage:
+  lazyagent passphrase           Prompt for a new passphrase and save it
+  lazyagent passphrase --show    Print the current bearer token without prompting
+
+The passphrase lives in ~/.config/lazyagent/config.json under "api_passphrase".
+The public per-install salt lives next to it under "api_salt".
+The bearer token is derived from it using PBKDF2-SHA256 — every client (mobile
+app, browser playground, curl) needs the passphrase and public salt to derive
+the same token locally. See docs/interfaces/http-api.md for the full algorithm.
+
+Flags:
+`)
+		fs.PrintDefaults()
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	cfg := core.LoadConfig()
+
+	if showOnly {
+		return runShow(cfg)
+	}
+	return runRotate(&cfg)
+}
+
+// runShow prints the bearer token for the current passphrase. The raw token
+// goes to stdout (single line, no prefix) so it can be captured in a pipe:
+//
+//	TOKEN=$(lazyagent passphrase --show)
+//
+// All diagnostic context (source of the passphrase, hints on missing config)
+// goes to stderr and never pollutes stdout.
+func runShow(cfg core.Config) int {
+	envPP := strings.TrimSpace(os.Getenv(apiauth.EnvVar))
+	cfgPP := strings.TrimSpace(cfg.APIPassphrase)
+
+	pp := envPP
+	source := apiauth.EnvVar
+	if pp == "" {
+		pp = cfgPP
+		source = core.ConfigPath()
+	}
+	if pp == "" {
+		fmt.Fprintln(os.Stderr, "No passphrase configured.")
+		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set one.")
+		return 1
+	}
+	if err := apiauth.ValidatePassphrase(pp); err != nil {
+		fmt.Fprintf(os.Stderr, "Configured passphrase is invalid: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set a stronger one.")
+		return 1
+	}
+	fmt.Println(apiauth.DeriveToken(pp, cfg.APISalt))
+	fmt.Fprintf(os.Stderr, "(passphrase source: %s)\n", source)
+	// If both sources are set but disagree, the token shown is the one that
+	// will be used at runtime (env wins). Surface the divergence so a user
+	// who just rotated and forgot to unset the env var isn't confused.
+	if envPP != "" && cfgPP != "" && envPP != cfgPP {
+		fmt.Fprintln(os.Stderr, "Note: configured value differs from the env var; the env var wins on --api start.")
+	}
+	return 0
+}
+
+// runRotate prompts for a new passphrase and saves it. All output goes to
+// stderr — same convention as the auth setup banner in main.go — so a user
+// who pipes the command somewhere doesn't end up with a token in their pipe.
+func runRotate(cfg *core.Config) int {
+	// If the env var is set it will silently override the saved value on the
+	// next `--api` start, making the rotation appear to do nothing. Warn up
+	// front so the user can choose to unset it (or stop the rotation).
+	if env := strings.TrimSpace(os.Getenv(apiauth.EnvVar)); env != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s is set in your environment.\n", apiauth.EnvVar)
+		fmt.Fprintln(os.Stderr, "It will keep overriding the saved passphrase on the next --api start.")
+		fmt.Fprintln(os.Stderr, "Unset it after this rotation if you want the new value to win.")
+		fmt.Fprintln(os.Stderr)
+	}
+
+	pp, err := apiauth.PromptForNew()
+	if err != nil {
+		if err == apiauth.ErrNoTTY {
+			fmt.Fprintln(os.Stderr, "Error: cannot prompt — stdin is not a terminal.")
+			fmt.Fprintln(os.Stderr, "Edit ~/.config/lazyagent/config.json directly to change the passphrase.")
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	cfg.APIPassphrase = pp
+	core.EnsureAPISalt(cfg)
+	if err := core.SaveConfig(*cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n", core.ConfigPath())
+	fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase --show` to print the bearer token.")
+	fmt.Fprintln(os.Stderr, "Restart `lazyagent --api` for the new token to take effect.")
+	return 0
+}

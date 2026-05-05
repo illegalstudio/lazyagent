@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -23,10 +24,11 @@ const maxPortAttempts = 10
 
 // Server is the lazyagent HTTP API server.
 type Server struct {
-	manager *core.SessionManager
-	mux     *http.ServeMux
-	srv     *http.Server
-	ln      net.Listener
+	manager  *core.SessionManager
+	mux      *http.ServeMux
+	srv      *http.Server
+	ln       net.Listener
+	authSalt string
 
 	// SSE subscribers.
 	ssemu   sync.Mutex
@@ -36,18 +38,47 @@ type Server struct {
 // New creates a new API server.
 // If host is non-empty it binds to that address (e.g. ":7421" or "0.0.0.0:7421").
 // If host is empty it binds to 127.0.0.1 on DefaultPort with fallback.
-func New(host string, provider core.SessionProvider) (*Server, error) {
+//
+// bearerToken is the expected Bearer token. When non-empty, every request to
+// /api/* is rejected with 401 unless it carries Authorization: Bearer <token>
+// (or ?token=<token> as a fallback for SSE EventSource clients). The
+// playground HTML at GET /api and the public KDF metadata at GET /api/auth are
+// exempt so clients can derive the token from the user's passphrase. An empty
+// token disables auth entirely (used only by tests and by callers that
+// explicitly opt out).
+func New(host string, provider core.SessionProvider, bearerToken, authSalt string) (*Server, error) {
+	authSalt = strings.TrimSpace(authSalt)
+	if authSalt == "" {
+		authSalt = apiauth.SaltPrefix
+	}
+
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 
 	s := &Server{
-		manager: manager,
-		sseSubs: make(map[chan struct{}]struct{}),
+		manager:  manager,
+		authSalt: authSalt,
+		sseSubs:  make(map[chan struct{}]struct{}),
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
+
+	var handler http.Handler = s.mux
+	if bearerToken != "" {
+		auth := apiauth.Middleware(bearerToken, map[string]bool{
+			"/api":      true,
+			"/api/auth": true,
+		})
+		handler = auth(handler)
+	} else {
+		// Surface accidental misuse: production callers always pass a token,
+		// only tests and explicit opt-outs land here. A loud line in the log
+		// makes a misconfigured deployment obvious instead of silently
+		// running an open API.
+		log.Printf("WARNING: API server starting WITHOUT authentication — every /api/* endpoint is reachable")
+	}
 	s.srv = &http.Server{
-		Handler:           corsMiddleware(s.mux),
+		Handler:           corsMiddleware(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB
@@ -182,7 +213,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -195,6 +226,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api", s.handlePlayground)
+	s.mux.HandleFunc("GET /api/auth", s.handleAuthInfo)
 	s.mux.HandleFunc("GET /api/sessions", s.handleGetSessions)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
 	s.mux.HandleFunc("PUT /api/sessions/{id}/name", s.handleSetSessionName)
@@ -272,8 +304,24 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAuthInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, AuthInfo{
+		Salt:       s.authSalt,
+		Iterations: apiauth.Iterations,
+		KeyLength:  apiauth.KeyLength,
+		Hash:       "SHA-256",
+		Encoding:   "base64url-no-padding",
+	})
+}
+
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, core.LoadConfig())
+	cfg := core.LoadConfig()
+	// Never expose the passphrase: even a holder of the bearer token has no
+	// reason to need it back, and clients shouldn't be able to round-trip it
+	// through a write to /api/config either (we don't accept writes today).
+	cfg.APIPassphrase = ""
+	cfg.APISalt = ""
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
@@ -397,6 +445,16 @@ type StatsResponse struct {
 	TotalSessions  int `json:"total_sessions"`
 	ActiveSessions int `json:"active_sessions"`
 	WindowMinutes  int `json:"window_minutes"`
+}
+
+// AuthInfo describes the public KDF parameters clients need before they can
+// derive the bearer token from a passphrase.
+type AuthInfo struct {
+	Salt       string `json:"salt"`
+	Iterations int    `json:"iterations"`
+	KeyLength  int    `json:"key_length"`
+	Hash       string `json:"hash"`
+	Encoding   string `json:"encoding"`
 }
 
 // SSEPayload is the data pushed on each SSE "update" event.

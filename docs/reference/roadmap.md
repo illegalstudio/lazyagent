@@ -57,6 +57,7 @@ sidebar:
 - ✅ Custom bind address
 - ✅ Combinable with TUI and GUI
 - ✅ Session rename endpoints
+- ✅ Passphrase-based Bearer auth (PBKDF2-SHA256)
 
 ## v0.5 — Multi-agent support
 

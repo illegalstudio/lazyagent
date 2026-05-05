@@ -77,13 +77,14 @@ make build
 ```
 lazyagent                        Launch the terminal UI (monitors all agents)
 lazyagent --agent claude         Monitor only Claude Code sessions
-lazyagent --api                  Start the HTTP API on 127.0.0.1:7421
+lazyagent --api                  Start the HTTP API (Bearer-token protected)
 lazyagent --gui                  Launch the macOS menu bar app
 lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent search "query"         Search chat transcripts with snippets
 lazyagent limits                 Show 5h / weekly rate-limit usage and pace
+lazyagent passphrase             Set or rotate the HTTP API passphrase
 lazyagent --help                 Show full help
 ```
 

@@ -23,6 +23,7 @@ lazyagent/
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── opencode/               # OpenCode SQLite parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
+│   ├── apiauth/                # Bearer-token derivation (PBKDF2) + auth middleware
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss, dark/light themes)
 │   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
 │   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
