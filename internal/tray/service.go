@@ -386,9 +386,13 @@ func (s *SessionService) OpenReleases() {
 	browser.OpenURL("https://github.com/illegalstudio/lazyagent/releases")
 }
 
-// GetConfig returns the current config.
+// GetConfig returns the current config. The API passphrase is scrubbed
+// before returning so the secret never crosses the Wails IPC boundary into
+// the frontend (mirrors what /api/config does for HTTP callers).
 func (s *SessionService) GetConfig() core.Config {
-	return core.LoadConfig()
+	cfg := core.LoadConfig()
+	cfg.APIPassphrase = ""
+	return cfg
 }
 
 // Detach switches from tray panel to a normal detached window.
