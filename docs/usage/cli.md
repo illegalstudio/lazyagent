@@ -190,6 +190,8 @@ lazyagent passphrase --show      # print the bearer token for the current passph
 
 `passphrase` (no flags) always prompts (double-entry confirmation), even if a passphrase is already configured — it's a rotation, not a setup. `--show` is read-only: it derives the token from the env var if `LAZYAGENT_API_PASSPHRASE` is set, otherwise from the configured value, and exits without writing.
 
+`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Every other invocation of the subcommand keeps all output on stderr.
+
 Restart any running `lazyagent --api` after rotating: the server reads the passphrase at startup, so it keeps using the old token until restarted.
 
 ## Common invocations

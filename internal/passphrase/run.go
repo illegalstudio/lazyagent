@@ -52,6 +52,13 @@ Flags:
 	return runRotate(&cfg)
 }
 
+// runShow prints the bearer token for the current passphrase. The raw token
+// goes to stdout (single line, no prefix) so it can be captured in a pipe:
+//
+//	TOKEN=$(lazyagent passphrase --show)
+//
+// All diagnostic context (source of the passphrase, hints on missing config)
+// goes to stderr and never pollutes stdout.
 func runShow(cfg core.Config) int {
 	pp := strings.TrimSpace(os.Getenv(apiauth.EnvVar))
 	source := apiauth.EnvVar
@@ -64,11 +71,14 @@ func runShow(cfg core.Config) int {
 		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set one.")
 		return 1
 	}
-	fmt.Printf("Bearer token: %s\n", apiauth.DeriveToken(pp))
+	fmt.Println(apiauth.DeriveToken(pp))
 	fmt.Fprintf(os.Stderr, "(passphrase source: %s)\n", source)
 	return 0
 }
 
+// runRotate prompts for a new passphrase and saves it. All output goes to
+// stderr — same convention as the auth setup banner in main.go — so a user
+// who pipes the command somewhere doesn't end up with a token in their pipe.
 func runRotate(cfg *core.Config) int {
 	pp, err := apiauth.PromptForNew()
 	if err != nil {
@@ -85,7 +95,7 @@ func runRotate(cfg *core.Config) int {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		return 1
 	}
-	fmt.Printf("Bearer token: %s\n", apiauth.DeriveToken(pp))
+	fmt.Fprintf(os.Stderr, "Bearer token: %s\n", apiauth.DeriveToken(pp))
 	fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n", core.ConfigPath())
 	fmt.Fprintln(os.Stderr, "Restart `lazyagent --api` for the new token to take effect.")
 	return 0
