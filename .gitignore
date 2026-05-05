@@ -7,7 +7,10 @@
 # Frontend build
 frontend/node_modules/
 frontend/dist/
-internal/assets/dist/
+# Track an empty internal/assets/dist/ so go:embed has a target even on a
+# bare clone (the Makefile copies frontend/dist into it before building).
+internal/assets/dist/*
+!internal/assets/dist/.gitkeep
 
 # Claude Code
 .claude/settings.local.json
