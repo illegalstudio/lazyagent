@@ -77,6 +77,14 @@ func promptPassphraseTwice(in *os.File, out io.Writer) (string, error) {
 			fmt.Fprintln(out, "Passphrase cannot be empty. Try again.")
 			continue
 		}
+		// Warn before asking for confirmation: a short passphrase makes the
+		// derived bearer token cheaper to brute-force, and the user should be
+		// able to abort right away rather than re-typing it just to learn
+		// they should have picked something longer.
+		if len(first) < MinPassphraseLength {
+			fmt.Fprintf(out, "Warning: passphrase is shorter than %d characters. A longer passphrase is harder to brute-force.\n", MinPassphraseLength)
+			fmt.Fprintln(out, "Press Ctrl+C to abort, or confirm to keep this passphrase.")
+		}
 
 		fmt.Fprint(out, "Confirm passphrase:   ")
 		second, err := term.ReadPassword(int(in.Fd()))
@@ -89,9 +97,6 @@ func promptPassphraseTwice(in *os.File, out io.Writer) (string, error) {
 		if string(first) != string(second) {
 			fmt.Fprintln(out, "Passphrases do not match. Try again.")
 			continue
-		}
-		if len(first) < MinPassphraseLength {
-			fmt.Fprintf(out, "Warning: passphrase is shorter than %d characters. A longer passphrase is harder to brute-force.\n\n", MinPassphraseLength)
 		}
 		return string(first), nil
 	}
