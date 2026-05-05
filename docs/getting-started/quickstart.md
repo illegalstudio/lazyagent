@@ -24,7 +24,7 @@ lazyagent is a single binary with three interfaces, selectable by flag:
 ```bash
 lazyagent              # Terminal UI (default)
 lazyagent --gui        # macOS menu bar app (detaches from the terminal)
-lazyagent --api        # HTTP API on http://127.0.0.1:7421
+lazyagent --api        # HTTP API on http://127.0.0.1:7421 (Bearer-token protected)
 ```
 
 They're combinable — on a typical macOS setup:
@@ -34,6 +34,8 @@ lazyagent --gui --api
 ```
 
 runs the menu bar app and the API side by side from a single process. See [Recipes](../usage/recipes.md) for more combinations.
+
+The first time you launch `--api`, lazyagent prompts for a passphrase, derives a Bearer token from it (PBKDF2-SHA256), and prints the token to stderr. Any client that knows the passphrase can derive the same token locally — see [HTTP API → Authentication](../interfaces/http-api.md#authentication).
 
 ## Scope to one agent
 

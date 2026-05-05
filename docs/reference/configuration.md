@@ -90,6 +90,14 @@ Default: `[]`. Extra Claude base directories to scan. Each entry must be a direc
 
 When empty, lazyagent auto-detects from the `CLAUDE_CONFIG_DIR` environment variable, falling back to `~/.claude`. Use this field if you keep Claude sessions somewhere non-standard and want lazyagent to pick them up without setting env vars every time.
 
+### `api_passphrase`
+
+Default: `""` (empty — auth not yet configured). The passphrase used to derive the bearer token that protects the [HTTP API](../interfaces/http-api.md). Created interactively on the first run of `lazyagent --api`; you can edit it manually here at any time, and the next API server startup will derive a new token from it.
+
+Anyone who can read this file can talk to your API. lazyagent does not change file permissions on your behalf — protect your home directory the same way you protect any other secret-bearing config (`~/.ssh`, `~/.aws`, etc).
+
+The `LAZYAGENT_API_PASSPHRASE` environment variable overrides this field at startup and is never persisted to disk — useful for CI or service-managed deployments.
+
 ### `tui.theme`
 
 Default: `"dark"`. Supported values:
