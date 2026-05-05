@@ -60,10 +60,13 @@ Flags:
 // All diagnostic context (source of the passphrase, hints on missing config)
 // goes to stderr and never pollutes stdout.
 func runShow(cfg core.Config) int {
-	pp := strings.TrimSpace(os.Getenv(apiauth.EnvVar))
+	envPP := strings.TrimSpace(os.Getenv(apiauth.EnvVar))
+	cfgPP := strings.TrimSpace(cfg.APIPassphrase)
+
+	pp := envPP
 	source := apiauth.EnvVar
 	if pp == "" {
-		pp = strings.TrimSpace(cfg.APIPassphrase)
+		pp = cfgPP
 		source = core.ConfigPath()
 	}
 	if pp == "" {
@@ -73,6 +76,12 @@ func runShow(cfg core.Config) int {
 	}
 	fmt.Println(apiauth.DeriveToken(pp))
 	fmt.Fprintf(os.Stderr, "(passphrase source: %s)\n", source)
+	// If both sources are set but disagree, the token shown is the one that
+	// will be used at runtime (env wins). Surface the divergence so a user
+	// who just rotated and forgot to unset the env var isn't confused.
+	if envPP != "" && cfgPP != "" && envPP != cfgPP {
+		fmt.Fprintln(os.Stderr, "Note: configured value differs from the env var; the env var wins on --api start.")
+	}
 	return 0
 }
 
