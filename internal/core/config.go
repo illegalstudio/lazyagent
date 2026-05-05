@@ -120,7 +120,11 @@ func LoadConfig() Config {
 	return cfg
 }
 
-// SaveConfig writes the config to disk.
+// SaveConfig writes the config to disk. The file is created with mode 0o600
+// because it carries the API passphrase: anyone who can read it can derive
+// the bearer token. Existing files are chmod'ed back to 0o600 on every save
+// so that historical files (originally 0o644) get tightened on first write
+// after upgrading.
 func SaveConfig(cfg Config) error {
 	path := ConfigPath()
 	if path == "" {
@@ -128,7 +132,7 @@ func SaveConfig(cfg Config) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
@@ -137,5 +141,10 @@ func SaveConfig(cfg Config) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	// os.WriteFile only honors the mode at file creation; force-tighten any
+	// pre-existing file that may have been created before this change.
+	return os.Chmod(path, 0o600)
 }
