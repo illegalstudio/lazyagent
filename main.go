@@ -18,6 +18,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
+	"github.com/illegalstudio/lazyagent/internal/passphrase"
 	"github.com/illegalstudio/lazyagent/internal/prune"
 	"github.com/illegalstudio/lazyagent/internal/search"
 	"github.com/illegalstudio/lazyagent/internal/tray"
@@ -40,6 +41,8 @@ func main() {
 			os.Exit(search.Run(os.Args[2:]))
 		case "limits":
 			os.Exit(limits.Run(os.Args[2:]))
+		case "passphrase":
+			os.Exit(passphrase.Run(os.Args[2:]))
 		}
 	}
 
@@ -80,6 +83,8 @@ Subcommands:
   lazyagent search "query"      Search chat transcripts with highlighted snippets
   lazyagent limits              Show 5h / weekly rate-limit usage and pace
   lazyagent limits --help       Show limits options (--agent claude|codex|all)
+  lazyagent passphrase          Set or rotate the HTTP API passphrase
+  lazyagent passphrase --show   Print the current bearer token without prompting
 
 Flags:
 `, version.String())
