@@ -59,6 +59,12 @@ func New(host string, provider core.SessionProvider, bearerToken string) (*Serve
 	if bearerToken != "" {
 		auth := apiauth.Middleware(bearerToken, map[string]bool{"/api": true})
 		handler = auth(handler)
+	} else {
+		// Surface accidental misuse: production callers always pass a token,
+		// only tests and explicit opt-outs land here. A loud line in the log
+		// makes a misconfigured deployment obvious instead of silently
+		// running an open API.
+		log.Printf("WARNING: API server starting WITHOUT authentication — every /api/* endpoint is reachable")
 	}
 	s.srv = &http.Server{
 		Handler:           corsMiddleware(handler),
