@@ -151,8 +151,6 @@ func extractChunks(src sourceState, cfg core.Config) ([]chunk, error) {
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", src.Agent)
 	}
-	_ = cfg
-	return nil, nil
 }
 
 type genericBlock struct {
