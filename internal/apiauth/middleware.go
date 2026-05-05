@@ -29,6 +29,12 @@ func Middleware(expectedToken string, exemptPaths map[string]bool) func(http.Han
 				writeUnauthorized(w, "missing bearer token")
 				return
 			}
+			// subtle.ConstantTimeCompare returns 0 immediately on length
+			// mismatch, which technically leaks length. Acceptable here:
+			// expectedToken always has fixed length 43 (32-byte PBKDF2
+			// output, base64url-encoded without padding), so a wrong-length
+			// input only tells the attacker what they could have computed
+			// from the public algorithm anyway.
 			if subtle.ConstantTimeCompare([]byte(provided), []byte(expectedToken)) != 1 {
 				writeUnauthorized(w, "invalid bearer token")
 				return

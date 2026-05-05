@@ -131,6 +131,10 @@ const KDF_SALT = "__SALT__";
 const KDF_ITER = __ITER__;
 const KDF_LEN  = __LEN__;
 
+// The token sits in a global so unlocked endpoints can use it without
+// re-deriving. The page is the only HTML the server ever serves and loads
+// no third-party scripts, so XSS exfil isn't a concern today — but if a
+// future change pulls in any external script (analytics, CDN), reconsider.
 let bearerToken = "";  // populated by unlock()
 let evtSource = null;
 
