@@ -25,6 +25,12 @@ export class Config {
      * — `lazyagent --api` will prompt for one on first run.
      */
     "api_passphrase"?: string;
+    /**
+     * APISalt is a public, per-install salt used with APIPassphrase when
+     * deriving the bearer token. It is not secret, but must stay stable so
+     * clients can derive the same token from the same passphrase.
+     */
+    "api_salt"?: string;
 
     /** Creates a new Config instance. */
     constructor($$source: Partial<Config> = {}) {

@@ -5,6 +5,7 @@
 package apiauth
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"strings"
@@ -12,26 +13,39 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// Derivation parameters. These are part of the public protocol — every client
-// that wants to compute a token from a passphrase MUST use exactly these
-// values, otherwise the derived token will not match what the server expects.
+// Derivation parameters. These are part of the public protocol: every client
+// that wants to compute a token from a passphrase must use these KDF settings
+// plus the server's public per-install salt.
 //
-// The "-v1" suffix in the salt allows future migrations: a "-v2" can be
-// introduced without breaking existing v1 clients.
+// SaltPrefix marks salts generated for this protocol version and allows future
+// migrations without making salts ambiguous.
 const (
-	Salt       = "lazyagent-api-v1"
+	SaltPrefix = "lazyagent-api-v1"
 	Iterations = 600_000
 	KeyLength  = 32
 )
 
-// DeriveToken returns the bearer token for the given passphrase.
+// NewSalt returns a public, per-install salt for API token derivation.
+func NewSalt() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return SaltPrefix + "-" + base64.RawURLEncoding.EncodeToString(b[:]), nil
+}
+
+// DeriveToken returns the bearer token for the given passphrase and salt.
 // Returns the empty string when passphrase is empty (callers use this to
 // detect "auth disabled / not configured").
-func DeriveToken(passphrase string) string {
+func DeriveToken(passphrase, salt string) string {
 	passphrase = strings.TrimSpace(passphrase)
 	if passphrase == "" {
 		return ""
 	}
-	key := pbkdf2.Key([]byte(passphrase), []byte(Salt), Iterations, KeyLength, sha256.New)
+	salt = strings.TrimSpace(salt)
+	if salt == "" {
+		salt = SaltPrefix
+	}
+	key := pbkdf2.Key([]byte(passphrase), []byte(salt), Iterations, KeyLength, sha256.New)
 	return base64.RawURLEncoding.EncodeToString(key)
 }

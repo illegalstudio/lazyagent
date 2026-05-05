@@ -48,13 +48,23 @@ func TestMiddlewareAcceptsCorrectToken(t *testing.T) {
 	}
 }
 
-func TestMiddlewareAcceptsTokenFromQuery(t *testing.T) {
+func TestMiddlewareAcceptsTokenFromQueryForSSE(t *testing.T) {
 	h := newHandler("expected", nil)
 	req := httptest.NewRequest("GET", "/api/events?token=expected", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (token from query)", rr.Code)
+	}
+}
+
+func TestMiddlewareRejectsTokenFromQueryForNonSSE(t *testing.T) {
+	h := newHandler("expected", nil)
+	req := httptest.NewRequest("GET", "/api/sessions?token=expected", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (query token only allowed for SSE)", rr.Code)
 	}
 }
 

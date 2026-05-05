@@ -15,14 +15,18 @@ import (
 // config file isn't convenient. The env var value is never written to disk.
 const EnvVar = "LAZYAGENT_API_PASSPHRASE"
 
-// MinPassphraseLength is the soft minimum below which we warn the user.
-// Not enforced — short passphrases produce valid (just weaker) tokens.
-const MinPassphraseLength = 8
+// MinPassphraseLength is the minimum accepted API passphrase length. Shorter
+// passphrases are too cheap to brute-force once an attacker has a token oracle
+// or captured token material.
+const MinPassphraseLength = 12
 
 // ErrNoTTY is returned when no passphrase is configured and stdin is not a
 // terminal, so we can't prompt for one. The caller should print actionable
 // guidance and exit.
 var ErrNoTTY = errors.New("no passphrase configured and stdin is not a terminal")
+
+// ErrWeakPassphrase is returned when a configured/env passphrase is too short.
+var ErrWeakPassphrase = errors.New("api passphrase is too short")
 
 // ResolvePassphrase returns the passphrase to use, in priority order:
 //  1. the LAZYAGENT_API_PASSPHRASE env var, if set
@@ -34,9 +38,15 @@ var ErrNoTTY = errors.New("no passphrase configured and stdin is not a terminal"
 // persisted to the config file by the caller.
 func ResolvePassphrase(configured string) (passphrase string, fromPrompt bool, err error) {
 	if env := strings.TrimSpace(os.Getenv(EnvVar)); env != "" {
+		if err := ValidatePassphrase(env); err != nil {
+			return "", false, err
+		}
 		return env, false, nil
 	}
 	if configured = strings.TrimSpace(configured); configured != "" {
+		if err := ValidatePassphrase(configured); err != nil {
+			return "", false, err
+		}
 		return configured, false, nil
 	}
 	pp, err := PromptForNew()
@@ -44,6 +54,18 @@ func ResolvePassphrase(configured string) (passphrase string, fromPrompt bool, e
 		return "", false, err
 	}
 	return pp, true, nil
+}
+
+// ValidatePassphrase enforces the non-interactive passphrase policy. Empty
+// values are handled by callers because they mean "not configured".
+func ValidatePassphrase(passphrase string) error {
+	if strings.TrimSpace(passphrase) == "" {
+		return nil
+	}
+	if len([]rune(strings.TrimSpace(passphrase))) < MinPassphraseLength {
+		return fmt.Errorf("%w: use at least %d characters", ErrWeakPassphrase, MinPassphraseLength)
+	}
+	return nil
 }
 
 // PromptForNew always prompts the user for a new passphrase (double-entry
@@ -77,13 +99,9 @@ func promptPassphraseTwice(in *os.File, out io.Writer) (string, error) {
 			fmt.Fprintln(out, "Passphrase cannot be empty. Try again.")
 			continue
 		}
-		// Warn before asking for confirmation: a short passphrase makes the
-		// derived bearer token cheaper to brute-force, and the user should be
-		// able to abort right away rather than re-typing it just to learn
-		// they should have picked something longer.
-		if len(first) < MinPassphraseLength {
-			fmt.Fprintf(out, "Warning: passphrase is shorter than %d characters. A longer passphrase is harder to brute-force.\n", MinPassphraseLength)
-			fmt.Fprintln(out, "Press Ctrl+C to abort, or confirm to keep this passphrase.")
+		if len([]rune(string(first))) < MinPassphraseLength {
+			fmt.Fprintf(out, "Passphrase must be at least %d characters. Try again.\n", MinPassphraseLength)
+			continue
 		}
 
 		fmt.Fprint(out, "Confirm passphrase:   ")

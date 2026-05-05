@@ -9,7 +9,8 @@ import (
 )
 
 // playgroundHTML is rendered with PBKDF2 parameters injected as JS constants
-// so the in-page client uses exactly the same algorithm as the server.
+// so the in-page client uses exactly the same algorithm and per-install salt as
+// the server.
 const playgroundHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,7 +128,7 @@ const playgroundHTML = `<!DOCTYPE html>
 
 <script>
 // PBKDF2 parameters — MUST match the server constants in internal/apiauth/derive.go.
-const KDF_SALT = "__SALT__";
+const KDF_SALT = __SALT__;
 const KDF_ITER = __ITER__;
 const KDF_LEN  = __LEN__;
 
@@ -319,13 +320,13 @@ function stopSSE() {
 
 func (s *Server) handlePlayground(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(renderedPlayground))
+	_, _ = w.Write([]byte(renderPlayground(s.authSalt)))
 }
 
-// renderedPlayground is the playground HTML with KDF parameters substituted in.
-// Computed once at package init since the parameters are constants.
-var renderedPlayground = strings.NewReplacer(
-	"__SALT__", apiauth.Salt,
-	"__ITER__", strconv.Itoa(apiauth.Iterations),
-	"__LEN__", strconv.Itoa(apiauth.KeyLength),
-).Replace(playgroundHTML)
+func renderPlayground(salt string) string {
+	return strings.NewReplacer(
+		"__SALT__", strconv.Quote(salt),
+		"__ITER__", strconv.Itoa(apiauth.Iterations),
+		"__LEN__", strconv.Itoa(apiauth.KeyLength),
+	).Replace(playgroundHTML)
+}

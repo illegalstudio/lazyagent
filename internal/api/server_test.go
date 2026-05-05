@@ -26,13 +26,15 @@ func (testProvider) WatchDirs() []string                         { return nil }
 // arbitrary — we don't exercise the PBKDF2 derivation here, only the
 // middleware enforcement.
 const testToken = "test-token"
+const testSalt = "lazyagent-api-v1-test"
 
 // newTestServer spins up an httptest server with the same handler chain
 // the production server uses (CORS + auth middleware + routes), so tests
 // genuinely exercise the auth middleware.
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
-	srv, err := New(":0", testProvider{}, testToken)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	srv, err := New(":0", testProvider{}, testToken, testSalt)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -120,6 +122,9 @@ func TestGetConfig(t *testing.T) {
 	if v, ok := body["api_passphrase"]; ok && v != "" {
 		t.Fatalf("api_passphrase should not be returned, got %v", v)
 	}
+	if v, ok := body["api_salt"]; ok && v != "" {
+		t.Fatalf("api_salt should not be returned from /api/config, got %v", v)
+	}
 }
 
 func TestPlaygroundIsPublic(t *testing.T) {
@@ -137,6 +142,40 @@ func TestPlaygroundIsPublic(t *testing.T) {
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
 		t.Fatalf("content-type = %q, want text/html", ct)
+	}
+}
+
+func TestPlaygroundQuotesSalt(t *testing.T) {
+	html := renderPlayground(`";alert(1)//`)
+	if strings.Contains(html, `const KDF_SALT = "";alert(1)//";`) {
+		t.Fatal("salt was interpolated into JavaScript without escaping")
+	}
+	if !strings.Contains(html, `const KDF_SALT = "\";alert(1)//";`) {
+		t.Fatal("escaped salt literal not found in playground HTML")
+	}
+}
+
+func TestAuthInfoIsPublic(t *testing.T) {
+	_, ts := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/auth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var info AuthInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if info.Salt != testSalt {
+		t.Fatalf("salt = %q, want %q", info.Salt, testSalt)
+	}
+	if info.Iterations == 0 || info.KeyLength == 0 || info.Hash == "" || info.Encoding == "" {
+		t.Fatalf("incomplete auth info: %+v", info)
 	}
 }
 

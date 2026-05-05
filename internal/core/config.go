@@ -2,8 +2,13 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 )
 
 // TUIConfig holds TUI-specific settings.
@@ -26,6 +31,10 @@ type Config struct {
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.
 	APIPassphrase string `json:"api_passphrase,omitempty"`
+	// APISalt is a public, per-install salt used with APIPassphrase when
+	// deriving the bearer token. It is not secret, but must stay stable so
+	// clients can derive the same token from the same passphrase.
+	APISalt string `json:"api_salt,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -94,30 +103,58 @@ func LoadConfig() Config {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// File doesn't exist — create it with defaults.
+		ensureAPISalt(&cfg)
 		_ = SaveConfig(cfg)
 		return cfg
 	}
 
 	_ = json.Unmarshal(data, &cfg)
 
-	// Backfill any missing agent keys so the file stays complete.
+	// Backfill any missing generated/config keys so the file stays complete.
+	changed := ensureAPISalt(&cfg)
 	defaults := DefaultConfig()
 	if cfg.Agents == nil {
 		cfg.Agents = defaults.Agents
+		changed = true
 	} else {
-		changed := false
 		for k, v := range defaults.Agents {
 			if _, ok := cfg.Agents[k]; !ok {
 				cfg.Agents[k] = v
 				changed = true
 			}
 		}
-		if changed {
-			_ = SaveConfig(cfg)
-		}
+	}
+	if changed {
+		_ = SaveConfig(cfg)
 	}
 
 	return cfg
+}
+
+// EnsureAPISalt backfills the public per-install API salt when missing.
+// It returns true when cfg was changed.
+func EnsureAPISalt(cfg *Config) bool {
+	salt := strings.TrimSpace(cfg.APISalt)
+	if salt != "" {
+		if salt == cfg.APISalt {
+			return false
+		}
+		cfg.APISalt = salt
+		return true
+	}
+	generated, err := apiauth.NewSalt()
+	if err != nil {
+		// The salt is public and only needs uniqueness, not secrecy. crypto/rand
+		// failure is extremely unlikely; this fallback avoids silently reverting
+		// to the global legacy salt in constrained environments.
+		generated = fmt.Sprintf("%s-%d-%d", apiauth.SaltPrefix, os.Getpid(), time.Now().UnixNano())
+	}
+	cfg.APISalt = generated
+	return true
+}
+
+func ensureAPISalt(cfg *Config) bool {
+	return EnsureAPISalt(cfg)
 }
 
 // SaveConfig writes the config to disk. The file is created with mode 0o600

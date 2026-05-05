@@ -27,13 +27,14 @@ func Run(args []string) int {
 		fmt.Fprint(os.Stderr, `lazyagent passphrase — set or rotate the HTTP API passphrase
 
 Usage:
-  lazyagent passphrase           Prompt for a new passphrase, save it, print the bearer token
+  lazyagent passphrase           Prompt for a new passphrase and save it
   lazyagent passphrase --show    Print the current bearer token without prompting
 
 The passphrase lives in ~/.config/lazyagent/config.json under "api_passphrase".
+The public per-install salt lives next to it under "api_salt".
 The bearer token is derived from it using PBKDF2-SHA256 — every client (mobile
-app, browser playground, curl) that knows the passphrase can reproduce the
-same token locally. See docs/interfaces/http-api.md for the full algorithm.
+app, browser playground, curl) needs the passphrase and public salt to derive
+the same token locally. See docs/interfaces/http-api.md for the full algorithm.
 
 Flags:
 `)
@@ -74,7 +75,12 @@ func runShow(cfg core.Config) int {
 		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set one.")
 		return 1
 	}
-	fmt.Println(apiauth.DeriveToken(pp))
+	if err := apiauth.ValidatePassphrase(pp); err != nil {
+		fmt.Fprintf(os.Stderr, "Configured passphrase is invalid: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set a stronger one.")
+		return 1
+	}
+	fmt.Println(apiauth.DeriveToken(pp, cfg.APISalt))
 	fmt.Fprintf(os.Stderr, "(passphrase source: %s)\n", source)
 	// If both sources are set but disagree, the token shown is the one that
 	// will be used at runtime (env wins). Surface the divergence so a user
@@ -110,12 +116,13 @@ func runRotate(cfg *core.Config) int {
 		return 1
 	}
 	cfg.APIPassphrase = pp
+	core.EnsureAPISalt(cfg)
 	if err := core.SaveConfig(*cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(os.Stderr, "Bearer token: %s\n", apiauth.DeriveToken(pp))
 	fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n", core.ConfigPath())
+	fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase --show` to print the bearer token.")
 	fmt.Fprintln(os.Stderr, "Restart `lazyagent --api` for the new token to take effect.")
 	return 0
 }

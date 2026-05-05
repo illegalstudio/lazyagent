@@ -170,7 +170,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			os.Exit(1)
 		}
 
-		srv, err := api.New(*apiHost, provider, bearerToken)
+		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -217,8 +217,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 // setupAPIAuth resolves the API passphrase (env var, configured value, or
 // interactive prompt), persists it if the user just chose one, and returns
-// the bearer token derived from it. It also prints the bearer token to
-// stderr so the user can copy it into clients (mobile app, curl).
+// the bearer token derived from it.
 //
 // Returns an error when no passphrase is configured and stdin is not a
 // terminal — in that case the API server cannot start.
@@ -234,18 +233,27 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		return "", err
 	}
 
+	saltChanged := core.EnsureAPISalt(cfg)
 	if fromPrompt {
 		cfg.APIPassphrase = passphrase
+	}
+	if fromPrompt || saltChanged {
 		if err := core.SaveConfig(*cfg); err != nil {
 			return "", fmt.Errorf("save config: %w", err)
 		}
+	}
+	if fromPrompt {
 		fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n\n", core.ConfigPath())
 	}
 
-	token := apiauth.DeriveToken(passphrase)
+	token := apiauth.DeriveToken(passphrase, cfg.APISalt)
 	fmt.Fprintln(os.Stderr, "API authentication enabled.")
-	fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
-	fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
+	if fromPrompt {
+		fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
+		fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
+	} else {
+		fmt.Fprintln(os.Stderr, "Use `lazyagent passphrase --show` to print the bearer token.")
+	}
 	fmt.Fprintln(os.Stderr)
 	return token, nil
 }

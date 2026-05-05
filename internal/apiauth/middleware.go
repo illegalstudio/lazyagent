@@ -13,9 +13,10 @@ import (
 //     so it can be opened in a browser; it then collects the passphrase and
 //     authenticates subsequent JS calls.
 //
-// For requests that cannot send the Authorization header (notably the browser
-// EventSource API used by /api/events), the token may be supplied via the
-// "token" query parameter. This is documented as a fallback.
+// For /api/events requests that cannot send the Authorization header (notably
+// the browser EventSource API), the token may be supplied via the "token" query
+// parameter. Other endpoints intentionally reject query-string tokens because
+// URLs are more likely to end up in logs and shell history.
 func Middleware(expectedToken string, exemptPaths map[string]bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +48,9 @@ func Middleware(expectedToken string, exemptPaths map[string]bool) func(http.Han
 func extractToken(r *http.Request) string {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
+	}
+	if r.URL.Path != "/api/events" {
+		return ""
 	}
 	return r.URL.Query().Get("token")
 }
