@@ -80,6 +80,16 @@ func runShow(cfg core.Config) int {
 // stderr — same convention as the auth setup banner in main.go — so a user
 // who pipes the command somewhere doesn't end up with a token in their pipe.
 func runRotate(cfg *core.Config) int {
+	// If the env var is set it will silently override the saved value on the
+	// next `--api` start, making the rotation appear to do nothing. Warn up
+	// front so the user can choose to unset it (or stop the rotation).
+	if env := strings.TrimSpace(os.Getenv(apiauth.EnvVar)); env != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s is set in your environment.\n", apiauth.EnvVar)
+		fmt.Fprintln(os.Stderr, "It will keep overriding the saved passphrase on the next --api start.")
+		fmt.Fprintln(os.Stderr, "Unset it after this rotation if you want the new value to win.")
+		fmt.Fprintln(os.Stderr)
+	}
+
 	pp, err := apiauth.PromptForNew()
 	if err != nil {
 		if err == apiauth.ErrNoTTY {
