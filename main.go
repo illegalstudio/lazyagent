@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
+	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
@@ -138,6 +139,14 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			fmt.Fprintln(os.Stderr, "Error: --gui is not available in this build")
 			os.Exit(1)
 		}
+		// Pre-flight: the parent forks the tray with stderr suppressed, so a
+		// missing frontend embed would exit silently. Catch it here for a
+		// terminal-visible diagnostic.
+		if !assets.HasFrontend() {
+			fmt.Fprintln(os.Stderr, "Error: --gui requires embedded frontend assets that are missing from this binary.")
+			fmt.Fprintln(os.Stderr, "Rebuild with 'make build' from source, or reinstall the official release.")
+			os.Exit(1)
+		}
 
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
 			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
@@ -151,6 +160,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			defer os.Remove(trayPidFile)
 
 			if err := tray.Run(*demoMode, *agentMode); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			return
