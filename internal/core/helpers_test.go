@@ -68,3 +68,43 @@ func TestEffectiveCost_FallsBackToEstimate(t *testing.T) {
 		t.Errorf("EffectiveCost should estimate when direct cost is 0, got %f", got)
 	}
 }
+
+func TestPadRight_UsesTerminalCells(t *testing.T) {
+	got := PadRight("项目", 6)
+	if width := DisplayWidth(got); width != 6 {
+		t.Fatalf("PadRight width = %d, want 6 (%q)", width, got)
+	}
+	if got != "项目  " {
+		t.Fatalf("PadRight = %q, want %q", got, "项目  ")
+	}
+}
+
+func TestPadRight_TruncatesWideTextByCells(t *testing.T) {
+	got := PadRight("项目abc", 5)
+	if width := DisplayWidth(got); width != 5 {
+		t.Fatalf("PadRight width = %d, want 5 (%q)", width, got)
+	}
+	if got != "项目a" {
+		t.Fatalf("PadRight = %q, want %q", got, "项目a")
+	}
+}
+
+func TestTruncateCells_AddsTailWithinCellWidth(t *testing.T) {
+	got := TruncateCells("你好世界abc", 7, "…")
+	if width := DisplayWidth(got); width > 7 {
+		t.Fatalf("TruncateCells width = %d, want <= 7 (%q)", width, got)
+	}
+	if got != "你好世…" {
+		t.Fatalf("TruncateCells = %q, want %q", got, "你好世…")
+	}
+}
+
+func TestShortName_UsesTerminalCells(t *testing.T) {
+	got := ShortName("/Users/me/项目/超级长文件名", 10)
+	if width := DisplayWidth(got); width > 10 {
+		t.Fatalf("ShortName width = %d, want <= 10 (%q)", width, got)
+	}
+	if got != "…长文件名" {
+		t.Fatalf("ShortName = %q, want %q", got, "…长文件名")
+	}
+}

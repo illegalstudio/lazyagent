@@ -35,12 +35,12 @@ type editorFinishedMsg struct{ err error }
 
 // Model is the main bubbletea model.
 type Model struct {
-	theme    Theme
-	sty      styles
+	theme     Theme
+	sty       styles
 	actColors map[core.ActivityKind]lipgloss.Color
 
-	manager  *core.SessionManager
-	cursor   int
+	manager      *core.SessionManager
+	cursor       int
 	selectedID   string // session ID of the currently selected item
 	listOffset   int
 	detailOffset int
@@ -48,11 +48,11 @@ type Model struct {
 	width  int
 	height int
 
-	err           error
-	lastRefresh   time.Time
-	loading       bool
-	focus         int // 0 = list, 1 = detail
-	spinFrame     int // animation frame counter for spinners
+	err         error
+	lastRefresh time.Time
+	loading     bool
+	focus       int // 0 = list, 1 = detail
+	spinFrame   int // animation frame counter for spinners
 
 	// Filter / search
 	searchMode  bool
@@ -93,8 +93,8 @@ type keyMap struct {
 	Filter key.Binding
 	Search key.Binding
 	Esc    key.Binding
-	Open key.Binding
-	Copy key.Binding
+	Open   key.Binding
+	Copy   key.Binding
 }
 
 var keys = keyMap{
@@ -306,8 +306,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.listOffset = 0
 			case "backspace":
-				if len(m.searchQuery) > 0 {
-					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+				runes := []rune(m.searchQuery)
+				if len(runes) > 0 {
+					m.searchQuery = string(runes[:len(runes)-1])
 				}
 				m.cursor = 0
 				m.listOffset = 0
@@ -843,14 +844,14 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 	}
 	var name string
 	if displayName != "" {
-		runes := []rune(agentPrefix + displayName)
-		if len(runes) > nameW {
-			name = string(runes[:nameW-1]) + "…"
-		} else {
-			name = agentPrefix + displayName
-		}
+		name = core.TruncateCells(agentPrefix+displayName, nameW, "…")
 	} else {
-		name = agentPrefix + core.ShortName(s.CWD, nameW-len([]rune(agentPrefix)))
+		nameBudget := nameW - core.DisplayWidth(agentPrefix)
+		if nameBudget < 0 {
+			nameBudget = 0
+		}
+		name = agentPrefix + core.ShortName(s.CWD, nameBudget)
+		name = core.TruncateCells(name, nameW, "")
 	}
 	name = core.PadRight(name, nameW)
 
@@ -882,7 +883,7 @@ func (m Model) renderDetail(detailW, innerH int) string {
 
 	if m.err != nil && len(m.visible) == 0 {
 		return pStyle.Width(detailW).Height(innerH).Render(
-			lipgloss.NewStyle().Foreground(m.theme.Warning).Render("error: "+m.err.Error()),
+			lipgloss.NewStyle().Foreground(m.theme.Warning).Render("error: " + m.err.Error()),
 		)
 	}
 	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
@@ -928,7 +929,7 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		lipgloss.NewStyle().Foreground(actColor).Bold(true).Render(string(activity))
 	if s.CurrentTool != "" {
 		statusLine += "  " + lipgloss.NewStyle().Foreground(m.theme.Muted).
-			Render("(" + s.CurrentTool + ")")
+			Render("("+s.CurrentTool+")")
 	}
 	add(statusLine)
 	add("")
@@ -1016,7 +1017,7 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 
 	if s.LastFileWrite != "" {
 		agePart := " (" + core.FormatDuration(time.Since(s.LastFileWriteAt)) + ")"
-		maxFile := width - 2 - 22 - len(agePart)
+		maxFile := width - 2 - 22 - core.DisplayWidth(agePart)
 		if maxFile < 4 {
 			maxFile = 4
 		}
@@ -1049,9 +1050,7 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 			text := msg.Text
 			// Collapse newlines for single-line display
 			text = strings.ReplaceAll(text, "\n", " ")
-			if len(text) > msgW {
-				text = text[:msgW-1] + "…"
-			}
+			text = core.TruncateCells(text, msgW, "…")
 			add(lipgloss.NewStyle().Foreground(m.theme.Subtext).Render("  "+role+"  ") +
 				lipgloss.NewStyle().Foreground(m.theme.Text).Render(text))
 		}
@@ -1125,5 +1124,3 @@ func (m Model) renderHelp() string {
 	}
 	return helpLine
 }
-
-
