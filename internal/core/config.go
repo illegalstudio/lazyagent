@@ -18,13 +18,13 @@ type TUIConfig struct {
 
 // Config holds application settings shared by TUI and GUI.
 type Config struct {
-	WindowMinutes  int             `json:"window_minutes"`
-	DefaultFilter  string          `json:"default_filter"`
-	Editor         string          `json:"editor"`
-	LaunchAtLogin  bool            `json:"launch_at_login"`
-	Notifications  bool            `json:"notifications"`
-	NotifyAfterSec int             `json:"notify_after_sec"`
-	Agents         map[string]bool `json:"agents"`
+	WindowMinutes        int             `json:"window_minutes"`
+	DefaultFilter        string          `json:"default_filter"`
+	Editor               string          `json:"editor"`
+	LaunchAtLogin        bool            `json:"launch_at_login"`
+	Notifications        bool            `json:"notifications"`
+	NotifyAfterSec       int             `json:"notify_after_sec"`
+	Agents               map[string]bool `json:"agents"`
 	ClaudeDirs           []string        `json:"claude_dirs,omitempty"`
 	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
 	TUI                  TUIConfig       `json:"tui"`
