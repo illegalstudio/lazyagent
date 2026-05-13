@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
+	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -138,6 +139,10 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			fmt.Fprintln(os.Stderr, "Error: --gui is not available in this build")
 			os.Exit(1)
 		}
+		if !assets.HasFrontend() {
+			fmt.Fprintln(os.Stderr, "Error: frontend assets not found — run 'make build' to include the menu bar app")
+			os.Exit(1)
+		}
 
 		if os.Getenv("LAZYAGENT_DETACHED") == "" {
 			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
@@ -151,6 +156,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			defer os.Remove(trayPidFile)
 
 			if err := tray.Run(*demoMode, *agentMode); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			return
