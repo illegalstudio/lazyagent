@@ -48,6 +48,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		}
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
+	s.manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
 	if err := s.manager.StartWatcher(); err != nil {
 		return err
 	}

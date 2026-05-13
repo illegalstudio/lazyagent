@@ -116,6 +116,7 @@ func NewModel(provider core.SessionProvider) Model {
 	cfg := core.LoadConfig()
 	t := LoadTheme(cfg.TUI.Theme)
 	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
+	mgr.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
 	_ = mgr.StartWatcher()
 	return Model{
 		theme:     t,
