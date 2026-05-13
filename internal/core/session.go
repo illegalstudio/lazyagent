@@ -65,7 +65,7 @@ func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionMana
 // sessions from filtered views (VisibleSessions / QuerySessions).
 func (m *SessionManager) SetExcludeCWDSubstrings(patterns []string) {
 	m.mu.Lock()
-	m.excludeCWDSubstrings = patterns
+	m.excludeCWDSubstrings = slices.Clone(patterns)
 	m.mu.Unlock()
 }
 
