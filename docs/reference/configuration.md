@@ -26,6 +26,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (or `$XDG_CONFIG_HOME/lazyagen
     "pi": true
   },
   "claude_dirs": [],
+  "exclude_cwd_substrings": [],
   "api_salt": "lazyagent-api-v1-2CwLr3D6GKbVv5m0Pu1nHQ",
   "tui": {
     "theme": "dark"
@@ -90,6 +91,23 @@ Default: `[]`. Extra Claude base directories to scan. Each entry must be a direc
 ```
 
 When empty, lazyagent auto-detects from the `CLAUDE_CONFIG_DIR` environment variable, falling back to `~/.claude`. Use this field if you keep Claude sessions somewhere non-standard and want lazyagent to pick them up without setting env vars every time.
+
+### `exclude_cwd_substrings`
+
+Default: `[]`. List of substrings; any session whose working directory (CWD) contains one of them is hidden from every interface (TUI, tray panel, HTTP API). Matching is a literal substring check on the full CWD path, case-sensitive.
+
+```json
+{
+  "exclude_cwd_substrings": [
+    ".claude-mem/observer-sessions",
+    "/tmp/scratch"
+  ]
+}
+```
+
+Useful for hiding background or automated sessions (e.g. observer processes, autonomous loops) that run without user attention and would otherwise clutter the active list. Sessions are still on disk and visible to other tools — this only affects what lazyagent shows.
+
+Substring matching is intentional and broad: `"test"` would also hide `/home/me/projects/latest`. Use a path-shaped fragment (with a `/` in it) when you want to be specific.
 
 ### `api_passphrase`
 
