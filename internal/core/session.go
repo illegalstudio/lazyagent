@@ -44,10 +44,11 @@ type SessionManager struct {
 	provider SessionProvider
 	names    *SessionNames
 
-	windowMinutes    int
-	activityFilter   ActivityKind
-	searchQuery      string
-	lastPollDiscover time.Time
+	windowMinutes        int
+	activityFilter       ActivityKind
+	searchQuery          string
+	lastPollDiscover     time.Time
+	excludeCWDSubstrings []string
 }
 
 // NewSessionManager creates a new SessionManager with the given provider.
@@ -58,6 +59,14 @@ func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionMana
 		provider:      provider,
 		names:         NewSessionNames(),
 	}
+}
+
+// SetExcludeCWDSubstrings sets the CWD substring patterns used to exclude
+// sessions from filtered views (VisibleSessions / QuerySessions).
+func (m *SessionManager) SetExcludeCWDSubstrings(patterns []string) {
+	m.mu.Lock()
+	m.excludeCWDSubstrings = slices.Clone(patterns)
+	m.mu.Unlock()
 }
 
 // SessionName returns the custom name for a session, or empty string.
@@ -225,6 +234,17 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 	lowerQuery := strings.ToLower(search)
 	var visible []*model.Session
 	for _, s := range m.sessions {
+		// CWD-based exclusion: skip sessions whose CWD contains any excluded substring.
+		excluded := false
+		for _, pattern := range m.excludeCWDSubstrings {
+			if pattern != "" && strings.Contains(s.CWD, pattern) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
+		}
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
 			continue
 		}

@@ -54,6 +54,7 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
+	manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
 
 	s := &Server{
 		manager:  manager,

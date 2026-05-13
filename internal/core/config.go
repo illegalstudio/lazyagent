@@ -18,15 +18,16 @@ type TUIConfig struct {
 
 // Config holds application settings shared by TUI and GUI.
 type Config struct {
-	WindowMinutes  int             `json:"window_minutes"`
-	DefaultFilter  string          `json:"default_filter"`
-	Editor         string          `json:"editor"`
-	LaunchAtLogin  bool            `json:"launch_at_login"`
-	Notifications  bool            `json:"notifications"`
-	NotifyAfterSec int             `json:"notify_after_sec"`
-	Agents         map[string]bool `json:"agents"`
-	ClaudeDirs     []string        `json:"claude_dirs,omitempty"`
-	TUI            TUIConfig       `json:"tui"`
+	WindowMinutes        int             `json:"window_minutes"`
+	DefaultFilter        string          `json:"default_filter"`
+	Editor               string          `json:"editor"`
+	LaunchAtLogin        bool            `json:"launch_at_login"`
+	Notifications        bool            `json:"notifications"`
+	NotifyAfterSec       int             `json:"notify_after_sec"`
+	Agents               map[string]bool `json:"agents"`
+	ClaudeDirs           []string        `json:"claude_dirs,omitempty"`
+	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
+	TUI                  TUIConfig       `json:"tui"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.
@@ -54,7 +55,8 @@ func DefaultConfig() Config {
 			"codex":    true,
 			"amp":      true,
 		},
-		TUI: TUIConfig{Theme: "dark"},
+		ExcludeCWDSubstrings: []string{},
+		TUI:                  TUIConfig{Theme: "dark"},
 	}
 }
 
@@ -123,6 +125,10 @@ func LoadConfig() Config {
 				changed = true
 			}
 		}
+	}
+	if cfg.ExcludeCWDSubstrings == nil {
+		cfg.ExcludeCWDSubstrings = defaults.ExcludeCWDSubstrings
+		changed = true
 	}
 	if changed {
 		_ = SaveConfig(cfg)

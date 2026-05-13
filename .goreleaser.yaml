@@ -4,6 +4,10 @@ before:
   hooks:
     - npm install --prefix frontend
     - npm run build --prefix frontend
+    # internal/assets/dist/ is tracked (with .gitkeep) so the embed compiles
+    # on a bare clone. Plain `cp -r SRC DST` over an existing dir nests as
+    # DST/SRC/, so we wipe the target first.
+    - rm -rf internal/assets/dist
     - cp -r frontend/dist internal/assets/dist
 
 builds:
