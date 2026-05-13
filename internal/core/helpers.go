@@ -5,35 +5,33 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // ShortName truncates a file path intelligently, showing "…/parent/child" when needed.
-// maxLen is measured in runes (visual width for monospace display).
+// maxLen is measured in terminal cells.
 func ShortName(path string, maxLen int) string {
-	if maxLen <= 2 {
+	if maxLen <= 0 {
 		return ""
 	}
-	runes := []rune(path)
-	if len(runes) <= maxLen {
+	if DisplayWidth(path) <= maxLen {
 		return path
 	}
 	base := filepath.Base(path)
 	parent := filepath.Base(filepath.Dir(path))
 	short := parent + "/" + base
-	// "…/" prefix = 2 runes
-	if len([]rune(short))+2 <= maxLen {
+	if DisplayWidth("…/"+short) <= maxLen {
 		return "…/" + short
 	}
-	baseRunes := []rune(base)
-	if len(baseRunes)+2 <= maxLen {
+	if DisplayWidth("…/"+base) <= maxLen {
 		return "…/" + base
 	}
-	// "…" = 1 rune, take last (maxLen-1) runes of base
-	tail := maxLen - 1
-	if tail > len(baseRunes) {
-		tail = len(baseRunes)
+	tailWidth := maxLen - DisplayWidth("…")
+	if tailWidth <= 0 {
+		return TruncateCells("…", maxLen, "")
 	}
-	return "…" + string(baseRunes[len(baseRunes)-tail:])
+	return "…" + suffixCells(base, tailWidth)
 }
 
 // FormatDuration converts a duration to a human-readable "Xs ago" string.
@@ -112,13 +110,58 @@ func EstimateCost(model string, inputTokens, outputTokens, cacheCreation, cacheR
 		float64(outputTokens)*outputRate
 }
 
-// PadRight pads a string with spaces to reach visual width n (rune count), or truncates if longer.
-func PadRight(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) >= n {
-		return string(runes[:n])
+// DisplayWidth returns the number of terminal cells needed to render s.
+func DisplayWidth(s string) int {
+	return runewidth.StringWidth(s)
+}
+
+// TruncateCells truncates s to width terminal cells, appending tail when truncated.
+func TruncateCells(s string, width int, tail string) string {
+	if width <= 0 {
+		return ""
 	}
-	return s + strings.Repeat(" ", n-len(runes))
+	if DisplayWidth(s) <= width {
+		return s
+	}
+	if DisplayWidth(tail) > width {
+		tail = ""
+	}
+	return runewidth.Truncate(s, width, tail)
+}
+
+// PadRight pads a string with spaces to reach visual width n, or truncates if longer.
+func PadRight(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	s = TruncateCells(s, n, "")
+	pad := n - DisplayWidth(s)
+	if pad <= 0 {
+		return s
+	}
+	return s + strings.Repeat(" ", pad)
+}
+
+func suffixCells(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if DisplayWidth(s) <= width {
+		return s
+	}
+
+	runes := []rune(s)
+	used := 0
+	start := len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		w := runewidth.RuneWidth(runes[i])
+		if used+w > width {
+			break
+		}
+		used += w
+		start = i
+	}
+	return string(runes[start:])
 }
 
 // Clamp bounds an integer to [lo, hi].

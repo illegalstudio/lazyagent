@@ -25,20 +25,24 @@ var projects = []struct {
 	GitBranch string
 	Model     string
 	Agent     string // "claude" or "pi"
+	Name      string
 }{
-	{"/Users/dev/projects/webapp-frontend", "feature/dashboard-redesign", "claude-sonnet-4-5-20250514", "claude"},
-	{"/Users/dev/projects/api-server", "fix/auth-middleware", "claude-sonnet-4-5-20250514", "claude"},
-	{"/Users/dev/projects/mobile-app", "main", "claude-sonnet-4-5-20250514", "claude"},
-	{"/Users/dev/projects/cli-tool", "feature/config-refactor", "claude-opus-4-6-20250610", "claude"},
-	{"/Users/dev/projects/data-pipeline", "feature/streaming-etl", "gemini-3-pro", "pi"},
-	{"/Users/dev/projects/infra-terraform", "chore/upgrade-providers", "claude-sonnet-4-5-20250514", "pi"},
-	{"/Users/dev/projects/docs-site", "feature/api-reference", "claude-haiku-4-5-20251001", "claude"},
-	{"/Users/dev/projects/shared-lib", "fix/race-condition", "gpt-4.1", "pi"},
+	{"/Users/dev/projects/客户管理控制台", "feature/中文搜索优化", "claude-sonnet-4-5-20250514", "claude", "客户管理控制台"},
+	{"/Users/dev/projects/webapp-frontend", "feature/dashboard-redesign", "claude-sonnet-4-5-20250514", "claude", ""},
+	{"/Users/dev/projects/api-server", "fix/auth-middleware", "claude-sonnet-4-5-20250514", "claude", ""},
+	{"/Users/dev/projects/mobile-app", "main", "claude-sonnet-4-5-20250514", "claude", ""},
+	{"/Users/dev/projects/cli-tool", "feature/config-refactor", "claude-opus-4-6-20250610", "claude", ""},
+	{"/Users/dev/projects/data-pipeline", "feature/streaming-etl", "gemini-3-pro", "pi", ""},
+	{"/Users/dev/projects/infra-terraform", "chore/upgrade-providers", "claude-sonnet-4-5-20250514", "pi", ""},
+	{"/Users/dev/projects/docs-site", "feature/api-reference", "claude-haiku-4-5-20251001", "claude", ""},
+	{"/Users/dev/projects/shared-lib", "fix/race-condition", "gpt-4.1", "pi", ""},
 }
 
 var toolNames = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Agent", "WebSearch"}
 
 var userMessages = []string{
+	"请检查客户列表里的中文搜索和分页显示是否正常。",
+	"侧边栏里的项目名称太长时会把状态列挤歪，帮我修一下。",
 	"Can you refactor the authentication middleware to use JWT tokens?",
 	"Fix the failing test in user_service_test.go",
 	"Add pagination support to the /api/items endpoint",
@@ -52,6 +56,8 @@ var userMessages = []string{
 }
 
 var assistantMessages = []string{
+	"我会先确认终端列宽计算，避免把中文字符当成单列字符处理。",
+	"已修正列表截断和会话预览，现在中文名称不会破坏对齐。",
 	"I'll start by reading the current middleware implementation to understand the structure.",
 	"I found the issue — the test was relying on a hardcoded timestamp. Let me fix that.",
 	"I've added cursor-based pagination with a default page size of 25. Here's what changed:",
@@ -65,6 +71,7 @@ var assistantMessages = []string{
 }
 
 var fileWrites = []string{
+	"src/components/客户列表.tsx",
 	"src/middleware/auth.ts",
 	"internal/service/user_test.go",
 	"api/handlers/items.go",
@@ -180,6 +187,14 @@ func GenerateSessions() []*model.Session {
 				}
 			}
 		}
+		if i == 0 {
+			recentMsgs = []model.ConversationMessage{
+				{Role: "user", Text: "请检查客户列表里的中文搜索和分页显示是否正常。", Timestamp: lastActivity.Add(-4 * time.Minute)},
+				{Role: "assistant", Text: "我会先确认终端列宽计算，避免把中文字符当成单列字符处理。", Timestamp: lastActivity.Add(-3 * time.Minute)},
+				{Role: "user", Text: "侧边栏里的项目名称太长时会把状态列挤歪，帮我修一下。", Timestamp: lastActivity.Add(-2 * time.Minute)},
+				{Role: "assistant", Text: "已修正列表截断和会话预览，现在中文名称不会破坏对齐。", Timestamp: lastActivity.Add(-time.Minute)},
+			}
+		}
 
 		// Build entry timestamps for sparkline — cluster them to create
 		// interesting patterns with bursts of activity.
@@ -211,6 +226,7 @@ func GenerateSessions() []*model.Session {
 			Model:               p.Model,
 			GitBranch:           p.GitBranch,
 			Agent:               p.Agent,
+			Name:                p.Name,
 			Status:              status,
 			CurrentTool:         currentTool,
 			LastActivity:        lastActivity,
