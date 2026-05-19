@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -296,5 +297,35 @@ func TestDispatcher_DistinctTransitionsNotDeduped(t *testing.T) {
 
 	if a := atomic.LoadInt32(&attempts); a != 2 {
 		t.Fatalf("got %d POSTs, want 2 (distinct transitions)", a)
+	}
+}
+
+func TestDispatcher_ContextCancelStopsCleanly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_ = d.Start(ctx)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	for i := 0; i < 50; i++ {
+		bus.Publish(core.SessionEvent{SessionID: fmt.Sprintf("s%d", i), To: core.ActivityWaiting, At: time.Now()})
+	}
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatcher did not stop after context cancel")
 	}
 }
