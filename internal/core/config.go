@@ -3,6 +3,8 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,79 @@ import (
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
 	Theme string `json:"theme"` // "dark" (default) or "light"
+}
+
+// WebhookConfig is a single outbound webhook destination.
+type WebhookConfig struct {
+	Name    string   `json:"name"`
+	URL     string   `json:"url"`
+	Secret  string   `json:"secret,omitempty"`
+	Events  []string `json:"events,omitempty"`
+	Agents  []string `json:"agents,omitempty"`
+	Enabled *bool    `json:"enabled,omitempty"` // absent = true
+}
+
+// IsEnabled returns true unless Enabled is explicitly set to false.
+func (w WebhookConfig) IsEnabled() bool {
+	return w.Enabled == nil || *w.Enabled
+}
+
+// knownActivityNames lists the canonical activity names accepted in config.
+var knownActivityNames = map[string]ActivityKind{
+	"idle":       ActivityIdle,
+	"waiting":    ActivityWaiting,
+	"thinking":   ActivityThinking,
+	"compacting": ActivityCompacting,
+	"reading":    ActivityReading,
+	"writing":    ActivityWriting,
+	"running":    ActivityRunning,
+	"searching":  ActivitySearching,
+	"browsing":   ActivityBrowsing,
+	"spawning":   ActivitySpawning,
+}
+
+// knownAgentNames lists the agent names accepted in config.
+var knownAgentNames = map[string]struct{}{
+	"claude": {}, "codex": {}, "pi": {}, "cursor": {}, "amp": {}, "opencode": {},
+}
+
+// Validate returns nil if the webhook is well-formed.
+func (w WebhookConfig) Validate() error {
+	if strings.TrimSpace(w.Name) == "" {
+		return fmt.Errorf("webhook: name is required")
+	}
+	if strings.TrimSpace(w.URL) == "" {
+		return fmt.Errorf("webhook %q: url is required", w.Name)
+	}
+	u, err := url.Parse(w.URL)
+	if err != nil {
+		return fmt.Errorf("webhook %q: url parse: %w", w.Name, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("webhook %q: url scheme must be http or https, got %q", w.Name, u.Scheme)
+	}
+	for _, ev := range w.Events {
+		if _, ok := knownActivityNames[strings.ToLower(ev)]; !ok {
+			return fmt.Errorf("webhook %q: unknown event %q", w.Name, ev)
+		}
+	}
+	for _, ag := range w.Agents {
+		if _, ok := knownAgentNames[strings.ToLower(ag)]; !ok {
+			return fmt.Errorf("webhook %q: unknown agent %q", w.Name, ag)
+		}
+	}
+	return nil
+}
+
+// ValidWebhooks returns the subset of webhooks that pass Validate and are enabled.
+func (c Config) ValidWebhooks() []WebhookConfig {
+	out := make([]WebhookConfig, 0, len(c.Webhooks))
+	for _, w := range c.Webhooks {
+		if err := w.Validate(); err == nil && w.IsEnabled() {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // Config holds application settings shared by TUI and GUI.
@@ -28,6 +103,7 @@ type Config struct {
 	ClaudeDirs           []string        `json:"claude_dirs,omitempty"`
 	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
 	TUI                  TUIConfig       `json:"tui"`
+	Webhooks             []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.
@@ -132,6 +208,12 @@ func LoadConfig() Config {
 	}
 	if changed {
 		_ = SaveConfig(cfg)
+	}
+
+	for _, w := range cfg.Webhooks {
+		if err := w.Validate(); err != nil {
+			log.Printf("config: %v (skipped)", err)
+		}
 	}
 
 	return cfg
