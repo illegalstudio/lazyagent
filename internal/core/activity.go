@@ -181,9 +181,11 @@ func NextActivityFilter(current ActivityKind) ActivityKind {
 }
 
 // ActivityTracker manages sticky activity states with grace period logic.
+// When an EventBus is attached, transitions are published on Update.
 type ActivityTracker struct {
 	activities   map[string]*ActivityEntry
 	waitingSince map[string]time.Time
+	bus          *EventBus
 }
 
 // NewActivityTracker creates a new ActivityTracker.
@@ -194,8 +196,15 @@ func NewActivityTracker() *ActivityTracker {
 	}
 }
 
+// SetEventBus attaches a bus so Update will publish transition events.
+// Passing nil clears any previously attached bus.
+func (t *ActivityTracker) SetEventBus(bus *EventBus) {
+	t.bus = bus
+}
+
 // Update resolves and stores the current activity for each session.
 // Applies a grace period before showing ActivityWaiting to avoid false positives.
+// If an EventBus is attached, transitions are published.
 func (t *ActivityTracker) Update(sessions []*model.Session, now time.Time) {
 	activeIDs := make(map[string]struct{}, len(sessions))
 	for _, s := range sessions {
@@ -217,7 +226,22 @@ func (t *ActivityTracker) Update(sessions []*model.Session, now time.Time) {
 			delete(t.waitingSince, id)
 		}
 
+		var prev ActivityKind
+		if e, ok := t.activities[id]; ok {
+			prev = e.Kind
+		}
 		t.activities[id] = &ActivityEntry{Kind: activity, LastSeen: now}
+
+		if t.bus != nil && prev != "" && prev != activity {
+			t.bus.Publish(SessionEvent{
+				SessionID:   id,
+				Agent:       s.Agent,
+				From:        prev,
+				To:          activity,
+				At:          now,
+				ProjectPath: s.CWD,
+			})
+		}
 	}
 	for id := range t.activities {
 		if _, ok := activeIDs[id]; !ok {

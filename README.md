@@ -27,6 +27,7 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
 - **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp) with highlighted snippets and an incremental local index.
 - **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand 5-hour and weekly rate-limit snapshot for Claude Code and Codex, with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
+- **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 

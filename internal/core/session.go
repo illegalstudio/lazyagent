@@ -61,6 +61,14 @@ func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionMana
 	}
 }
 
+// SetEventBus attaches an event bus so activity transitions are published
+// to subscribers. Pass nil to detach.
+func (m *SessionManager) SetEventBus(bus *EventBus) {
+	m.mu.Lock()
+	m.tracker.SetEventBus(bus)
+	m.mu.Unlock()
+}
+
 // SetExcludeCWDSubstrings sets the CWD substring patterns used to exclude
 // sessions from filtered views (VisibleSessions / QuerySessions).
 func (m *SessionManager) SetExcludeCWDSubstrings(patterns []string) {

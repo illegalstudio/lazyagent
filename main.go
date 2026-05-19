@@ -4,12 +4,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
@@ -25,6 +29,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/tray"
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
+	"github.com/illegalstudio/lazyagent/internal/webhook"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
@@ -171,6 +176,23 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	// EventBus + webhook dispatcher for the main process.
+	// When --gui is set the tray fork owns webhook delivery (avoids
+	// cross-process duplicate POSTs); otherwise the main process owns it.
+	var eventBus *core.EventBus
+	var apiAddrAtomic atomic.Value
+	apiAddrAtomic.Store("")
+	if len(cfg.ValidWebhooks()) > 0 && os.Getenv("LAZYAGENT_DETACHED") == "" && !runGUI {
+		eventBus = core.NewEventBus()
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		apiAddrFunc := func() string {
+			v, _ := apiAddrAtomic.Load().(string)
+			return v
+		}
+		disp := webhook.New(eventBus, &webhook.ConfigAdapter{Cfg: cfg}, httpClient, apiAddrFunc)
+		go func() { _ = disp.Start(ctx) }()
+	}
+
 	var apiDone chan struct{}
 
 	if runAPI {
@@ -180,11 +202,15 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			os.Exit(1)
 		}
 
-		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt)
+		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt, eventBus)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Store the resolved listen address so the webhook dispatcher can
+		// include a self-link in outbound payloads.
+		apiAddrAtomic.Store("http://" + normalizeAPIAddr(srv.Addr().String()))
 
 		if runTUI {
 			// API in background, TUI in foreground.
@@ -207,7 +233,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 	if runTUI {
 		p := tea.NewProgram(
-			ui.NewModel(provider),
+			ui.NewModel(provider, eventBus),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)
@@ -294,6 +320,19 @@ func forkTray(demoMode bool, agentMode string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// normalizeAPIAddr substitutes wildcard bind hosts with a client-usable
+// loopback so payloads carry navigable URLs instead of 0.0.0.0:NNNN.
+func normalizeAPIAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 // killPreviousTray reads the PID file, kills the old process if still alive, and cleans up.

@@ -34,7 +34,7 @@ const testSalt = "lazyagent-api-v1-test"
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	srv, err := New(":0", testProvider{}, testToken, testSalt)
+	srv, err := New(":0", testProvider{}, testToken, testSalt, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
