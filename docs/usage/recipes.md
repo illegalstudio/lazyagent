@@ -48,16 +48,17 @@ The mobile app fetches the public salt from `/api/auth`, then derives the bearer
 
 ## Check rate-limit usage before a long run
 
-Before starting an agent task that might burn through quota, snapshot where you stand on the 5-hour and weekly windows:
+Before starting an agent task that might burn through quota, snapshot where you stand across all three providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window):
 
 ```bash
-lazyagent limits                 # both Claude Code and Codex
+lazyagent limits                 # Claude Code, Codex, and Grok
 lazyagent limits --agent claude  # just Claude
+lazyagent limits --agent grok    # just Grok (monthly billing)
 ```
 
 The `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
 
-Claude data comes from an undocumented endpoint Anthropic uses for `/status` — the command is on-demand only and never polled. Codex data is read locally from the latest session rollout, no network call. See [`limits`](../maintenance/limits.md) for the full disclaimer.
+Claude and Grok data come from undocumented endpoints used by their respective official CLIs — the command is on-demand only and never polled. Codex data is read locally from the latest session rollout, no network call. See [`limits`](../maintenance/limits.md) for the full disclaimer.
 
 ## Quick status check from the shell
 

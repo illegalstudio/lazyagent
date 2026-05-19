@@ -167,15 +167,16 @@ Full reference, including the index location, ranking, and resume commands: [`se
 
 ### `limits`
 
-`limits` prints a one-shot snapshot of the 5-hour and weekly rate-limit windows for Claude Code and Codex, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`).
+`limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, and Grok, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window.
 
 ```bash
-lazyagent limits                 # both agents
+lazyagent limits                 # all three agents
 lazyagent limits --agent claude  # only Claude Code
 lazyagent limits --agent codex   # only Codex
+lazyagent limits --agent grok    # only Grok
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call).
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call). Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
