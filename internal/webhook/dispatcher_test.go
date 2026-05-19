@@ -240,3 +240,61 @@ func TestDispatcher_NoHMACWhenSecretEmpty(t *testing.T) {
 		t.Fatalf("X-Lazyagent-Signature should be absent, got %q", sig)
 	}
 }
+
+func TestDispatcher_DedupesSameTransitionWithinWindow(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	now := time.Now()
+	ev := core.SessionEvent{SessionID: "s1", From: core.ActivityIdle, To: core.ActivityWaiting, At: now}
+	bus.Publish(ev)
+	bus.Publish(ev) // duplicate from a second manager
+	bus.Publish(ev) // duplicate from a third
+
+	time.Sleep(300 * time.Millisecond)
+
+	if a := atomic.LoadInt32(&attempts); a != 1 {
+		t.Fatalf("got %d POSTs, want 1 (dedup)", a)
+	}
+}
+
+func TestDispatcher_DistinctTransitionsNotDeduped(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	now := time.Now()
+	bus.Publish(core.SessionEvent{SessionID: "s1", From: core.ActivityIdle, To: core.ActivityWaiting, At: now})
+	bus.Publish(core.SessionEvent{SessionID: "s1", From: core.ActivityWaiting, To: core.ActivityThinking, At: now})
+
+	time.Sleep(300 * time.Millisecond)
+
+	if a := atomic.LoadInt32(&attempts); a != 2 {
+		t.Fatalf("got %d POSTs, want 2 (distinct transitions)", a)
+	}
+}

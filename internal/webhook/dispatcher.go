@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -20,6 +21,12 @@ import (
 // Implementations may return a different slice on each call.
 type ConfigSource interface {
 	Webhooks() []core.WebhookConfig
+}
+
+type lastSeenEntry struct {
+	from core.ActivityKind
+	to   core.ActivityKind
+	at   time.Time
 }
 
 // Dispatcher consumes SessionEvents from a bus and delivers them as HTTP
@@ -33,6 +40,11 @@ type Dispatcher struct {
 	queueSize int
 	workers   int
 	backoffs  []time.Duration
+
+	dedupWindow time.Duration
+
+	mu       sync.Mutex
+	lastSeen map[string]lastSeenEntry
 }
 
 type deliveryJob struct {
@@ -50,13 +62,15 @@ func New(bus *core.EventBus, cfg ConfigSource, client *http.Client, apiAddr func
 		apiAddr = func() string { return "" }
 	}
 	return &Dispatcher{
-		bus:       bus,
-		cfg:       cfg,
-		client:    client,
-		apiAddr:   apiAddr,
-		queueSize: 256,
-		workers:   4,
-		backoffs:  []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second},
+		bus:         bus,
+		cfg:         cfg,
+		client:      client,
+		apiAddr:     apiAddr,
+		queueSize:   256,
+		workers:     4,
+		backoffs:    []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second},
+		dedupWindow: 2 * time.Second,
+		lastSeen:    make(map[string]lastSeenEntry),
 	}
 }
 
@@ -99,7 +113,22 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 	}
 }
 
+func (d *Dispatcher) shouldDedup(ev core.SessionEvent) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	prev, ok := d.lastSeen[ev.SessionID]
+	now := time.Now()
+	if ok && prev.from == ev.From && prev.to == ev.To && now.Sub(prev.at) < d.dedupWindow {
+		return true
+	}
+	d.lastSeen[ev.SessionID] = lastSeenEntry{from: ev.From, to: ev.To, at: now}
+	return false
+}
+
 func (d *Dispatcher) fanout(ev core.SessionEvent, queue chan<- deliveryJob) {
+	if d.shouldDedup(ev) {
+		return
+	}
 	webhooks := d.cfg.Webhooks()
 	if len(webhooks) == 0 {
 		return
