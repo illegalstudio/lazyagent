@@ -167,3 +167,76 @@ func TestDispatcher_AllAttemptsFail(t *testing.T) {
 		t.Fatalf("got %d attempts, want 4 (initial + 3 retries)", a)
 	}
 }
+
+func TestDispatcher_HMACHeaderWhenSecretSet(t *testing.T) {
+	var mu sync.Mutex
+	var sigHeader string
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sig := r.Header.Get("X-Lazyagent-Signature")
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		sigHeader = sig
+		body = b
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL, Secret: "hello"}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	bus.Publish(core.SessionEvent{SessionID: "s1", To: core.ActivityWaiting, At: time.Now()})
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	sig := sigHeader
+	b := body
+	mu.Unlock()
+
+	if sig == "" {
+		t.Fatal("X-Lazyagent-Signature missing")
+	}
+	if want := Sign("hello", b); sig != want {
+		t.Fatalf("got %q, want %q", sig, want)
+	}
+}
+
+func TestDispatcher_NoHMACWhenSecretEmpty(t *testing.T) {
+	var mu sync.Mutex
+	var sigHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sig := r.Header.Get("X-Lazyagent-Signature")
+		mu.Lock()
+		sigHeader = sig
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	bus.Publish(core.SessionEvent{SessionID: "s1", To: core.ActivityWaiting, At: time.Now()})
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	sig := sigHeader
+	mu.Unlock()
+
+	if sig != "" {
+		t.Fatalf("X-Lazyagent-Signature should be absent, got %q", sig)
+	}
+}
