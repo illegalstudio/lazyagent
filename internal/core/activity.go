@@ -217,13 +217,7 @@ func (t *ActivityTracker) Update(sessions []*model.Session, now time.Time) {
 
 		if activity == ActivityWaiting {
 			if _, seen := t.waitingSince[id]; !seen {
-				// Anchor grace to session's last activity so that sessions
-				// already past the grace window aren't held back on first poll.
-				anchor := s.LastActivity
-				if anchor.IsZero() {
-					anchor = now
-				}
-				t.waitingSince[id] = anchor
+				t.waitingSince[id] = now
 			}
 			if now.Sub(t.waitingSince[id]) < WaitingGrace {
 				continue

@@ -86,12 +86,14 @@ func TestActivityTracker_EmitsTransitionOnChange(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	// Status flips to waiting (after grace).
-	s.Status = model.StatusWaitingForUser
-	tr.Update([]*model.Session{s}, now.Add(WaitingGrace+time.Second))
+	// Status flips to executing a Bash tool: should emit Thinking→Running.
+	s.Status = model.StatusExecutingTool
+	s.CurrentTool = "Bash"
+	s.RecentTools = []model.ToolCall{{Name: "Bash", Timestamp: now}}
+	tr.Update([]*model.Session{s}, now)
 	select {
 	case ev := <-ch:
-		if ev.From != ActivityThinking || ev.To != ActivityWaiting {
+		if ev.From != ActivityThinking || ev.To != ActivityRunning {
 			t.Fatalf("unexpected transition: %+v", ev)
 		}
 	case <-time.After(time.Second):
