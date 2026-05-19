@@ -62,7 +62,13 @@ Every delivery is an HTTP POST with a JSON body:
 }
 ```
 
-The `api` object is present only when lazyagent is running with `--api` and the HTTP server is bound. Omit any logic that depends on it when running without `--api`.
+The `api` object is included on a best-effort basis. It is present when the
+webhook dispatcher and the API server run in the same process — typically
+`--tui --api` (or `--api` alone). When the GUI tray is involved
+(`--gui`, `--gui --api`, `--tui --gui --api`), the tray process owns
+webhook delivery while the API server lives in the parent process, so the
+two are not linked and `api` is omitted from payloads. Consumers should
+treat `api` as optional and not rely on its presence.
 
 ## Request headers
 
@@ -97,9 +103,12 @@ Always use a constant-time comparison (`hmac.compare_digest` or equivalent) to a
 - **Retry on transient failures.** HTTP 5xx responses and network errors trigger exponential backoff: 1 s, 5 s, 30 s. Maximum 4 attempts total.
 - **No retry on 4xx.** Client errors (wrong URL, bad auth, malformed payload on the consumer side) are logged with the status code and a body snippet, then discarded.
 - **Dedup window.** Duplicate transitions within 2 seconds are coalesced. This prevents double-delivery when multiple in-process managers (e.g. `--tui` and `--gui` running together) each observe the same transition.
-- **`api.*` URLs.** Present only when `--api` is active and the server is bound; absent otherwise.
+- **`api.*` URLs.** Present only when `--api` is active, the server is bound, and the dispatcher and API server share the same process; absent otherwise (see note above the payload schema).
 
 ## Troubleshooting
+
+**`api.session_url` is missing in `--gui --api` mode.**
+This is expected: the tray process delivers webhooks while the parent process runs the API server, and the two are not cross-linked. Use `--tui --api` if you need the backlink in the payload.
 
 **I see no POSTs.**
 Verify that the `webhooks` array is non-empty and well-formed JSON. lazyagent logs invalid webhook entries on startup with a line like `config: webhook "name": ...`. Also confirm the `events` and `agents` filters match what you expect.

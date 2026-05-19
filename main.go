@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -209,7 +210,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 		// Store the resolved listen address so the webhook dispatcher can
 		// include a self-link in outbound payloads.
-		apiAddrAtomic.Store("http://" + srv.Addr().String())
+		apiAddrAtomic.Store("http://" + normalizeAPIAddr(srv.Addr().String()))
 
 		if runTUI {
 			// API in background, TUI in foreground.
@@ -319,6 +320,19 @@ func forkTray(demoMode bool, agentMode string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// normalizeAPIAddr substitutes wildcard bind hosts with a client-usable
+// loopback so payloads carry navigable URLs instead of 0.0.0.0:NNNN.
+func normalizeAPIAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 // killPreviousTray reads the PID file, kills the old process if still alive, and cleans up.
