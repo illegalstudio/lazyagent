@@ -151,3 +151,33 @@ func TestFilterSessionsLocked_MultipleExcludePatterns(t *testing.T) {
 		t.Errorf("expected 'normal' session, got %q", visible[0].SessionID)
 	}
 }
+
+func TestSessionManager_SetEventBus_PropagatesToTracker(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	bus := NewEventBus()
+	ch := bus.Subscribe(4)
+	defer bus.Unsubscribe(ch)
+
+	now := time.Now()
+	provider := fakeProvider{
+		sessions: []*model.Session{
+			{SessionID: "s1", Agent: "claude", LastActivity: now, Status: model.StatusThinking},
+		},
+	}
+	m := NewSessionManager(60, provider)
+	m.SetEventBus(bus)
+
+	if err := m.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+
+	select {
+	case ev := <-ch:
+		if ev.SessionID != "s1" || ev.To != ActivityThinking {
+			t.Fatalf("unexpected event: %+v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event after Reload")
+	}
+}
