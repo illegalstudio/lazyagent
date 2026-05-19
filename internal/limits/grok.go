@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 )
 
-// grokAuthFile is the JSON layout of ~/.grok/auth.json: a map keyed by the
-// OIDC scope ("https://auth.x.ai::<client-id>") whose value carries the bearer
-// JWT under "key". Extra fields are ignored.
+// grokAuthEntry is one value in the map persisted at ~/.grok/auth.json.
+// The map is keyed by the OIDC scope ("https://auth.x.ai::<client-id>") and
+// each value carries the bearer JWT under "key". Extra fields are ignored.
 type grokAuthEntry struct {
 	Key string `json:"key"`
 }
