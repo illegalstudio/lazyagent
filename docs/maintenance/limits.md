@@ -96,7 +96,7 @@ In an interactive terminal the bars and pace label are colored. When piped or re
 
 ## How it gets the data
 
-The two providers work very differently — there's a single command, but two paths under the hood.
+The three providers work very differently — there's a single command, but three paths under the hood.
 
 ### Claude Code
 
@@ -137,7 +137,7 @@ When the response advertises an `onDemandCap` greater than zero, the cap is show
 
 ## When an agent isn't installed
 
-Both providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`.
+All three providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`, and for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`).
 
 | State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` |
 |-------|-------------------------|------------------|-----------------|----------------|
@@ -169,11 +169,11 @@ The "don't poll" guidance applies equally to Grok: run `lazyagent limits` intera
 
 | Code | Meaning |
 |------|---------|
-| `0` | Both requested agents succeeded |
+| `0` | All requested agents succeeded |
 | `1` | At least one agent failed (token missing, endpoint error, no Codex sessions, …) — details on stderr |
 | `2` | Invalid flags (e.g. unknown `--agent` value) |
 
-Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` prefix, so you can pipe stdout to a parser without losing the error context.
+Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` prefix, so you can pipe stdout to a parser without losing the error context.
 
 ## Environment
 
