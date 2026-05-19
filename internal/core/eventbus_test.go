@@ -63,6 +63,30 @@ func TestEventBus_UnsubscribeIdempotent(t *testing.T) {
 	}
 }
 
+func TestEventBus_PublishConcurrentUnsubscribe(t *testing.T) {
+	// Exercise the race between Publish iterating the subscriber list and
+	// Unsubscribe mutating it. Run under `-race`.
+	bus := NewEventBus()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		ch := bus.Subscribe(16)
+		wg.Add(2)
+		go func(ch <-chan SessionEvent) {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				bus.Publish(SessionEvent{SessionID: "x"})
+			}
+		}(ch)
+		go func(ch <-chan SessionEvent) {
+			defer wg.Done()
+			time.Sleep(time.Microsecond)
+			bus.Unsubscribe(ch)
+		}(ch)
+	}
+	wg.Wait()
+}
+
 func TestEventBus_ConcurrentPublish(t *testing.T) {
 	bus := NewEventBus()
 	ch := bus.Subscribe(1024)

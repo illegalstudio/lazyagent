@@ -55,7 +55,7 @@ func (b *EventBus) Unsubscribe(ch <-chan SessionEvent) {
 // is full miss this event.
 func (b *EventBus) Publish(e SessionEvent) {
 	b.mu.RLock()
-	subs := b.subs
+	subs := append([]chan SessionEvent(nil), b.subs...)
 	b.mu.RUnlock()
 	for _, ch := range subs {
 		select {
