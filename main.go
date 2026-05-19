@@ -175,12 +175,13 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// EventBus + webhook dispatcher for the main process. The tray fork handles
-	// its own bus + dispatcher in internal/tray/service.go.
+	// EventBus + webhook dispatcher for the main process.
+	// When --gui is set the tray fork owns webhook delivery (avoids
+	// cross-process duplicate POSTs); otherwise the main process owns it.
 	var eventBus *core.EventBus
 	var apiAddrAtomic atomic.Value
 	apiAddrAtomic.Store("")
-	if len(cfg.ValidWebhooks()) > 0 && os.Getenv("LAZYAGENT_DETACHED") == "" {
+	if len(cfg.ValidWebhooks()) > 0 && os.Getenv("LAZYAGENT_DETACHED") == "" && !runGUI {
 		eventBus = core.NewEventBus()
 		httpClient := &http.Client{Timeout: 10 * time.Second}
 		apiAddrFunc := func() string {

@@ -21,7 +21,6 @@ func TestPayload_MarshalContainsExpectedFields(t *testing.T) {
 		Timestamp:   time.Date(2026, 5, 19, 14, 30, 0, 0, time.UTC),
 		API: &APILinks{
 			SessionURL: "http://127.0.0.1:7421/api/sessions/abc",
-			DetailURL:  "http://127.0.0.1:7421/api/sessions/abc/full",
 		},
 	}
 	b, err := json.Marshal(p)

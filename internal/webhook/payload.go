@@ -19,5 +19,4 @@ type Payload struct {
 // Present only when the API server is running.
 type APILinks struct {
 	SessionURL string `json:"session_url"`
-	DetailURL  string `json:"detail_url"`
 }

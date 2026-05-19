@@ -160,7 +160,6 @@ func (d *Dispatcher) fanout(ev core.SessionEvent, queue chan<- deliveryJob) {
 	if base := d.apiAddr(); base != "" {
 		payload.API = &APILinks{
 			SessionURL: fmt.Sprintf("%s/api/sessions/%s", base, ev.SessionID),
-			DetailURL:  fmt.Sprintf("%s/api/sessions/%s/full", base, ev.SessionID),
 		}
 	}
 	body, err := json.Marshal(payload)

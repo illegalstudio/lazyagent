@@ -100,6 +100,8 @@ func TestWebhookConfig_Validate_RejectsMissingFields(t *testing.T) {
 		{"unparseable", WebhookConfig{Name: "x", URL: "::"}},
 		{"unknown event", WebhookConfig{Name: "x", URL: "https://x", Events: []string{"nope"}}},
 		{"unknown agent", WebhookConfig{Name: "x", URL: "https://x", Agents: []string{"nope"}}},
+		{"no host (http)", WebhookConfig{Name: "x", URL: "http://"}},
+		{"no host (https with path)", WebhookConfig{Name: "x", URL: "https:///path"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

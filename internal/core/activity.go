@@ -232,7 +232,7 @@ func (t *ActivityTracker) Update(sessions []*model.Session, now time.Time) {
 		}
 		t.activities[id] = &ActivityEntry{Kind: activity, LastSeen: now}
 
-		if t.bus != nil && prev != activity {
+		if t.bus != nil && prev != "" && prev != activity {
 			t.bus.Publish(SessionEvent{
 				SessionID:   id,
 				Agent:       s.Agent,

@@ -67,6 +67,9 @@ func (w WebhookConfig) Validate() error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("webhook %q: url scheme must be http or https, got %q", w.Name, u.Scheme)
 	}
+	if u.Host == "" {
+		return fmt.Errorf("webhook %q: url is missing host", w.Name)
+	}
 	for _, ev := range w.Events {
 		if _, ok := knownActivityNames[strings.ToLower(ev)]; !ok {
 			return fmt.Errorf("webhook %q: unknown event %q", w.Name, ev)

@@ -57,8 +57,7 @@ Every delivery is an HTTP POST with a JSON body:
   "project_path": "/Users/foo/code/bar",
   "timestamp": "2026-05-19T14:30:00Z",
   "api": {
-    "session_url": "http://127.0.0.1:7421/api/sessions/abc123",
-    "detail_url": "http://127.0.0.1:7421/api/sessions/abc123/full"
+    "session_url": "http://127.0.0.1:7421/api/sessions/abc123"
   }
 }
 ```

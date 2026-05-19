@@ -56,7 +56,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		s.manager.SetEventBus(bus)
 		httpClient := &http.Client{Timeout: 10 * time.Second}
 		d := webhook.New(bus, &webhook.ConfigAdapter{Cfg: cfg}, httpClient, func() string { return "" })
-		go func() { _ = d.Start(context.Background()) }()
+		go func() { _ = d.Start(s.ctx) }()
 	}
 	if err := s.manager.StartWatcher(); err != nil {
 		return err

@@ -160,24 +160,41 @@ func TestSessionManager_SetEventBus_PropagatesToTracker(t *testing.T) {
 	defer bus.Unsubscribe(ch)
 
 	now := time.Now()
-	provider := fakeProvider{
-		sessions: []*model.Session{
-			{SessionID: "s1", Agent: "claude", LastActivity: now, Status: model.StatusThinking},
-		},
-	}
-	m := NewSessionManager(60, provider)
+	p := &mutableStubProvider{sessions: []*model.Session{{SessionID: "s1", Agent: "claude", LastActivity: now, Status: model.StatusThinking}}}
+	m := NewSessionManager(60, p)
 	m.SetEventBus(bus)
 
+	// First Reload is an observation: no event expected.
 	if err := m.Reload(); err != nil {
-		t.Fatalf("Reload: %v", err)
+		t.Fatalf("Reload 1: %v", err)
 	}
-
 	select {
 	case ev := <-ch:
-		if ev.SessionID != "s1" || ev.To != ActivityThinking {
-			t.Fatalf("unexpected event: %+v", ev)
+		t.Fatalf("unexpected event on first observation: %+v", ev)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Mutate state and reload: now we expect a transition event.
+	p.sessions[0].Status = model.StatusExecutingTool
+	p.sessions[0].CurrentTool = "Bash"
+	p.sessions[0].RecentTools = []model.ToolCall{{Name: "Bash", Timestamp: time.Now()}}
+	p.sessions[0].LastActivity = time.Now()
+	if err := m.Reload(); err != nil {
+		t.Fatalf("Reload 2: %v", err)
+	}
+	select {
+	case ev := <-ch:
+		if ev.From != ActivityThinking || ev.To != ActivityRunning {
+			t.Fatalf("unexpected transition: %+v", ev)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("no event after Reload")
+		t.Fatal("no event after real transition")
 	}
 }
+
+type mutableStubProvider struct{ sessions []*model.Session }
+
+func (p *mutableStubProvider) DiscoverSessions() ([]*model.Session, error) { return p.sessions, nil }
+func (p *mutableStubProvider) UseWatcher() bool                            { return false }
+func (p *mutableStubProvider) RefreshInterval() time.Duration              { return 0 }
+func (p *mutableStubProvider) WatchDirs() []string                         { return nil }
