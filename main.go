@@ -180,7 +180,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			os.Exit(1)
 		}
 
-		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt)
+		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)

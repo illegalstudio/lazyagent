@@ -46,7 +46,7 @@ type Server struct {
 // exempt so clients can derive the token from the user's passphrase. An empty
 // token disables auth entirely (used only by tests and by callers that
 // explicitly opt out).
-func New(host string, provider core.SessionProvider, bearerToken, authSalt string) (*Server, error) {
+func New(host string, provider core.SessionProvider, bearerToken, authSalt string, bus *core.EventBus) (*Server, error) {
 	authSalt = strings.TrimSpace(authSalt)
 	if authSalt == "" {
 		authSalt = apiauth.SaltPrefix
@@ -55,6 +55,9 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 	manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if bus != nil {
+		manager.SetEventBus(bus)
+	}
 
 	s := &Server{
 		manager:  manager,
