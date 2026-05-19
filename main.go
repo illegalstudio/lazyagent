@@ -4,12 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/illegalstudio/lazyagent/internal/api"
@@ -25,6 +28,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/tray"
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
+	"github.com/illegalstudio/lazyagent/internal/webhook"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
@@ -171,6 +175,22 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	// EventBus + webhook dispatcher for the main process. The tray fork handles
+	// its own bus + dispatcher in internal/tray/service.go.
+	var eventBus *core.EventBus
+	var apiAddrAtomic atomic.Value
+	apiAddrAtomic.Store("")
+	if len(cfg.ValidWebhooks()) > 0 && os.Getenv("LAZYAGENT_DETACHED") == "" {
+		eventBus = core.NewEventBus()
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		apiAddrFunc := func() string {
+			v, _ := apiAddrAtomic.Load().(string)
+			return v
+		}
+		disp := webhook.New(eventBus, &webhook.ConfigAdapter{Cfg: cfg}, httpClient, apiAddrFunc)
+		go func() { _ = disp.Start(ctx) }()
+	}
+
 	var apiDone chan struct{}
 
 	if runAPI {
@@ -180,11 +200,15 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			os.Exit(1)
 		}
 
-		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt, nil)
+		srv, err := api.New(*apiHost, provider, bearerToken, cfg.APISalt, eventBus)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Store the resolved listen address so the webhook dispatcher can
+		// include a self-link in outbound payloads.
+		apiAddrAtomic.Store("http://" + srv.Addr().String())
 
 		if runTUI {
 			// API in background, TUI in foreground.
@@ -207,7 +231,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 	if runTUI {
 		p := tea.NewProgram(
-			ui.NewModel(provider, nil),
+			ui.NewModel(provider, eventBus),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)
