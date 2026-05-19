@@ -42,6 +42,7 @@ type Dispatcher struct {
 	backoffs  []time.Duration
 
 	dedupWindow time.Duration
+	dedupTTL    time.Duration
 
 	mu       sync.Mutex
 	lastSeen map[string]lastSeenEntry
@@ -70,6 +71,7 @@ func New(bus *core.EventBus, cfg ConfigSource, client *http.Client, apiAddr func
 		workers:     4,
 		backoffs:    []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second},
 		dedupWindow: 2 * time.Second,
+		dedupTTL:    5 * time.Minute,
 		lastSeen:    make(map[string]lastSeenEntry),
 	}
 }
@@ -116,12 +118,23 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 func (d *Dispatcher) shouldDedup(ev core.SessionEvent) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	prev, ok := d.lastSeen[ev.SessionID]
 	now := time.Now()
+	prev, ok := d.lastSeen[ev.SessionID]
 	if ok && prev.from == ev.From && prev.to == ev.To && now.Sub(prev.at) < d.dedupWindow {
 		return true
 	}
 	d.lastSeen[ev.SessionID] = lastSeenEntry{from: ev.From, to: ev.To, at: now}
+
+	// Opportunistic eviction: drop entries older than dedupTTL so the map
+	// doesn't grow unbounded on long-running processes. Runs once per
+	// recorded entry — amortized O(1) per call.
+	if len(d.lastSeen) > 64 {
+		for id, e := range d.lastSeen {
+			if now.Sub(e.at) > d.dedupTTL {
+				delete(d.lastSeen, id)
+			}
+		}
+	}
 	return false
 }
 
@@ -203,7 +216,7 @@ func (d *Dispatcher) doOnce(ctx context.Context, job deliveryJob) (int, bool, er
 		return 0, false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "lazyagent/"+version.String())
+	req.Header.Set("User-Agent", "lazyagent/"+version.Version)
 	req.Header.Set("X-Lazyagent-Event", "state_transition")
 	req.Header.Set("X-Lazyagent-Delivery", job.deliveryID)
 	if job.webhook.Secret != "" {

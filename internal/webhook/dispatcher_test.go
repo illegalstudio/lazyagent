@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -297,6 +298,34 @@ func TestDispatcher_DistinctTransitionsNotDeduped(t *testing.T) {
 
 	if a := atomic.LoadInt32(&attempts); a != 2 {
 		t.Fatalf("got %d POSTs, want 2 (distinct transitions)", a)
+	}
+}
+
+func TestDispatcher_LastSeenEvictsOldEntries(t *testing.T) {
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: nil} // no webhooks; we only care about lastSeen
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+
+	// Trigger > 64 entries so eviction kicks in, with old timestamps.
+	d.mu.Lock()
+	for i := 0; i < 100; i++ {
+		d.lastSeen[fmt.Sprintf("old-%d", i)] = lastSeenEntry{
+			from: core.ActivityIdle,
+			to:   core.ActivityThinking,
+			at:   time.Now().Add(-1 * time.Hour),
+		}
+	}
+	d.mu.Unlock()
+
+	// Recording a new entry should trigger eviction of all old entries.
+	d.shouldDedup(core.SessionEvent{SessionID: "fresh", From: core.ActivityIdle, To: core.ActivityWaiting, At: time.Now()})
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id := range d.lastSeen {
+		if !strings.HasPrefix(id, "fresh") {
+			t.Fatalf("old entry %q was not evicted", id)
+		}
 	}
 }
 
