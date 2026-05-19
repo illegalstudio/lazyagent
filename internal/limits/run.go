@@ -1,6 +1,6 @@
 // Package limits implements the `lazyagent limits` subcommand: a one-shot
-// snapshot of the user's Claude Code and Codex rate-limit windows (5-hour
-// and weekly), plus a "pace" indicator that compares actual consumption to
+// snapshot of the user's Claude Code, Codex, and Grok rate-limit / billing
+// windows, plus a "pace" indicator that compares actual consumption to
 // a perfectly linear consumption rate.
 //
 // IMPORTANT (Claude): the source for Claude is /api/oauth/usage on
@@ -12,6 +12,11 @@
 // Codex limits are read from the latest session rollout under
 // ~/.codex/sessions, where Codex itself persists the server's rate_limits
 // response after each turn. No network call is made for Codex.
+//
+// IMPORTANT (Grok): the source for Grok is /v1/billing on
+// cli-chat-proxy.grok.com — the same endpoint the Grok CLI's `/usage show`
+// slash command calls. As of this writing xAI does not document it publicly.
+// Same caveats as Claude: on-demand only, fail gracefully.
 package limits
 
 import (
@@ -41,15 +46,16 @@ func Run(args []string) int {
 	fs.SetOutput(os.Stderr)
 
 	var opts options
-	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, all")
+	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, all")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `lazyagent limits — show 5-hour and weekly rate-limit usage
+		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
 
 Usage:
-  lazyagent limits                  Show limits for both Claude Code and Codex
+  lazyagent limits                  Show limits for Claude Code, Codex, and Grok
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
+  lazyagent limits --agent grok     Show only Grok limits
 
 Output explains:
   - Used %:    how much of the window has been consumed
@@ -66,11 +72,15 @@ Authentication:
             3. ~/.claude/.credentials.json
           If none is found, run `+"`claude`"+` to log in.
   Codex   reads ~/.codex/sessions/<date>/rollout-*.jsonl (no network call).
+  Grok    reads its OAuth token from, in order:
+            1. GROK_OAUTH_TOKEN env var
+            2. ~/.grok/auth.json
+          If none is found, run `+"`grok login`"+`.
 
-Disclaimer (Claude):
-  /api/oauth/usage is an undocumented Anthropic endpoint used by Claude Code
-  itself. lazyagent calls it only on explicit user invocation. It may break or
-  be revoked by Anthropic without notice.
+Disclaimer (Claude, Grok):
+  Both providers expose their usage through undocumented endpoints used by
+  their respective official CLIs. lazyagent calls them only on explicit user
+  invocation. They may break or be revoked by their vendors without notice.
 
 Flags:
 `)
@@ -127,8 +137,8 @@ Flags:
 	// All agents were missing AND no real errors fired: tell the user once,
 	// rather than letting them stare at an empty stdout and wonder what happened.
 	if printed == 0 && !explicit && missing == len(agents) {
-		fmt.Fprintln(os.Stderr, "No supported agents are installed (neither Claude Code nor Codex was detected).")
-		fmt.Fprintln(os.Stderr, "Run `claude` to log in, or run a Codex CLI session first.")
+		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, or Grok was detected).")
+		fmt.Fprintln(os.Stderr, "Run `claude` / `grok login` to authenticate, or run a Codex CLI session first.")
 		exitCode = 1
 	}
 
@@ -144,6 +154,8 @@ func notInstalledMessage(agent string) string {
 		return "Claude Code is not installed or not logged in. Run `claude` to log in, or set CLAUDE_CODE_OAUTH_TOKEN."
 	case "codex":
 		return "Codex is not installed (no sessions under ~/.codex/sessions). Run a Codex CLI session first."
+	case "grok":
+		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
 	default:
 		return fmt.Sprintf("%s is not installed.", agent)
 	}
@@ -155,6 +167,8 @@ func fetchReport(ctx context.Context, agent string) (Report, error) {
 		return fetchClaudeReport(ctx)
 	case "codex":
 		return fetchCodexReport()
+	case "grok":
+		return fetchGrokReport(ctx)
 	default:
 		return Report{}, fmt.Errorf("unsupported agent %q", agent)
 	}
@@ -164,10 +178,10 @@ func resolveAgents(arg string) ([]string, error) {
 	arg = strings.TrimSpace(strings.ToLower(arg))
 	switch arg {
 	case "", "all":
-		return []string{"claude", "codex"}, nil
-	case "claude", "codex":
+		return []string{"claude", "codex", "grok"}, nil
+	case "claude", "codex", "grok":
 		return []string{arg}, nil
 	default:
-		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, or all)", arg)
+		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, grok, or all)", arg)
 	}
 }
