@@ -22,7 +22,7 @@ lazyagent limits [--agent claude|codex|grok|all]
 | `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, or `all` |
 | `--help` | bool | `false` | Print usage and exit |
 
-Only `claude`, `codex`, and `grok` are supported — they're the agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
+Only `claude`, `codex`, and `grok` are supported — they're the only agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
 
 ## Quick reference
 
@@ -131,9 +131,9 @@ The OAuth token is read in this priority order:
 
 If neither is present, the command tells you to run `grok login`.
 
-The response carries one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line so you can see both "$83.25 of $600.00" and the percentage in the same report.
+The response carries one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
 
-When the response advertises an `onDemandCap` greater than zero, the cap is shown after the source line. The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* monthly budget.
+When the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `Source: $83.25 of $600.00 used (on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* monthly budget.
 
 ## When an agent isn't installed
 
