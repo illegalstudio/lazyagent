@@ -130,6 +130,26 @@ Default: `"dark"`. Supported values:
 
 All TUI colors (panels, activity labels, help bar, overlays) are driven by the theme.
 
+### `webhooks`
+
+Default: `[]` (empty — no outbound webhooks). A list of HTTP endpoints that receive a POST whenever a session changes activity state. Each entry can filter by event type and agent source, and optionally sign requests with HMAC-SHA256.
+
+```json
+{
+  "webhooks": [
+    {
+      "name": "slack-needs-input",
+      "url": "https://hooks.slack.com/services/T00/B00/XXX",
+      "secret": "abc123",
+      "events": ["waiting"],
+      "agents": ["claude"]
+    }
+  ]
+}
+```
+
+See [Outbound Webhooks](webhooks.md) for the full field reference, payload schema, request headers, HMAC verification, delivery semantics, and troubleshooting tips.
+
 ## Where the config file lives
 
 | OS | Path |

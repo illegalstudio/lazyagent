@@ -152,9 +152,17 @@ sidebar:
 - ✅ Codex via the latest rollout JSONL under `~/.codex/sessions/` — no network call, fallback to older rollouts when the most recent has no `rate_limits` event yet
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
 
+## v0.10 — Outbound webhooks
+
+- ✅ Typed `core.EventBus` for in-process pub-sub of activity transitions
+- ✅ `internal/webhook/` dispatcher with async best-effort delivery
+- ✅ Event + agent filters per webhook
+- ✅ Optional HMAC-SHA256 signing (GitHub-style header)
+- ✅ Async fan-out with bounded queue, retry on transient failures, dedup window for duplicate transitions across in-process managers
+- ✅ Documentation with payload schema and verification example
+
 ## Future ideas
 
-- ⬜ Outbound webhooks on status changes
 - ⬜ Multi-machine support via shared config / remote API
 - ⬜ TUI actions: kill session, attach terminal
 - ⬜ Session history browser (browse past conversations)
