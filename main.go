@@ -207,7 +207,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 
 	if runTUI {
 		p := tea.NewProgram(
-			ui.NewModel(provider),
+			ui.NewModel(provider, nil),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)

@@ -112,11 +112,14 @@ var keys = keyMap{
 	Copy:   key.NewBinding(key.WithKeys("c")),
 }
 
-func NewModel(provider core.SessionProvider) Model {
+func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 	cfg := core.LoadConfig()
 	t := LoadTheme(cfg.TUI.Theme)
 	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
 	mgr.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if bus != nil {
+		mgr.SetEventBus(bus)
+	}
 	_ = mgr.StartWatcher()
 	return Model{
 		theme:     t,
