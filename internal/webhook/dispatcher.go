@@ -138,12 +138,40 @@ func (d *Dispatcher) fanout(ev core.SessionEvent, queue chan<- deliveryJob) {
 	}
 }
 
-// deliver performs a single POST attempt (retry semantics added in T9).
+// deliver performs the POST, retrying on transient failures.
+// 4xx is treated as permanent. 5xx, network errors, and timeouts retry
+// with backoff up to len(d.backoffs) times (total attempts = 1 + retries).
 func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
+	for attempt := 0; attempt <= len(d.backoffs); attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(d.backoffs[attempt-1]):
+			}
+		}
+		status, transient, err := d.doOnce(ctx, job)
+		if err == nil && !transient {
+			return
+		}
+		if err == nil && status >= 400 && status < 500 {
+			return
+		}
+		if attempt == len(d.backoffs) {
+			log.Printf("webhook %q: giving up after %d attempts", job.webhook.Name, attempt+1)
+		}
+	}
+}
+
+// doOnce performs a single POST. Returns (status, transient, err).
+//   - 2xx: status=2xx, transient=false, err=nil → success
+//   - 4xx: status=4xx, transient=false, err=nil → permanent
+//   - 5xx: status=5xx, transient=true, err=nil → retry
+//   - network/timeout: status=0, transient=true, err=non-nil → retry
+func (d *Dispatcher) doOnce(ctx context.Context, job deliveryJob) (int, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, job.webhook.URL, bytes.NewReader(job.body))
 	if err != nil {
-		log.Printf("webhook %q: build request: %v", job.webhook.Name, err)
-		return
+		return 0, false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "lazyagent/"+version.String())
@@ -154,15 +182,18 @@ func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
 	}
 	resp, err := d.client.Do(req)
 	if err != nil {
-		log.Printf("webhook %q: POST: %v", job.webhook.Name, err)
-		return
+		return 0, true, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return
+		return resp.StatusCode, false, nil
 	}
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
 	log.Printf("webhook %q: %d %s — %s", job.webhook.Name, resp.StatusCode, resp.Status, string(snippet))
+	if resp.StatusCode >= 500 {
+		return resp.StatusCode, true, nil
+	}
+	return resp.StatusCode, false, nil
 }
 
 func newDeliveryID() string {

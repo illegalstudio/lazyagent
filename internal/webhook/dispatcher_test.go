@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,5 +72,98 @@ func TestDispatcher_HappyPath(t *testing.T) {
 	}
 	if h := headers[0].Get("Content-Type"); h != "application/json" {
 		t.Errorf("Content-Type = %q", h)
+	}
+}
+
+func TestDispatcher_Retry500Then200(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&attempts, 1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+	d.backoffs = []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	bus.Publish(core.SessionEvent{SessionID: "s1", To: core.ActivityWaiting, At: time.Now()})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&attempts) >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if a := atomic.LoadInt32(&attempts); a != 2 {
+		t.Fatalf("got %d attempts, want 2", a)
+	}
+}
+
+func TestDispatcher_NoRetryOn400(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+	d.backoffs = []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	bus.Publish(core.SessionEvent{SessionID: "s1", To: core.ActivityWaiting, At: time.Now()})
+	time.Sleep(200 * time.Millisecond)
+
+	if a := atomic.LoadInt32(&attempts); a != 1 {
+		t.Fatalf("got %d attempts, want 1 (no retry on 4xx)", a)
+	}
+}
+
+func TestDispatcher_AllAttemptsFail(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	bus := core.NewEventBus()
+	cfg := stubCfg{webhooks: []core.WebhookConfig{{Name: "test", URL: srv.URL}}}
+	d := New(bus, cfg, &http.Client{Timeout: time.Second}, nil)
+	d.backoffs = []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	bus.Publish(core.SessionEvent{SessionID: "s1", To: core.ActivityWaiting, At: time.Now()})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&attempts) >= 4 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if a := atomic.LoadInt32(&attempts); a != 4 {
+		t.Fatalf("got %d attempts, want 4 (initial + 3 retries)", a)
 	}
 }
