@@ -1,8 +1,12 @@
 package limits
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -100,4 +104,71 @@ func grokConfigToWindow(cfg *grokBillingConfig) Window {
 // aligns vertically when stacked in a report.
 func formatCentsUSD(cents int64) string {
 	return fmt.Sprintf("$%d.%02d", cents/100, ((cents%100)+100)%100)
+}
+
+// grokBillingURL is the (undocumented) endpoint the Grok CLI itself calls when
+// the user runs the /usage show slash command. See package doc in run.go for
+// the stability caveat.
+const grokBillingURL = "https://cli-chat-proxy.grok.com/v1/billing"
+
+func fetchGrokReport(ctx context.Context) (Report, error) {
+	token, err := readGrokToken()
+	if err != nil {
+		if errors.Is(err, errAgentNotInstalled) {
+			return Report{}, err
+		}
+		return Report{}, fmt.Errorf("read Grok OAuth token: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, grokBillingURL, nil)
+	if err != nil {
+		return Report{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("User-Agent", userAgent())
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Report{}, fmt.Errorf("call Grok billing endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return Report{}, fmt.Errorf("Grok OAuth token rejected (401). Run `grok login` to refresh, or set GROK_OAUTH_TOKEN")
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return Report{}, fmt.Errorf("Grok billing endpoint rate-limited (429). Try again in a minute")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return Report{}, fmt.Errorf("Grok billing endpoint: %s — %s", resp.Status, snippet(body, 200))
+	}
+
+	billing, err := parseGrokBilling(body)
+	if err != nil {
+		return Report{}, err
+	}
+	if billing.Config == nil {
+		return Report{}, fmt.Errorf("Grok billing response missing config block (response: %s)", snippet(body, 200))
+	}
+	if billing.Config.MonthlyLimit.Val <= 0 {
+		return Report{}, fmt.Errorf("Grok billing response has no monthly limit (no active subscription?)")
+	}
+
+	w := grokConfigToWindow(billing.Config)
+	source := fmt.Sprintf("Source: %s of %s used",
+		formatCentsUSD(billing.Config.Used.Val),
+		formatCentsUSD(billing.Config.MonthlyLimit.Val),
+	)
+	if billing.Config.OnDemandCap.Val > 0 {
+		source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+	}
+
+	return Report{
+		Provider: "Grok",
+		Source:   source,
+		Windows:  []Window{w},
+		Note:     "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
+	}, nil
 }
