@@ -97,6 +97,7 @@ Restrict monitoring to one agent. Valid values:
 | `pi` | pi coding agent |
 | `codex` | Codex CLI |
 | `amp` | Amp CLI |
+| `grok` | Grok CLI |
 | `cursor` | Cursor IDE |
 | `opencode` | OpenCode |
 | `all` | Every enabled agent (default) |
@@ -153,7 +154,7 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 
 ### `search`
 
-`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
+`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
 
 ```bash
 lazyagent search "race condition"

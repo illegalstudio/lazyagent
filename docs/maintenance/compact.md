@@ -25,7 +25,7 @@ All flags are optional. With no flags, compact opens the interactive agent picke
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
 | `--days N` | int | `0` (unset) | Only compact sessions idle more than N days |
-| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex`. Empty opens the picker |
+| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex,grok`. Empty opens the picker |
 | `--threshold-kb N` | int | `10` | Truncate JSON string values larger than N KiB |
 | `--min-size-kb N` | int | `512` | Skip files smaller than N KiB |
 | `--dry-run` | bool | `false` | Print a grouped summary, rewrite nothing |
@@ -75,7 +75,7 @@ Tuning guide:
 
 ## Agent selection
 
-Same interactive picker as `prune` when `--agent` is omitted — see [Prune: agent selection](prune.md#agent-selection) for the keybindings. Pass `--agent claude,codex,pi` to skip the picker.
+Same interactive picker as `prune` when `--agent` is omitted — see [Prune: agent selection](prune.md#agent-selection) for the keybindings. Pass `--agent claude,codex,pi,grok` to skip the picker.
 
 ## What gets truncated
 
@@ -108,6 +108,10 @@ Each agent has its own set of field paths. Only oversized values are touched; sh
 - `payload.message` — long agent_message payloads
 - `payload.arguments` — function call arguments
 - `payload.content[].text` / `input_text` / `output_text` — message content blocks
+
+### Grok CLI
+
+For Grok, compact rewrites the bulky files inside the session directory — `updates.jsonl`, oversized `tool_result` payloads in `chat_history.jsonl`, `rewind_points.jsonl`, and `terminal/*.log`. Truncating `rewind_points.jsonl` disables Grok's rewind feature for that session.
 
 ## Dry runs
 
@@ -163,6 +167,7 @@ mv session.jsonl.bak session.jsonl
 - **claude** (Claude Code CLI and Desktop share the same JSONL format)
 - **pi**
 - **codex**
+- **grok**
 
 Not supported:
 
