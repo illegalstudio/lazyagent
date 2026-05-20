@@ -112,6 +112,24 @@ func TestParseGrokSession_Fields(t *testing.T) {
 	if s.Status != model.StatusWaitingForUser {
 		t.Errorf("Status = %v, want WaitingForUser (last entry is assistant with no tool_calls)", s.Status)
 	}
+	// Tools and messages must carry a non-zero timestamp — a zero time.Time
+	// renders as a duration overflow ("106751d ago") in the UI.
+	if len(s.RecentTools) == 0 {
+		t.Fatal("expected at least one tool in RecentTools")
+	}
+	for _, tc := range s.RecentTools {
+		if tc.Timestamp.IsZero() {
+			t.Errorf("tool %q has a zero Timestamp", tc.Name)
+		}
+		if !tc.Timestamp.Equal(s.LastActivity) {
+			t.Errorf("tool %q Timestamp = %v, want LastActivity %v", tc.Name, tc.Timestamp, s.LastActivity)
+		}
+	}
+	for _, msg := range s.RecentMessages {
+		if msg.Timestamp.IsZero() {
+			t.Errorf("%s message has a zero Timestamp", msg.Role)
+		}
+	}
 }
 
 func TestParseGrokSession_TitleFallback(t *testing.T) {

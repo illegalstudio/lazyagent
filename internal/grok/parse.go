@@ -79,6 +79,18 @@ func ParseGrokSession(sessionDir string) (*model.Session, error) {
 	s.RecentTools = chat.recentTools
 	s.Status, s.CurrentTool = grokStatus(chat.lastEntry)
 
+	// chat_history.jsonl carries no per-message timestamps. Stamp tools and
+	// messages with the session's last-activity time so the UI shows a sane
+	// relative age — a zero time.Time renders as a time.Duration overflow
+	// ("106751d ago") and would never satisfy the activity-tracker freshness
+	// check. It also lets a recently active session surface its tool activity.
+	for i := range s.RecentTools {
+		s.RecentTools[i].Timestamp = s.LastActivity
+	}
+	for i := range s.RecentMessages {
+		s.RecentMessages[i].Timestamp = s.LastActivity
+	}
+
 	// Message counts: prefer signals.json, fall back to counting the transcript.
 	if signals, ok := readGrokSignals(filepath.Join(sessionDir, "signals.json")); ok {
 		s.UserMessages = signals.UserMessageCount
