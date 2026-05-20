@@ -96,6 +96,20 @@ func TestMultiProvider_RefreshInterval(t *testing.T) {
 	}
 }
 
+func TestBuildProvider_Grok(t *testing.T) {
+	p := BuildProvider("grok", DefaultConfig())
+	if _, ok := p.(*GrokProvider); !ok {
+		t.Fatalf("BuildProvider(\"grok\") = %T, want *GrokProvider", p)
+	}
+}
+
+func TestDefaultConfig_GrokEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("grok") {
+		t.Error("grok must be enabled by default")
+	}
+}
+
 var errTest = errorString("test error")
 
 type errorString string

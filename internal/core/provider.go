@@ -8,6 +8,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
+	"github.com/illegalstudio/lazyagent/internal/grok"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/opencode"
 	"github.com/illegalstudio/lazyagent/internal/pi"
@@ -155,6 +156,24 @@ func (p *AmpProvider) WatchDirs() []string {
 	return nil
 }
 
+// GrokProvider discovers xAI Grok CLI sessions from disk.
+type GrokProvider struct {
+	cache *model.SessionCache
+}
+
+// NewGrokProvider creates a GrokProvider with an mtime-based cache.
+func NewGrokProvider() *GrokProvider {
+	return &GrokProvider{cache: model.NewSessionCache()}
+}
+
+func (p *GrokProvider) DiscoverSessions() ([]*model.Session, error) {
+	return grok.DiscoverSessions(p.cache)
+}
+
+func (p *GrokProvider) UseWatcher() bool               { return true }
+func (p *GrokProvider) RefreshInterval() time.Duration { return 0 }
+func (p *GrokProvider) WatchDirs() []string            { return []string{grok.GrokSessionsDir()} }
+
 // BuildProvider creates a SessionProvider based on agent mode and config.
 // When agentMode is "all", it reads the agents config to decide which providers
 // to include. A specific agentMode (e.g. "claude") overrides the config.
@@ -172,6 +191,8 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		return NewCodexProvider()
 	case "amp":
 		return NewAmpProvider()
+	case "grok":
+		return NewGrokProvider()
 	default: // "all"
 		var providers []SessionProvider
 		if cfg.AgentEnabled("claude") {
@@ -191,6 +212,9 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		}
 		if cfg.AgentEnabled("amp") {
 			providers = append(providers, NewAmpProvider())
+		}
+		if cfg.AgentEnabled("grok") {
+			providers = append(providers, NewGrokProvider())
 		}
 		if len(providers) == 0 {
 			// All disabled — return a no-op provider.
