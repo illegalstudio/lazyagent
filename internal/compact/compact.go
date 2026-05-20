@@ -25,6 +25,7 @@ var supportedAgents = []chatops.Agent{
 	{Key: "claude", Label: "Claude Code", Color: "#E7A15E"},
 	{Key: "pi", Label: "pi coding agent", Color: "#F38BA8"},
 	{Key: "codex", Label: "Codex CLI", Color: "#A6E3A1"},
+	{Key: "grok", Label: "Grok", Color: "#89B4FA"},
 }
 
 // defaultThresholdBytes is the maximum length (in bytes) of a single JSON
@@ -261,14 +262,11 @@ func collectCandidates(agents []string, opts options) ([]Candidate, []error) {
 			if opts.daysSet && !s.LastActivity.IsZero() && s.LastActivity.After(cutoff) {
 				continue
 			}
-			info, err := os.Stat(s.JSONLPath)
-			if err != nil {
+			size := sessionSizeBytes(s)
+			if size < opts.minSize {
 				continue
 			}
-			if info.Size() < opts.minSize {
-				continue
-			}
-			all = append(all, Candidate{Session: s, SizeBefore: info.Size()})
+			all = append(all, Candidate{Session: s, SizeBefore: size})
 		}
 	}
 
