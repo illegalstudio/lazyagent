@@ -29,7 +29,7 @@ func Run(args []string) int {
 	fs.SetOutput(os.Stderr)
 
 	var opts options
-	fs.StringVar(&opts.agent, "agent", "all", "Agent to search: claude,codex,pi,amp,all")
+	fs.StringVar(&opts.agent, "agent", "all", "Agent to search: claude,codex,pi,amp,grok,all")
 	fs.IntVar(&opts.limit, "limit", 20, "Maximum chat sessions to show")
 	fs.IntVar(&opts.snippets, "snippets", 2, "Maximum snippets per chat session")
 	fs.BoolVar(&opts.reindex, "reindex", false, "Rebuild the local search index before searching")
@@ -41,6 +41,7 @@ func Run(args []string) int {
 Usage:
   lazyagent search [query] [flags]
   lazyagent search --agent codex "parser bug"
+  lazyagent search --agent grok "parser bug"
 
 If query is omitted, lazyagent prompts for it.
 

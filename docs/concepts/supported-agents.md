@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-lazyagent supports seven agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
+lazyagent supports eight agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
 
 | Agent | Path | Format | Prefix |
 |-------|------|--------|--------|
@@ -16,6 +16,7 @@ lazyagent supports seven agents out of the box. Each has a dedicated provider th
 | [Amp CLI](https://ampcode.com/) | `~/.local/share/amp/threads/*.json` | Per-thread JSON | `A` |
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
+| [Grok CLI](https://github.com/xai-org/grok-cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
 
 The prefix appears next to each session in the TUI list, the GUI panel, and the API response so you can tell at a glance which agent produced a session.
 
@@ -30,6 +31,7 @@ lazyagent --agent codex
 lazyagent --agent amp
 lazyagent --agent pi
 lazyagent --agent opencode
+lazyagent --agent grok
 lazyagent --agent all       # default
 ```
 
@@ -64,6 +66,14 @@ Pi writes JSONL into `~/.pi/agent/sessions/--<encoded-cwd>--/`. The encoding is 
 ### OpenCode
 
 OpenCode uses SQLite with relational tables (`session`, `message`, `part`). lazyagent polls every 3 seconds and detects sub-agents via `parent_id`. Tool names are normalized to the same activity taxonomy as the other agents.
+
+### Grok CLI
+
+Grok writes one *directory* per session, two levels deep under `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an `updates.jsonl` stream, and several smaller files. lazyagent reads `summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard URL percent-encoding of the parent directory name.
+
+**No per-session cost.** Grok's on-disk data does not expose an input/output/cache token split, so Grok sessions show no per-session token or cost figures in any interface — those fields are left at zero. (The separate `lazyagent limits` command still reports Grok's monthly billing window; that uses Grok's billing API, not on-disk session data.)
+
+**Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are treated as sidechains and hidden from the default list, the same as Claude's sub-agent sessions.
 
 ## What's not supported (yet)
 

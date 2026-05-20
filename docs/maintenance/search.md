@@ -7,7 +7,7 @@ sidebar:
 
 `lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and resume it directly with the originating agent.
 
-It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, and **Amp**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
+It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, and **Grok**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
 ## Synopsis
 
@@ -23,7 +23,7 @@ lazyagent search [QUERY] [--agent LIST]
 
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
-| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp`, or `all` |
+| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp,grok`, or `all` |
 | `--limit N` | int | `20` | Maximum chat sessions to show |
 | `--snippets N` | int | `2` | Maximum snippet lines per session |
 | `--reindex` | bool | `false` | Drop the local index and rebuild it before searching |
@@ -77,6 +77,8 @@ Type a 1-based result number to open that session in the originating agent. lazy
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
 
+> **Grok sessions** are indexed and searchable, but `search` cannot resume them directly — Grok exposes no resume command, so selecting a Grok result reports that and exits.
+
 ## Index management
 
 The index updates *incrementally* on every run — there's normally no reason to think about it. Two situations call for a manual rebuild:
@@ -105,6 +107,7 @@ The next `lazyagent search` invocation will rebuild it.
 - **codex** — Codex CLI (`~/.codex/sessions/`)
 - **pi** — pi coding agent (`~/.pi/agent/sessions/`)
 - **amp** — Amp CLI (`~/.local/share/amp/threads/`)
+- **grok** — Grok CLI (`~/.grok/sessions/`)
 
 Not supported:
 

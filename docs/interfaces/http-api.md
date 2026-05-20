@@ -266,6 +266,8 @@ Full details for a single session.
 }
 ```
 
+The `timestamp` field in `recent_tools` and `recent_messages` is optional and omitted when the time is unknown. Agents such as Grok record no per-item timestamp in their transcripts; only the most recent tool call and the most recent message carry a timestamp (the session's last-activity time — the best available).
+
 Returns **`404 Not Found`** if the session doesn't exist.
 
 ### `PUT /api/sessions/{id}/name`

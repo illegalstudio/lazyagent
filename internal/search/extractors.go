@@ -14,6 +14,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/grok"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
 
@@ -98,6 +99,8 @@ func listSources(agent string, cfg core.Config) ([]sourceState, error) {
 		return walkFiles(agent, pi.PiSessionsDir(), ".jsonl")
 	case "amp":
 		return walkFiles(agent, amp.ThreadsDir(), ".json")
+	case "grok":
+		return listGrokSources(), nil
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", agent)
 	}
@@ -148,6 +151,8 @@ func extractChunks(src sourceState, cfg core.Config) ([]chunk, error) {
 		return extractPi(src)
 	case "amp":
 		return extractAmp(src)
+	case "grok":
+		return extractGrok(src)
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", src.Agent)
 	}
@@ -449,4 +454,76 @@ func extractAmp(src sourceState) ([]chunk, error) {
 		chunks = appendChunk(chunks, src, sessionID, cwd, thread.Title, msg.Role, ts, strings.Join(parts, "\n"))
 	}
 	return chunks, nil
+}
+
+// grokSummaryLite is the subset of a Grok summary.json the indexer needs.
+type grokSummaryLite struct {
+	Info struct {
+		ID  string `json:"id"`
+		CWD string `json:"cwd"`
+	} `json:"info"`
+	GeneratedTitle string `json:"generated_title"`
+	SessionSummary string `json:"session_summary"`
+}
+
+type grokChatLine struct {
+	Type    string          `json:"type"`
+	Content json.RawMessage `json:"content"`
+}
+
+// listGrokSources returns one source per Grok session, keyed on its
+// chat_history.jsonl file (the transcript the indexer scans).
+func listGrokSources() []sourceState {
+	var out []sourceState
+	for _, dir := range grok.SessionDirs() {
+		path := filepath.Join(dir, "chat_history.jsonl")
+		if src, ok := fileSource("grok", filepath.Base(dir), path); ok {
+			out = append(out, src)
+		}
+	}
+	return out
+}
+
+// extractGrok turns one Grok session's chat_history.jsonl into search chunks.
+// CWD, title and the canonical session ID come from the sibling summary.json.
+func extractGrok(src sourceState) ([]chunk, error) {
+	sessionDir := filepath.Dir(src.Path)
+	sessionID := src.ID
+	var cwd, name string
+	if data, err := os.ReadFile(filepath.Join(sessionDir, "summary.json")); err == nil {
+		var sum grokSummaryLite
+		if json.Unmarshal(data, &sum) == nil {
+			if sum.Info.ID != "" {
+				sessionID = sum.Info.ID
+			}
+			cwd = sum.Info.CWD
+			name = sum.GeneratedTitle
+			if name == "" {
+				name = sum.SessionSummary
+			}
+		}
+	}
+	var chunks []chunk
+	err := scanJSONL(src.Path, func(line []byte) {
+		var e grokChatLine
+		if json.Unmarshal(line, &e) != nil {
+			return
+		}
+		var role, text string
+		switch e.Type {
+		case "user":
+			msg, ok := grok.UserMessageText(e.Content)
+			if !ok {
+				return
+			}
+			role, text = "user", msg
+		case "assistant", "tool_result":
+			role = e.Type
+			text = contentText(e.Content, map[string]bool{"text": true})
+		default:
+			return
+		}
+		chunks = appendChunk(chunks, src, sessionID, cwd, name, role, time.Time{}, text)
+	})
+	return chunks, err
 }

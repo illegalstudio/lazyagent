@@ -12,6 +12,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/grok"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
 
@@ -149,16 +150,20 @@ func rewriteFile(path string, mutator lineMutator, threshold int64, backup bool)
 	return info.Size(), nil
 }
 
-// estimateRewrite runs the mutator in memory without writing anything, and
-// returns what the post-rewrite file size would be. Used by --dry-run.
+// estimateRewrite runs the agent's mutator in memory without writing anything
+// and returns the projected post-rewrite file size. Used by --dry-run.
 func estimateRewrite(path, agent string, threshold int64) (int64, error) {
+	return estimateJSONL(path, mutatorFor(agent), threshold)
+}
+
+// estimateJSONL simulates a per-line rewrite with the given mutator and
+// returns the projected file size, writing nothing.
+func estimateJSONL(path string, mutator lineMutator, threshold int64) (int64, error) {
 	in, err := os.Open(path)
 	if err != nil {
 		return 0, err
 	}
 	defer in.Close()
-
-	mutator := mutatorFor(agent)
 
 	var total int64
 	scanner := bufio.NewScanner(in)
@@ -190,7 +195,13 @@ func estimateRewrite(path, agent string, threshold int64) (int64, error) {
 func estimateSizes(candidates []Candidate, threshold int64) {
 	for i := range candidates {
 		c := &candidates[i]
-		after, err := estimateRewrite(c.Session.JSONLPath, c.Session.Agent, threshold)
+		var after int64
+		var err error
+		if c.Session.Agent == "grok" {
+			after, err = estimateGrokSession(c.Session.JSONLPath, threshold)
+		} else {
+			after, err = estimateRewrite(c.Session.JSONLPath, c.Session.Agent, threshold)
+		}
 		if err != nil {
 			c.SizeAfter = c.SizeBefore
 			continue
@@ -199,8 +210,16 @@ func estimateSizes(candidates []Candidate, threshold int64) {
 	}
 }
 
+// testGuardRoots holds extra root directories injected by tests. When
+// non-empty the normal root list is replaced entirely so tests can write to
+// their own temp directories without relaxing the real guard.
+var testGuardRoots []string
+
 // guardPath blocks compacting anything outside the known agent roots.
 func guardPath(path string) error {
+	if len(testGuardRoots) > 0 {
+		return chatops.EnsureWithin(path, testGuardRoots)
+	}
 	cfg := core.LoadConfig()
 	var roots []string
 	roots = append(roots, claude.ClaudeProjectsDirs(cfg.ClaudeDirs)...)
@@ -208,6 +227,9 @@ func guardPath(path string) error {
 		roots = append(roots, d)
 	}
 	if d := codex.SessionsDir(); d != "" {
+		roots = append(roots, d)
+	}
+	if d := grok.GrokSessionsDir(); d != "" {
 		roots = append(roots, d)
 	}
 	return chatops.EnsureWithin(path, roots)
@@ -250,8 +272,13 @@ func executeCompact(candidates []Candidate, opts options) (int, int, int64) {
 	var saved int64
 	for i := range candidates {
 		c := &candidates[i]
-		mutator := mutatorFor(c.Session.Agent)
-		newSize, err := rewriteFile(c.Session.JSONLPath, mutator, opts.threshold, opts.backup)
+		var newSize int64
+		var err error
+		if c.Session.Agent == "grok" {
+			newSize, err = compactGrokSession(c.Session.JSONLPath, opts.threshold, opts.backup)
+		} else {
+			newSize, err = rewriteFile(c.Session.JSONLPath, mutatorFor(c.Session.Agent), opts.threshold, opts.backup)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed: %s — %v\n", filepath.Base(c.Session.JSONLPath), err)
 			failed++

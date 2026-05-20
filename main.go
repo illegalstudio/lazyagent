@@ -54,7 +54,7 @@ func main() {
 	apiMode := flag.Bool("api", false, "Start the API server")
 	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
 	demoMode := flag.Bool("demo", false, "Use generated fake data instead of real Claude sessions")
-	agentMode := flag.String("agent", "all", "Which agent sessions to show: claude, pi, opencode, cursor, codex, amp, all (default: all)")
+	agentMode := flag.String("agent", "all", "Which agent sessions to show: claude, pi, opencode, cursor, codex, amp, grok, all (default: all)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `%s — monitor all running coding agent sessions
@@ -67,6 +67,7 @@ Usage:
   lazyagent --agent cursor      Monitor only Cursor sessions
   lazyagent --agent codex       Monitor only Codex CLI sessions
   lazyagent --agent amp         Monitor only Amp CLI sessions
+  lazyagent --agent grok        Monitor only Grok CLI sessions
   lazyagent --agent all         Monitor all agents (default)
   lazyagent --api               Start the API server (http://127.0.0.1:7421)
   lazyagent --api --host :7421  Start the API server on custom address
@@ -118,10 +119,10 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 		provider = demo.Provider{}
 	} else {
 		switch *agentMode {
-		case "claude", "pi", "opencode", "cursor", "codex", "amp", "all":
+		case "claude", "pi", "opencode", "cursor", "codex", "amp", "grok", "all":
 			provider = core.BuildProvider(*agentMode, cfg)
 		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown --agent value %q (use claude, pi, opencode, cursor, codex, amp, or all)\n", *agentMode)
+			fmt.Fprintf(os.Stderr, "Error: unknown --agent value %q (use claude, pi, opencode, cursor, codex, amp, grok, or all)\n", *agentMode)
 			os.Exit(1)
 		}
 	}

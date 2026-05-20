@@ -218,10 +218,16 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
 	for _, t := range sess.RecentTools {
+		ago := ""
+		// Only timestamped tool calls get a relative age — agents like Grok
+		// record a per-tool time only for the most recent call.
+		if !t.Timestamp.IsZero() {
+			ago = core.FormatDuration(time.Since(t.Timestamp))
+		}
 		tools = append(tools, ToolItem{
 			Name:      t.Name,
 			Timestamp: t.Timestamp,
-			Ago:       core.FormatDuration(time.Since(t.Timestamp)),
+			Ago:       ago,
 		})
 	}
 

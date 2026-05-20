@@ -1,7 +1,7 @@
 // Package prune implements the `lazyagent prune` subcommand, which deletes
 // old or orphaned chat sessions from supported coding agents.
 //
-// Supported agents (v1): claude, pi, codex. Amp is skipped because local
+// Supported agents (v1): claude, pi, codex, grok. Amp is skipped because local
 // thread files are re-synced from the remote. Cursor and OpenCode store
 // sessions inside SQLite databases owned by third-party apps; deleting rows
 // there is deferred to a future version.
@@ -21,7 +21,7 @@ import (
 )
 
 // SupportedAgents lists the agent names that prune can safely clean up.
-var SupportedAgents = []string{"claude", "pi", "codex"}
+var SupportedAgents = []string{"claude", "pi", "codex", "grok"}
 
 // activeWindow skips files touched very recently (a live session might be
 // writing to them). Anything younger than this is silently excluded.

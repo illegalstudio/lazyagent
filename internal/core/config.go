@@ -54,6 +54,7 @@ func DefaultConfig() Config {
 			"cursor":   true,
 			"codex":    true,
 			"amp":      true,
+			"grok":     true,
 		},
 		ExcludeCWDSubstrings: []string{},
 		TUI:                  TUIConfig{Theme: "dark"},
