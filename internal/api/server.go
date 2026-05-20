@@ -430,15 +430,15 @@ type SessionFull struct {
 
 // ToolItem represents a recent tool call.
 type ToolItem struct {
-	Name      string    `json:"name"`
-	Timestamp time.Time `json:"timestamp"`
+	Name      string     `json:"name"`
+	Timestamp *time.Time `json:"timestamp,omitempty"`
 }
 
 // ConversationItem represents a conversation message.
 type ConversationItem struct {
-	Role      string    `json:"role"`
-	Text      string    `json:"text"`
-	Timestamp time.Time `json:"timestamp"`
+	Role      string     `json:"role"`
+	Text      string     `json:"text"`
+	Timestamp *time.Time `json:"timestamp,omitempty"`
 }
 
 // StatsResponse is returned by GET /api/stats and included in SSE frames.
@@ -489,13 +489,24 @@ func (s *Server) buildSessionItem(sess *model.Session, activity core.ActivityKin
 	}
 }
 
+// optTime returns a pointer to t, or nil when t is the zero value, so an
+// unknown timestamp is omitted from the JSON response instead of being
+// serialized as the year-1 zero time. (Grok records a per-item timestamp
+// only for the most recent tool/message.)
+func optTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
 func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 	sess := &detail.Session
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
 	for _, t := range sess.RecentTools {
 		tools = append(tools, ToolItem{
 			Name:      t.Name,
-			Timestamp: t.Timestamp,
+			Timestamp: optTime(t.Timestamp),
 		})
 	}
 	msgs := make([]ConversationItem, 0, len(sess.RecentMessages))
@@ -503,7 +514,7 @@ func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 		msgs = append(msgs, ConversationItem{
 			Role:      m.Role,
 			Text:      m.Text,
-			Timestamp: m.Timestamp,
+			Timestamp: optTime(m.Timestamp),
 		})
 	}
 	return SessionFull{

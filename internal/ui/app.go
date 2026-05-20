@@ -1069,9 +1069,13 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		}
 		for i := len(tools) - 1; i >= 0; i-- {
 			tc := tools[i]
-			ago := core.FormatDuration(time.Since(tc.Timestamp))
-			add(lipgloss.NewStyle().Foreground(m.theme.Primary).Render("  "+tc.Name) +
-				lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  "+ago))
+			line := lipgloss.NewStyle().Foreground(m.theme.Primary).Render("  " + tc.Name)
+			// Only timestamped tool calls get a relative age — agents like
+			// Grok record a per-tool time only for the most recent call.
+			if !tc.Timestamp.IsZero() {
+				line += lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  " + core.FormatDuration(time.Since(tc.Timestamp)))
+			}
+			add(line)
 		}
 	}
 

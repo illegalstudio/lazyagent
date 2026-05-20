@@ -112,23 +112,55 @@ func TestParseGrokSession_Fields(t *testing.T) {
 	if s.Status != model.StatusWaitingForUser {
 		t.Errorf("Status = %v, want WaitingForUser (last entry is assistant with no tool_calls)", s.Status)
 	}
-	// Tools and messages must carry a non-zero timestamp — a zero time.Time
-	// renders as a duration overflow ("106751d ago") in the UI.
-	if len(s.RecentTools) == 0 {
-		t.Fatal("expected at least one tool in RecentTools")
+	// Only the most recent tool/message is stamped (chat_history has no
+	// per-item time); earlier entries keep a zero Timestamp.
+	if n := len(s.RecentTools); n > 0 {
+		if !s.RecentTools[n-1].Timestamp.Equal(s.LastActivity) {
+			t.Errorf("last tool Timestamp = %v, want LastActivity %v", s.RecentTools[n-1].Timestamp, s.LastActivity)
+		}
+		for _, tc := range s.RecentTools[:n-1] {
+			if !tc.Timestamp.IsZero() {
+				t.Errorf("non-last tool %q has Timestamp %v, want zero", tc.Name, tc.Timestamp)
+			}
+		}
 	}
-	for _, tc := range s.RecentTools {
-		if tc.Timestamp.IsZero() {
-			t.Errorf("tool %q has a zero Timestamp", tc.Name)
+	if n := len(s.RecentMessages); n > 0 {
+		if !s.RecentMessages[n-1].Timestamp.Equal(s.LastActivity) {
+			t.Errorf("last message Timestamp = %v, want LastActivity %v", s.RecentMessages[n-1].Timestamp, s.LastActivity)
 		}
-		if !tc.Timestamp.Equal(s.LastActivity) {
-			t.Errorf("tool %q Timestamp = %v, want LastActivity %v", tc.Name, tc.Timestamp, s.LastActivity)
+		for _, msg := range s.RecentMessages[:n-1] {
+			if !msg.Timestamp.IsZero() {
+				t.Errorf("non-last %s message has Timestamp %v, want zero", msg.Role, msg.Timestamp)
+			}
 		}
 	}
-	for _, msg := range s.RecentMessages {
-		if msg.Timestamp.IsZero() {
-			t.Errorf("%s message has a zero Timestamp", msg.Role)
-		}
+}
+
+func TestParseGrokSession_OnlyLastToolHasTimestamp(t *testing.T) {
+	root := t.TempDir()
+	summary := `{"info":{"id":"m","cwd":"/tmp/p"},"chat_format_version":1,"updated_at":"2026-05-17T11:00:00Z"}`
+	chat := `{"type":"user","content":[{"type":"text","text":"<user_query>go</user_query>"}]}
+{"type":"assistant","content":"","reasoning":{"text":"a","encrypted":"x","id":"r1"},"tool_calls":[{"id":"c1","name":"read","arguments":"{}"}]}
+{"type":"tool_result","content":"r1","tool_call_id":"c1"}
+{"type":"assistant","content":"","reasoning":{"text":"b","encrypted":"y","id":"r2"},"tool_calls":[{"id":"c2","name":"bash","arguments":"{}"}]}
+{"type":"tool_result","content":"r2","tool_call_id":"c2"}
+{"type":"assistant","content":"done","reasoning":{"text":"c","encrypted":"z","id":"r3"}}
+`
+	dir := writeSession(t, root, "%2Ftmp%2Fp", "m", map[string]string{
+		"summary.json": summary, "chat_history.jsonl": chat,
+	})
+	s, err := ParseGrokSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.RecentTools) != 2 {
+		t.Fatalf("RecentTools = %d, want 2", len(s.RecentTools))
+	}
+	if !s.RecentTools[0].Timestamp.IsZero() {
+		t.Errorf("earlier tool must keep a zero Timestamp, got %v", s.RecentTools[0].Timestamp)
+	}
+	if s.RecentTools[1].Timestamp.IsZero() {
+		t.Error("the most recent tool must be stamped")
 	}
 }
 
