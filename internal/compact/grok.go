@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
@@ -81,7 +82,14 @@ func truncateGrokDeep(v any, threshold int64) int64 {
 			saved += truncateGrokDeep(child, threshold)
 		}
 	case []any:
-		for _, child := range t {
+		for i, child := range t {
+			if s, ok := child.(string); ok {
+				if newVal, delta := truncateString(s, threshold); delta > 0 {
+					t[i] = newVal
+					saved += delta
+				}
+				continue
+			}
 			saved += truncateGrokDeep(child, threshold)
 		}
 	}
@@ -103,7 +111,8 @@ func grokLiveDirBytes(dir string) int64 {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if filepath.Ext(p) == ".bak" {
+		name := d.Name()
+		if filepath.Ext(name) == ".bak" || strings.HasSuffix(name, ".compact.tmp") {
 			return nil
 		}
 		if info, err := d.Info(); err == nil {

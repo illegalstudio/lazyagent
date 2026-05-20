@@ -95,17 +95,7 @@ func TestCompactGrokSession(t *testing.T) {
 
 func grokDirSize(t *testing.T, dir string) int64 {
 	t.Helper()
-	var total int64
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if info, err := e.Info(); err == nil && !e.IsDir() {
-			total += info.Size()
-		}
-	}
-	return total
+	return grokLiveDirBytes(dir)
 }
 
 func TestEstimateGrokSession(t *testing.T) {
@@ -122,5 +112,32 @@ func TestEstimateGrokSession(t *testing.T) {
 	// Estimation must not modify any file.
 	if grokDirSize(t, dir) != before {
 		t.Error("estimateGrokSession modified the session on disk")
+	}
+}
+
+func TestCompactGrokSession_TerminalLog(t *testing.T) {
+	dir := writeGrokSessionForCompact(t, "small payload") // chat/updates stay tiny
+	logDir := filepath.Join(dir, "terminal")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(logDir, "call-1.log")
+	big := strings.Repeat("C", 50*1024) // 50 KiB raw log, above the 10 KiB threshold
+	if err := os.WriteFile(logPath, []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := compactGrokSession(dir, 10*1024, true); err != nil {
+		t.Fatalf("compactGrokSession: %v", err)
+	}
+	info, err := os.Stat(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() >= int64(len(big)) {
+		t.Errorf("terminal log did not shrink: size=%d, was %d", info.Size(), len(big))
+	}
+	if _, err := os.Stat(logPath + ".bak"); err != nil {
+		t.Error("expected a .bak backup of the terminal log")
 	}
 }
