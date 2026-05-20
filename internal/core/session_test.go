@@ -102,6 +102,45 @@ func TestFilterSessionsLocked_ExcludesCWDSubstrings(t *testing.T) {
 	}
 }
 
+func TestFilterSessionsLocked_HidesEmptyGrokSessions(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	now := time.Now()
+	provider := fakeProvider{
+		sessions: []*model.Session{
+			{SessionID: "grok-active", Agent: "grok", CWD: "/p", LastActivity: now, UserMessages: 3},
+			{SessionID: "grok-empty", Agent: "grok", CWD: "/p", LastActivity: now, UserMessages: 0},
+			{SessionID: "claude-zero", Agent: "claude", CWD: "/p", LastActivity: now, UserMessages: 0},
+		},
+	}
+
+	mgr := NewSessionManager(60, provider)
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("Reload failed: %v", err)
+	}
+
+	// Discovery keeps every session so prune can reach old never-used ones.
+	if len(mgr.Sessions()) != 3 {
+		t.Errorf("Sessions() = %d, want 3 (raw discovery keeps empty Grok sessions)", len(mgr.Sessions()))
+	}
+
+	// The rendering filter (backing TUI, GUI and API) hides the empty Grok
+	// session — and only Grok: a non-Grok session with no user messages is
+	// left untouched.
+	check := func(name string, got []*model.Session) {
+		for _, s := range got {
+			if s.SessionID == "grok-empty" {
+				t.Errorf("%s must not contain the never-used Grok session", name)
+			}
+		}
+		if len(got) != 2 {
+			t.Errorf("%s = %d sessions, want 2 (grok-active + claude-zero)", name, len(got))
+		}
+	}
+	check("VisibleSessions", mgr.VisibleSessions()) // TUI + GUI/tray
+	check("QuerySessions", mgr.QuerySessions("", "")) // HTTP API
+}
+
 func TestFilterSessionsLocked_NoExcludePatterns(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 

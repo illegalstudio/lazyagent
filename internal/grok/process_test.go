@@ -38,10 +38,7 @@ func TestDiscoverSessions_PrimaryAndSubagent(t *testing.T) {
 	subSummary := `{"info":{"id":"sub","cwd":"/tmp/wt"},"chat_format_version":1,
 		"updated_at":"2026-05-17T11:00:00Z","session_kind":"subagent"}`
 	writeSession(t, root, "%2Ftmp%2Fwt", "sub", map[string]string{
-		"summary.json": subSummary,
-		// A subagent that did work has a user/task message — without one,
-		// discovery hides it as a never-used session.
-		"chat_history.jsonl": `{"type":"user","content":[{"type":"text","text":"<user_query>do the subtask</user_query>"}]}` + "\n",
+		"summary.json": subSummary, "chat_history.jsonl": "",
 	})
 
 	sessions, err := discoverSessionsFromDir(root, model.NewSessionCache())
@@ -67,7 +64,10 @@ func TestDiscoverSessions_PrimaryAndSubagent(t *testing.T) {
 	}
 }
 
-func TestDiscoverSessions_HidesSessionsWithNoUserMessage(t *testing.T) {
+func TestDiscoverSessions_IncludesSessionsWithNoUserMessage(t *testing.T) {
+	// Discovery returns sessions even with no user message yet, so `prune` can
+	// reach and delete very old never-used sessions. Hiding them from the list
+	// is done at the rendering layer (core.filterSessionsLocked), not here.
 	root := t.TempDir()
 	freshSummary := `{"info":{"id":"fresh","cwd":"/tmp/p"},"chat_format_version":1,"updated_at":"2026-05-17T11:00:00Z"}`
 	activeSummary := `{"info":{"id":"active","cwd":"/tmp/p"},"chat_format_version":1,"updated_at":"2026-05-17T11:00:00Z"}`
@@ -87,11 +87,20 @@ func TestDiscoverSessions_HidesSessionsWithNoUserMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 1 {
-		t.Fatalf("got %d sessions, want 1 (the no-message session must be hidden)", len(sessions))
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2 (discovery must include the no-message session)", len(sessions))
 	}
-	if sessions[0].SessionID != "active" {
-		t.Errorf("surviving session = %q, want \"active\"", sessions[0].SessionID)
+	var fresh *model.Session
+	for _, s := range sessions {
+		if s.SessionID == "fresh" {
+			fresh = s
+		}
+	}
+	if fresh == nil {
+		t.Fatal("the never-used session must still be discovered (so prune can reach it)")
+	}
+	if fresh.UserMessages != 0 {
+		t.Errorf("fresh session UserMessages = %d, want 0", fresh.UserMessages)
 	}
 }
 

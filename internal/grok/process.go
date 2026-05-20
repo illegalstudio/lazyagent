@@ -200,20 +200,10 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 	}
 
 	cache.Prune(seen)
-
-	// Hide sessions the user has not interacted with yet. Grok creates a
-	// session directory (summary.json, system_prompt.txt, ...) the moment
-	// `grok` is launched — before any message is sent. A session only becomes
-	// a real conversation once the user writes the first message, i.e. once a
-	// <user_query> entry exists in chat_history.jsonl (UserMessages > 0).
-	// Empty sessions stay in the cache (keyed on chat_history.jsonl), so once
-	// the first message lands the file grows, the cache misses, and the
-	// session is re-parsed and surfaces.
-	active := sessions[:0]
-	for _, s := range sessions {
-		if s.UserMessages > 0 {
-			active = append(active, s)
-		}
-	}
-	return active, nil
+	// Discovery returns every session, including ones with no user message
+	// yet (a Grok session directory is created the moment `grok` is launched).
+	// Keeping them here lets `prune` reach and delete very old never-used
+	// sessions; hiding them from the TUI/GUI/API list is done at the rendering
+	// layer (core.filterSessionsLocked).
+	return sessions, nil
 }
