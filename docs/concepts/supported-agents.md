@@ -69,22 +69,11 @@ OpenCode uses SQLite with relational tables (`session`, `message`, `part`). lazy
 
 ### Grok CLI
 
-Grok writes one *directory* per session, two levels deep under
-`~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory
-holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an
-`updates.jsonl` stream, and several smaller files. lazyagent reads
-`summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard
-URL percent-encoding of the parent directory name.
+Grok writes one *directory* per session, two levels deep under `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an `updates.jsonl` stream, and several smaller files. lazyagent reads `summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard URL percent-encoding of the parent directory name.
 
-**No per-session cost.** Grok's on-disk data does not expose an
-input/output/cache token split, so Grok sessions show no per-session token or
-cost figures in any interface — those fields are honestly left at zero. (The
-separate `lazyagent limits` command still reports Grok's monthly billing
-window; that uses Grok's billing API, not on-disk session data.)
+**No per-session cost.** Grok's on-disk data does not expose an input/output/cache token split, so Grok sessions show no per-session token or cost figures in any interface — those fields are left at zero. (The separate `lazyagent limits` command still reports Grok's monthly billing window; that uses Grok's billing API, not on-disk session data.)
 
-**Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are
-treated as sidechains and hidden from the default list, the same as Claude's
-sub-agent sessions.
+**Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are treated as sidechains and hidden from the default list, the same as Claude's sub-agent sessions.
 
 ## What's not supported (yet)
 

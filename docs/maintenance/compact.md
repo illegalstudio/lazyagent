@@ -111,7 +111,12 @@ Each agent has its own set of field paths. Only oversized values are touched; sh
 
 ### Grok CLI
 
-For Grok, compact rewrites the bulky files inside the session directory — `updates.jsonl`, oversized `tool_result` payloads in `chat_history.jsonl`, `rewind_points.jsonl`, and `terminal/*.log`. Truncating `rewind_points.jsonl` disables Grok's rewind feature for that session.
+- `updates.jsonl` — the ACP update stream
+- `chat_history.jsonl` — oversized `tool_result` payloads
+- `rewind_points.jsonl` — checkpoint snapshots
+- `terminal/*.log` — raw terminal capture logs
+
+Truncating `rewind_points.jsonl` disables Grok's rewind feature for that session.
 
 ## Dry runs
 
