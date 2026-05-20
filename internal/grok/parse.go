@@ -67,7 +67,11 @@ func ParseGrokSession(sessionDir string) (*model.Session, error) {
 	// Timestamps. updated_at == last_active_at in every observed sample;
 	// fall back across both, then created_at.
 	s.LastActivity = parseGrokTime(firstNonEmpty(summary.LastActiveAt, summary.UpdatedAt, summary.CreatedAt))
-	s.LastSummaryAt = parseGrokTime(firstNonEmpty(summary.UpdatedAt, summary.LastActiveAt))
+	// LastSummaryAt is intentionally left zero: it drives the "compacting"
+	// activity (core.ResolveActivity), and Grok exposes no compaction-summary
+	// marker on disk — not in summary.json, chat_history.jsonl, or events.jsonl.
+	// Mapping it to updated_at (as an earlier draft did) made every recently
+	// active session falsely render as "compacting".
 
 	// Transcript: counts, recent messages/tools, status.
 	chat := parseGrokChatHistory(filepath.Join(sessionDir, "chat_history.jsonl"))

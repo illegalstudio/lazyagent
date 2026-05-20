@@ -96,6 +96,11 @@ func TestParseGrokSession_Fields(t *testing.T) {
 	if s.LastActivity.IsZero() {
 		t.Error("LastActivity is zero")
 	}
+	// LastSummaryAt must stay zero: Grok has no compaction-summary marker, and
+	// a non-zero value would falsely render the session as "compacting".
+	if !s.LastSummaryAt.IsZero() {
+		t.Errorf("LastSummaryAt = %v, want zero (Grok has no compaction marker)", s.LastSummaryAt)
+	}
 	if s.IsSidechain {
 		t.Error("primary session must not be a sidechain")
 	}
