@@ -176,6 +176,46 @@ func TestParseGrokSession_MissingSummary(t *testing.T) {
 	}
 }
 
+func TestParseGrokSession_StatusExecutingTool(t *testing.T) {
+	root := t.TempDir()
+	summary := `{"info":{"id":"t","cwd":"/tmp/p"},"chat_format_version":1,
+		"updated_at":"2026-05-17T11:00:00Z"}`
+	// Chat ends on an assistant entry with a pending tool call.
+	chat := `{"type":"user","content":[{"type":"text","text":"run the tests"}]}
+{"type":"assistant","content":"running","tool_calls":[{"id":"call-9","name":"bash","arguments":"{}"}]}
+`
+	dir := writeSession(t, root, "%2Ftmp%2Fp", "t", map[string]string{
+		"summary.json": summary, "chat_history.jsonl": chat,
+	})
+	s, err := ParseGrokSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Status != model.StatusExecutingTool {
+		t.Errorf("Status = %v, want ExecutingTool", s.Status)
+	}
+	if s.CurrentTool != "Bash" {
+		t.Errorf("CurrentTool = %q, want Bash", s.CurrentTool)
+	}
+}
+
+func TestParseGrokSession_StatusThinking(t *testing.T) {
+	root := t.TempDir()
+	summary := `{"info":{"id":"u","cwd":"/tmp/p"},"chat_format_version":1,
+		"updated_at":"2026-05-17T11:00:00Z"}`
+	chat := `{"type":"user","content":[{"type":"text","text":"hello"}]}` + "\n"
+	dir := writeSession(t, root, "%2Ftmp%2Fp", "u", map[string]string{
+		"summary.json": summary, "chat_history.jsonl": chat,
+	})
+	s, err := ParseGrokSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Status != model.StatusThinking {
+		t.Errorf("Status = %v, want Thinking", s.Status)
+	}
+}
+
 func TestDecodeGrokDirName(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"%2FUsers%2Falice%2Fproject", "/Users/alice/project"},

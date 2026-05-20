@@ -9,8 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
@@ -237,11 +238,6 @@ func grokEntryText(raw json.RawMessage) string {
 				return b.Text
 			}
 		}
-		for _, b := range blocks {
-			if b.Text != "" {
-				return b.Text
-			}
-		}
 	}
 	return ""
 }
@@ -252,7 +248,8 @@ func normalizeGrokToolName(name string) string {
 	if name == "" {
 		return name
 	}
-	return strings.ToUpper(name[:1]) + name[1:]
+	r, size := utf8.DecodeRuneInString(name)
+	return string(unicode.ToUpper(r)) + name[size:]
 }
 
 // grokStatus infers session status from the last transcript entry.
