@@ -77,6 +77,8 @@ Type a 1-based result number to open that session in the originating agent. lazy
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
 
+> **Grok sessions** are indexed and searchable, but `search` cannot resume them directly — Grok exposes no resume command, so selecting a Grok result reports that and exits.
+
 ## Index management
 
 The index updates *incrementally* on every run — there's normally no reason to think about it. Two situations call for a manual rebuild:

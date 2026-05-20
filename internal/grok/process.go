@@ -138,6 +138,11 @@ func discoverSessionsFromDir(sessionsDir string, cache *model.SessionCache) ([]*
 		// change — including the offset>0 "file grew" case — triggers a full
 		// re-parse, because Grok parsing reads summary.json + the whole
 		// chat_history.jsonl rather than appending incrementally.
+		// Trade-off: the cache key is chat_history.jsonl only, so a change
+		// to summary.json or updates.jsonl alone (e.g. an asynchronously-
+		// generated title) is not detected until the next chat_history.jsonl
+		// write or a full --reindex. chat_history.jsonl is chosen because it
+		// is always present and grows on every turn.
 		if cached != nil && offset == 0 {
 			sessions = append(sessions, cached)
 			continue
