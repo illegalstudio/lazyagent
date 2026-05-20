@@ -1,0 +1,6 @@
+{
+  "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {
+    "key": "test-jwt-token-payload",
+    "extra": "ignored"
+  }
+}

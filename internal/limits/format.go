@@ -19,7 +19,7 @@ type Window struct {
 
 // Report is the data we render for one provider.
 type Report struct {
-	Provider string   // "Claude Code" / "Codex"
+	Provider string   // "Claude Code" / "Codex" / "Grok"
 	Source   string   // short note shown before the disclaimer (provenance)
 	Windows  []Window // 5h, 7d, ...
 	Note     string   // disclaimer (may be empty)

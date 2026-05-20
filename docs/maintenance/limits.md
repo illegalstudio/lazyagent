@@ -1,35 +1,36 @@
 ---
 title: "Show rate-limit usage"
-description: "On-demand snapshot of Claude Code and Codex 5-hour and weekly rate-limit windows, with a pace indicator vs. linear consumption."
+description: "On-demand snapshot of Claude Code (5h + 7d), Codex (5h + 7d), and Grok (monthly billing) rate-limit windows, with a pace indicator vs. linear consumption."
 sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot snapshot of the **5-hour** and **weekly** rate-limit windows for Claude Code and Codex, with a *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
+`lazyagent limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, and Grok, with a *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll. Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window.
 
-Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, or *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall.
+Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
 
 ## Synopsis
 
 ```
-lazyagent limits [--agent claude|codex|all]
+lazyagent limits [--agent claude|codex|grok|all]
 ```
 
 ## Flags
 
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
-| `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, or `all` |
+| `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, or `all` |
 | `--help` | bool | `false` | Print usage and exit |
 
-Only `claude` and `codex` are supported — they're the only agents in lazyagent's set that expose rate-limit windows in a stable, observable form.
+Only `claude`, `codex`, and `grok` are supported — they're the only agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
 
 ## Quick reference
 
 ```bash
-lazyagent limits                   # both agents (default)
+lazyagent limits                   # all three agents (default)
 lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
+lazyagent limits --agent grok      # only Grok
 lazyagent limits --help            # full usage + disclaimers
 ```
 
@@ -95,7 +96,7 @@ In an interactive terminal the bars and pace label are colored. When piped or re
 
 ## How it gets the data
 
-The two providers work very differently — there's a single command, but two paths under the hood.
+The three providers work very differently — there's a single command, but three paths under the hood.
 
 ### Claude Code
 
@@ -119,20 +120,34 @@ If the most recent rollout has no `rate_limits` event yet (a brand-new session t
 
 The `Source:` line in the output points to the rollout actually read — useful when you notice the data is stale and want to confirm whether you've simply not used Codex recently.
 
+### Grok
+
+A single HTTPS GET to `https://cli-chat-proxy.grok.com/v1/billing` with the user's OAuth bearer token. This is the **same** endpoint Grok CLI's interactive `/usage show` slash command queries.
+
+The OAuth token is read in this priority order:
+
+1. **`GROK_OAUTH_TOKEN`** environment variable — useful for CI or for overriding the on-disk credential file
+2. **`~/.grok/auth.json`** — the file `grok login` writes to. lazyagent picks the first entry whose `key` field is non-empty (in practice there is exactly one)
+
+If neither is present, the command tells you to run `grok login`.
+
+The response carries one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
+
+When the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `Source: $83.25 of $600.00 used (on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* monthly budget.
+
 ## When an agent isn't installed
 
-Both providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`.
+All three providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`, and for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`).
 
-| State | Default (`--agent all`) | `--agent claude` | `--agent codex` |
-|-------|-------------------------|------------------|-----------------|
-| Both installed | Both reports printed | Claude printed | Codex printed |
-| Only Claude | Claude printed, Codex silently skipped | Claude printed | Friendly error, exit 1 |
-| Only Codex | Codex printed, Claude silently skipped | Friendly error, exit 1 | Codex printed |
-| Neither | Single guidance message on stderr, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 |
+| State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` |
+|-------|-------------------------|------------------|-----------------|----------------|
+| All three installed | Three reports printed | Claude printed | Codex printed | Grok printed |
+| Subset installed | Installed providers printed, others silently skipped | Claude printed or error | Codex printed or error | Grok printed or error |
+| None installed | Single guidance message on stderr, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 |
 
 The default `--agent all` mode is forgiving: a missing agent is not an error, it just doesn't show up. Explicit `--agent X` is strict: if you asked for it, missing it is an error worth surfacing.
 
-## Disclaimer (Claude Code)
+## Disclaimers (Claude Code, Grok)
 
 `/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` UI and is subject to:
 
@@ -142,21 +157,30 @@ The default `--agent all` mode is forgiving: a missing agent is not an error, it
 
 If you're distributing lazyagent or building automation on top of it, prefer running `lazyagent limits` only when a human has asked for it. Don't put it in a `watch` loop.
 
+For **Grok**, `/v1/billing` is similarly **not** part of xAI's documented public API. As of this writing it is used internally by the Grok CLI's `/usage show` slash command and is subject to:
+
+- **No stability guarantee** — endpoint path, response shape, and field names may change without notice. lazyagent fails gracefully (clear error, exit code 1) when this happens.
+- **Subscription scope** — the response reflects the billing plan associated with the OAuth token (SuperGrok and similar). Users without a billing plan, or pure API-key users on `api.x.ai`, won't see meaningful data here.
+- **Bearer reuse** — lazyagent sends the same JWT the Grok CLI uses. Treat it as a credential; the same caveats about token-rotation and revocation apply.
+
+The "don't poll" guidance applies equally to Grok: run `lazyagent limits` interactively, not in a `watch` loop.
+
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Both requested agents succeeded |
+| `0` | All requested agents succeeded |
 | `1` | At least one agent failed (token missing, endpoint error, no Codex sessions, …) — details on stderr |
 | `2` | Invalid flags (e.g. unknown `--agent` value) |
 
-Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` prefix, so you can pipe stdout to a parser without losing the error context.
+Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` prefix, so you can pipe stdout to a parser without losing the error context.
 
 ## Environment
 
 | Variable | Effect |
 |----------|--------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token for the Claude call. Used in priority before the macOS keychain or the credentials file |
+| `GROK_OAUTH_TOKEN` | Override the OAuth token for the Grok call. Used in priority before `~/.grok/auth.json` |
 
 ## See also
 
