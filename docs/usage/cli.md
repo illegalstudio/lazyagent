@@ -10,7 +10,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
-- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour and weekly rate-limit usage with a pace indicator
+- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage with a pace indicator
 
 ## Synopsis
 
@@ -105,6 +105,7 @@ Restrict monitoring to one agent. Valid values:
 ```bash
 lazyagent --agent claude     # only Claude
 lazyagent --agent codex      # only Codex
+lazyagent --agent grok       # only Grok
 lazyagent --agent all        # default — every agent
 ```
 
@@ -150,7 +151,7 @@ lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
-See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), and [`limits`](../maintenance/limits.md) for their flag tables.
+See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), and [`limits`](../maintenance/limits.md) for their flag tables.
 
 ### `search`
 
@@ -162,9 +163,9 @@ lazyagent search --agent codex "parser"
 lazyagent search --reindex "config"
 ```
 
-After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command. Piped output stays non-interactive.
+After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions are searchable but not directly resumable, because Grok CLI does not expose a resume command. Piped output stays non-interactive.
 
-Full reference, including the index location, ranking, and resume commands: [`search`](../maintenance/search.md).
+Full reference, including the index location, ranking, resume commands, and Grok caveat: [`search`](../maintenance/search.md).
 
 ### `limits`
 
@@ -239,6 +240,7 @@ The maintenance subcommands define their own exit codes; see their respective pa
 |----------|--------|
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
+| `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |

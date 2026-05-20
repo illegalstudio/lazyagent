@@ -19,7 +19,7 @@ lazyagent computes a single `Session` record per conversation, regardless of whi
 | Is git worktree | `git rev-parse` at discovery time |
 | Main repo path (if worktree) | `git worktree` |
 | Message count (user / assistant) | JSONL / SQLite |
-| Token usage & estimated cost | JSONL + per-model pricing |
+| Token usage & estimated cost | JSONL + per-model pricing, when the agent records token counters |
 | Activity sparkline (last N minutes) | JSONL entry timestamps |
 | Last file written | Tool call inspection |
 | Recent conversation (last 5 messages) | JSONL / SQLite |
@@ -30,7 +30,7 @@ lazyagent computes a single `Session` record per conversation, regardless of whi
 | Desktop session title | Claude Desktop metadata |
 | Permission mode (Desktop) | Claude Desktop metadata |
 | Remote control URL | JSONL (Claude `bridge_status` entries) |
-| Resume command | Computed per agent |
+| Resume command | Computed per agent when available |
 
 ## Custom names
 
@@ -38,19 +38,19 @@ Every session can be renamed (<kbd>r</kbd> in TUI or GUI, `PUT /api/sessions/{id
 
 ## Resume command
 
-For every supported agent, lazyagent builds the exact shell command that would resume the selected session:
+For agents that expose a resumable CLI, lazyagent builds the exact shell command that would resume the selected session:
 
-- Claude Code: `claude --resume <session-id> --cwd <cwd>`
+- Claude Code: `claude --resume <session-id>`
 - Codex CLI: `codex resume <session-id>`
-- Amp: `amp thread continue <thread-id>`
-- pi: `pi agent resume <session-id>`
-- OpenCode: `opencode --session <id>`
-- Cursor: opens in Cursor IDE via the `cursor` CLI (if installed)
+- Amp: `amp threads continue <thread-id>`
+- pi: `pi --session <session-id>`
+- OpenCode: `opencode -s <id>`
+- Cursor: `cursor-agent --resume="<id>"`
 
-In the TUI, <kbd>c</kbd> copies the command to the clipboard. The GUI has a copy button next to the command. The API exposes it as `resume_command` on the session detail response.
+Grok CLI does not currently expose a direct resume command that lazyagent can invoke, so Grok sessions omit this field. In the TUI, <kbd>c</kbd> copies the command to the clipboard when one exists. The GUI has a copy button next to the command. The API exposes it as `resume_command` on the session detail response.
 
 ## Cost estimation
 
-Cost is derived from the token counters already present in the transcript, multiplied by the per-model price list baked into lazyagent. Supported model families include Claude (Opus, Sonnet, Haiku), GPT (4o, 4.1, o1, o3), and Gemini. Unknown models show tokens but no cost.
+Cost is derived from the token counters already present in the transcript, multiplied by the per-model price list baked into lazyagent. Supported model families include Claude (Opus, Sonnet, Haiku), GPT (4o, 4.1, o1, o3), and Gemini. Unknown models show tokens but no cost. Grok sessions show no per-session token or cost figures because Grok's local transcript data does not expose an input/output/cache token split.
 
 Costs are estimates — the authoritative number is always your provider's billing console.

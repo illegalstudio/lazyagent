@@ -22,6 +22,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (or `$XDG_CONFIG_HOME/lazyagen
     "claude": true,
     "codex": true,
     "cursor": true,
+    "grok": true,
     "opencode": true,
     "pi": true
   },
@@ -71,6 +72,7 @@ Default: all `true`. Per-agent enable flags. Disabled agents are skipped even wh
     "claude": true,
     "codex": true,
     "cursor": false,
+    "grok": true,
     "opencode": true,
     "pi": true
   }

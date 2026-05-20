@@ -5,21 +5,22 @@ sidebar:
   order: 3
 ---
 
-lazyagent is a single Go binary with an optional Svelte 5 frontend embedded for the macOS menu bar app. Everything shares one core package; the three interfaces and the two maintenance commands are thin consumers of it.
+lazyagent is a single Go binary with an optional Svelte 5 frontend embedded for the macOS menu bar app. Everything shares one core package; the three interfaces and the command packages are thin consumers of it.
 
 ## Module map
 
 ```
 lazyagent/
-├── main.go                     # Entry point: --tui / --gui / --api / --agent + prune / compact subcommands
+├── main.go                     # Entry point: --tui / --gui / --api / --agent + subcommands
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config
-│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Codex/Amp providers
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Codex/Amp/Grok providers
 │   ├── model/                  # Shared types (Session, ToolCall, DesktopMeta, …)
 │   ├── amp/                    # Amp CLI thread parsing and session discovery
 │   ├── claude/                 # Claude Code JSONL parsing, Desktop sidecar, session discovery
 │   ├── codex/                  # Codex CLI JSONL parsing and session discovery
 │   ├── cursor/                 # Cursor IDE session discovery from state.vscdb (SQLite)
+│   ├── grok/                   # Grok CLI session-directory parsing and discovery
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── opencode/               # OpenCode SQLite parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
@@ -28,7 +29,9 @@ lazyagent/
 │   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
 │   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
 │   ├── prune/                  # `lazyagent prune` — delete old or orphaned chat files
-│   ├── compact/                # `lazyagent compact` — truncate oversized JSONL payloads
+│   ├── compact/                # `lazyagent compact` — truncate oversized session payloads
+│   ├── search/                 # `lazyagent search` — local transcript full-text search
+│   ├── limits/                 # `lazyagent limits` — rate-limit / billing snapshots
 │   ├── demo/                   # Fake session data for screenshots
 │   └── assets/                 # Embedded frontend dist (go:embed)
 ├── frontend/                   # Svelte 5 + Tailwind 4 (menu bar UI)
@@ -51,7 +54,7 @@ The shared engine: session provider interface, file watcher (fsnotify-based, wit
 
 Pure types — `Session`, `ToolCall`, `ConversationMessage`, `DesktopMeta`, and the `SessionCache` that backs incremental JSONL parsing. No behavior, no imports beyond `time` and `sync`.
 
-### Per-agent providers (`internal/amp`, `claude`, `codex`, `cursor`, `pi`, `opencode`)
+### Per-agent providers (`internal/amp`, `claude`, `codex`, `cursor`, `grok`, `pi`, `opencode`)
 
 Each owns the on-disk layout and parsing for its agent. They expose discovery functions that return `[]*model.Session`, integrated via the `SessionProvider` interface in `core/provider.go`.
 
@@ -61,14 +64,14 @@ The three interfaces. Each consumes `SessionProvider.DiscoverSessions()` on a lo
 
 ### `internal/chatops`
 
-A small toolbox of CLI helpers shared by the two maintenance commands: the interactive agent picker, tables, the destructive-operation disclaimer, the "all clean" zen box, `y/N` confirmation, `EnsureWithin` path guard, and `HumanBytes` formatter.
+A small toolbox of CLI helpers shared by the maintenance commands: the interactive agent picker, tables, the destructive-operation disclaimer, the "all clean" zen box, `y/N` confirmation, `EnsureWithin` path guard, and `HumanBytes` formatter.
 
 ### `internal/prune`, `internal/compact`
 
-The two maintenance commands. Both are thin orchestrators:
+The destructive maintenance commands. Both are thin orchestrators:
 
 - **`prune`** discovers candidates via the standard providers, applies age/orphan filters, and deletes files. Per-agent deletion handles sidecar metadata (Claude Desktop) and name-index rewrites (Codex).
-- **`compact`** reads each JSONL line, applies a per-agent `lineMutator` that truncates oversized fields, and rewrites atomically with line-count validation.
+- **`compact`** rewrites JSONL transcripts and Grok session directories, applies per-agent truncation rules to oversized fields, and rewrites atomically with validation.
 
 ## Activity state machine
 
@@ -88,4 +91,4 @@ Events are **debounced** at 200 ms so a burst of writes during a tool call doesn
 
 ## Cost estimation
 
-Per-model pricing tables live in `internal/core/costs.go` (Claude, GPT, Gemini families). Estimates are derived from token counters already present in the transcript — lazyagent never calls any LLM.
+Per-model pricing tables live in `internal/core/costs.go` (Claude, GPT, Gemini families). Estimates are derived from token counters already present in the transcript — lazyagent never calls any LLM. Grok sessions report no per-session cost because their local files do not expose the token split needed for that calculation.

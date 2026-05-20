@@ -1,11 +1,11 @@
 ---
 title: "Prune old sessions"
-description: "Delete chat files that are old, orphaned, or both — with dry-run previews and a destructive-op disclaimer."
+description: "Delete chat sessions that are old, orphaned, or both — with dry-run previews and a destructive-op disclaimer."
 sidebar:
   order: 1
 ---
 
-`lazyagent prune` deletes entire chat session files. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
+`lazyagent prune` deletes entire chat sessions: files for JSONL-backed agents, directories for Grok. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
 
 For *shrinking* sessions you want to keep, see [Compact](compact.md) instead.
 

@@ -1,11 +1,11 @@
 ---
 title: "Search chat transcripts"
-description: "Full-text search over local agent transcripts, with highlighted snippets, an incremental SQLite FTS5 index, and an interactive resume picker."
+description: "Full-text search over local agent transcripts, with highlighted snippets, an incremental SQLite FTS5 index, and an optional interactive opener."
 sidebar:
   order: 4
 ---
 
-`lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and resume it directly with the originating agent.
+`lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
 
 It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, and **Grok**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
@@ -54,7 +54,7 @@ Ranking uses FTS5's built-in `bm25(chunks)` — the most relevant matches appear
 
 ## Output
 
-For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A) for visual scanning across mixed result sets.
+For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A, G) for visual scanning across mixed result sets.
 
 Pipe-safe behavior: when stdout is not a terminal the interactive resume prompt is skipped, so `lazyagent search query | grep ...` and `| jq` work cleanly. Headers and snippets still go to stdout; warnings (e.g. "indexing failed for X session: …") go to stderr.
 
@@ -66,7 +66,7 @@ After printing results in an interactive terminal, lazyagent shows:
 Open a chat? Enter result #, or press Enter to quit:
 ```
 
-Type a 1-based result number to open that session in the originating agent. lazyagent runs the right resume command for you:
+Type a 1-based result number to open that session in the originating agent when a resume command is available. lazyagent runs the right command for you:
 
 | Agent | Resume command |
 |-------|----------------|
@@ -144,4 +144,4 @@ lazyagent search --reindex "anything"
 
 - [`lazyagent prune`](prune.md) — delete entire chat files (destructive, complementary)
 - [`lazyagent compact`](compact.md) — shrink chat files in place (destructive, complementary)
-- [`lazyagent limits`](limits.md) — show 5-hour and weekly rate-limit usage
+- [`lazyagent limits`](limits.md) — show 5-hour, weekly, and monthly usage

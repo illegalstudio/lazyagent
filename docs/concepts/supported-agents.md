@@ -16,7 +16,7 @@ lazyagent supports eight agents out of the box. Each has a dedicated provider th
 | [Amp CLI](https://ampcode.com/) | `~/.local/share/amp/threads/*.json` | Per-thread JSON | `A` |
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
-| [Grok CLI](https://github.com/xai-org/grok-cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
+| [Grok CLI](https://x.ai/cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
 
 The prefix appears next to each session in the TUI list, the GUI panel, and the API response so you can tell at a glance which agent produced a session.
 
@@ -78,5 +78,5 @@ Grok writes one *directory* per session, two levels deep under `~/.grok/sessions
 ## What's not supported (yet)
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
-- The two maintenance commands (`prune`, `compact`) intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
+- The destructive maintenance commands (`prune`, `compact`) intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
 - The [`limits`](../maintenance/limits.md) command supports only Claude Code, Codex, and Grok — they're the only agents lazyagent observes that expose stable rate-limit or billing windows (5-hour + 7-day for Claude/Codex, monthly for Grok).

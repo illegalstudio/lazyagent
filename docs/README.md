@@ -5,9 +5,9 @@ sidebar:
   order: 0
 ---
 
-lazyagent watches session data from coding agents — [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — and shows what each one is doing in real time. No modifications to any agent are needed; it's purely observational.
+lazyagent watches session data from coding agents — [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — and shows what each one is doing in real time. No modifications to any agent are needed; it's purely observational.
 
-Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, and an HTTP API. They share the same engine and can all run at once. Two maintenance subcommands, `prune` and `compact`, clean up old or oversized transcripts.
+Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, and an HTTP API. They share the same engine and can all run at once. Maintenance subcommands cover pruning, compaction, transcript search, and rate-limit snapshots.
 
 ## Getting Started
 

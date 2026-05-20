@@ -28,6 +28,7 @@ Scope the scan to a single agent with `--agent`:
 ```bash
 lazyagent --agent claude   # Claude Code CLI and Desktop
 lazyagent --agent codex    # Codex CLI only
+lazyagent --agent grok     # Grok CLI only
 ```
 
 To permanently hide an agent without passing `--agent` every time, set it to `false` in the [`agents` config block](../reference/configuration.md#agents).
@@ -136,7 +137,7 @@ You deleted `~/projects/abandoned-app` and want every session associated with it
 lazyagent prune --orphaned --dry-run-verbose | grep abandoned-app
 
 # Commit
-lazyagent prune --orphaned --agent claude,codex,pi
+lazyagent prune --orphaned --agent claude,codex,pi,grok
 ```
 
 `--orphaned` catches anything whose CWD no longer resolves — the exact case here.

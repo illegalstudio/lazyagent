@@ -42,6 +42,7 @@ The first time you launch `--api`, lazyagent prompts for a passphrase, derives a
 ```bash
 lazyagent --agent claude    # Claude Code CLI + Desktop
 lazyagent --agent codex     # Codex CLI only
+lazyagent --agent grok      # Grok CLI only
 lazyagent --agent all       # every agent (default)
 ```
 
@@ -49,17 +50,21 @@ Every value for `--agent` is documented in [CLI reference](../usage/cli.md#-agen
 
 ## Maintenance at a glance
 
-Two subcommands keep chat transcripts under control:
+The maintenance subcommands keep chat transcripts and usage windows under control:
 
 ```bash
 lazyagent prune --days 30        # delete sessions idle for >30 days
 lazyagent compact                # shrink session files in place
+lazyagent search "query"         # search local transcripts
+lazyagent limits                 # show rate-limit / billing usage
 ```
 
-Both support `--dry-run` and an interactive agent picker. Full reference:
+`prune` and `compact` support `--dry-run` and an interactive agent picker. Full reference:
 
 - [Prune old sessions](../maintenance/prune.md)
 - [Compact session files](../maintenance/compact.md)
+- [Search chat transcripts](../maintenance/search.md)
+- [Show rate-limit usage](../maintenance/limits.md)
 
 ## Next steps
 

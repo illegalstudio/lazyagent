@@ -26,14 +26,14 @@ It's the default because it's the most information-dense interface. The layout i
 | <kbd>f</kbd> | Cycle activity filter (`all` → `active` → `waiting` → …) |
 | <kbd>/</kbd> | Search sessions by project path |
 | <kbd>o</kbd> | Open the selected session's CWD in your editor |
-| <kbd>c</kbd> | Copy the resume command to the clipboard |
+| <kbd>c</kbd> | Copy the resume command to the clipboard, when available |
 | <kbd>r</kbd> | Rename the session (empty name resets to default) |
 | <kbd>esc</kbd> | Close detail overlay / dismiss search |
 | <kbd>q</kbd> / <kbd>ctrl+c</kbd> | Quit |
 
 ## Visual indicators
 
-- **Agent prefix** — a one-character prefix (π, D, C, X, A, O) identifies which agent produced the session. See [Supported agents](../concepts/supported-agents.md).
+- **Agent prefix** — a one-character prefix (π, D, C, X, A, O, G) identifies which agent produced the session. See [Supported agents](../concepts/supported-agents.md).
 - **Activity badge** — a colored state label (`idle`, `thinking`, `writing`, …). See [Activity states](../concepts/activity-states.md).
 - **Braille spinner** — animates while the session is actively executing.
 - **Sparkline** — a Unicode braille mini-chart of the last N minutes of activity.
