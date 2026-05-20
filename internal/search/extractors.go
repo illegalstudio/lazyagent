@@ -509,13 +509,21 @@ func extractGrok(src sourceState) ([]chunk, error) {
 		if json.Unmarshal(line, &e) != nil {
 			return
 		}
-		if e.Type != "user" && e.Type != "assistant" && e.Type != "tool_result" {
+		var role, text string
+		switch e.Type {
+		case "user":
+			msg, ok := grok.UserMessageText(e.Content)
+			if !ok {
+				return
+			}
+			role, text = "user", msg
+		case "assistant", "tool_result":
+			role = e.Type
+			text = contentText(e.Content, map[string]bool{"text": true})
+		default:
 			return
 		}
-		// contentText handles both the user array form and the plain-string
-		// form used by assistant/tool_result entries.
-		text := contentText(e.Content, map[string]bool{"text": true})
-		chunks = appendChunk(chunks, src, sessionID, cwd, name, e.Type, time.Time{}, text)
+		chunks = appendChunk(chunks, src, sessionID, cwd, name, role, time.Time{}, text)
 	})
 	return chunks, err
 }

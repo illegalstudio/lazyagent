@@ -3,6 +3,7 @@ package grok
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
@@ -42,12 +43,15 @@ const primarySummary = `{
 }`
 
 const primaryChat = `{"type":"system","content":"system prompt"}
-{"type":"user","content":[{"type":"text","text":"Hello Grok"}]}
-{"type":"assistant","content":"Working on it","tool_calls":[{"id":"call-1","name":"bash","arguments":"{}"}],"model_id":"grok-build"}
+{"type":"user","content":[{"type":"text","text":"<user_info>\nOS Version: macos\n</user_info>"}]}
+{"type":"user","content":[{"type":"text","text":"\n\n<system-reminder>\nThe following skills are available\n</system-reminder>"}]}
+{"type":"user","content":[{"type":"text","text":"<user_query>\nHello Grok\n</user_query>"}]}
+{"type":"assistant","content":"","reasoning":{"text":"Let me look into it","encrypted":"abc","id":"r1"},"tool_calls":[{"id":"call-1","name":"bash","arguments":"{}"}],"model_id":"grok-build"}
 {"type":"tool_result","content":"command output","tool_call_id":"call-1"}
+{"type":"assistant","content":"Here is the result","reasoning":{"text":"done","encrypted":"def","id":"r2"},"model_id":"grok-build"}
 `
 
-const primarySignals = `{"userMessageCount":1,"assistantMessageCount":1,"contextTokensUsed":1234}`
+const primarySignals = `{"userMessageCount":1,"assistantMessageCount":2,"contextTokensUsed":1234}`
 
 func TestParseGrokSession_Fields(t *testing.T) {
 	root := t.TempDir()
@@ -85,8 +89,8 @@ func TestParseGrokSession_Fields(t *testing.T) {
 	if s.TotalMessages != 4 {
 		t.Errorf("TotalMessages = %d, want 4", s.TotalMessages)
 	}
-	if s.UserMessages != 1 || s.AssistantMessages != 1 {
-		t.Errorf("counts = (%d,%d), want (1,1)", s.UserMessages, s.AssistantMessages)
+	if s.UserMessages != 1 || s.AssistantMessages != 2 {
+		t.Errorf("counts = (%d,%d), want (1,2)", s.UserMessages, s.AssistantMessages)
 	}
 	if s.LastActivity.IsZero() {
 		t.Error("LastActivity is zero")
@@ -99,8 +103,8 @@ func TestParseGrokSession_Fields(t *testing.T) {
 		s.CacheCreationTokens != 0 || s.CostUSD != 0 {
 		t.Error("token/cost fields must stay zero for Grok")
 	}
-	if s.Status != model.StatusProcessingResult {
-		t.Errorf("Status = %v, want ProcessingResult (last entry is tool_result)", s.Status)
+	if s.Status != model.StatusWaitingForUser {
+		t.Errorf("Status = %v, want WaitingForUser (last entry is assistant with no tool_calls)", s.Status)
 	}
 }
 
@@ -109,7 +113,7 @@ func TestParseGrokSession_TitleFallback(t *testing.T) {
 	// No generated_title, no session_summary → fall back to first user message.
 	summary := `{"info":{"id":"x","cwd":"/tmp/p"},"chat_format_version":1,
 		"updated_at":"2026-05-17T11:00:00Z"}`
-	chat := `{"type":"user","content":[{"type":"text","text":"Please refactor auth"}]}` + "\n"
+	chat := `{"type":"user","content":[{"type":"text","text":"<user_query>Please refactor auth</user_query>"}]}` + "\n"
 	dir := writeSession(t, root, "%2Ftmp%2Fp", "x", map[string]string{
 		"summary.json": summary, "chat_history.jsonl": chat,
 	})
@@ -133,8 +137,8 @@ func TestParseGrokSession_CountsFromTranscriptWhenNoSignals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.UserMessages != 1 || s.AssistantMessages != 1 {
-		t.Errorf("counts from transcript = (%d,%d), want (1,1)", s.UserMessages, s.AssistantMessages)
+	if s.UserMessages != 1 || s.AssistantMessages != 2 {
+		t.Errorf("counts from transcript = (%d,%d), want (1,2)", s.UserMessages, s.AssistantMessages)
 	}
 }
 
@@ -182,7 +186,7 @@ func TestParseGrokSession_StatusExecutingTool(t *testing.T) {
 		"updated_at":"2026-05-17T11:00:00Z"}`
 	// Chat ends on an assistant entry with a pending tool call.
 	chat := `{"type":"user","content":[{"type":"text","text":"run the tests"}]}
-{"type":"assistant","content":"running","tool_calls":[{"id":"call-9","name":"bash","arguments":"{}"}]}
+{"type":"assistant","content":"running","reasoning":{"text":"running tests","encrypted":"x","id":"r1"},"tool_calls":[{"id":"call-9","name":"bash","arguments":"{}"}]}
 `
 	dir := writeSession(t, root, "%2Ftmp%2Fp", "t", map[string]string{
 		"summary.json": summary, "chat_history.jsonl": chat,
@@ -226,5 +230,62 @@ func TestDecodeGrokDirName(t *testing.T) {
 		if got := decodeGrokDirName(tt.in); got != tt.want {
 			t.Errorf("decodeGrokDirName(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestParseGrokSession_FiltersSyntheticUserEntries(t *testing.T) {
+	// primaryChat has 3 user entries: <user_info>, <system-reminder>, and the
+	// real <user_query>. Only the last is a message.
+	root := t.TempDir()
+	dir := writeSession(t, root, "%2Ftmp%2Fp", "f", map[string]string{
+		"summary.json": primarySummary, "chat_history.jsonl": primaryChat,
+	})
+	s, err := ParseGrokSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userMsgs := 0
+	for _, m := range s.RecentMessages {
+		if strings.Contains(m.Text, "<system-reminder>") || strings.Contains(m.Text, "<user_info>") {
+			t.Errorf("synthetic entry leaked into RecentMessages: %q", m.Text)
+		}
+		if m.Role == "user" {
+			userMsgs++
+			if strings.Contains(m.Text, "<user_query>") {
+				t.Errorf("user message not unwrapped: %q", m.Text)
+			}
+			if m.Text != "Hello Grok" {
+				t.Errorf("user message = %q, want %q", m.Text, "Hello Grok")
+			}
+		}
+	}
+	if userMsgs != 1 {
+		t.Errorf("got %d user messages in RecentMessages, want 1", userMsgs)
+	}
+}
+
+func TestParseGrokSession_AssistantEntriesParsed(t *testing.T) {
+	// Regression: Grok assistant entries carry `reasoning` as an OBJECT. A
+	// mistyped struct field made json.Unmarshal fail and silently drop every
+	// assistant entry.
+	root := t.TempDir()
+	dir := writeSession(t, root, "%2Ftmp%2Fp", "a", map[string]string{
+		"summary.json": primarySummary, "chat_history.jsonl": primaryChat,
+	})
+	s, err := ParseGrokSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asstMsgs := 0
+	for _, m := range s.RecentMessages {
+		if m.Role == "assistant" {
+			asstMsgs++
+		}
+	}
+	if asstMsgs == 0 {
+		t.Fatal("no assistant messages in RecentMessages — assistant entries were dropped")
+	}
+	if len(s.RecentTools) == 0 {
+		t.Error("no tools captured — assistant tool_calls were dropped")
 	}
 }

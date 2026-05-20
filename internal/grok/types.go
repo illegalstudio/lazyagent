@@ -29,10 +29,14 @@ type grokSummary struct {
 type grokChatEntry struct {
 	Type       string          `json:"type"` // system | user | assistant | tool_result
 	Content    json.RawMessage `json:"content"`
-	Reasoning  string          `json:"reasoning"`
 	ToolCalls  []grokToolCall  `json:"tool_calls"`
 	ToolCallID string          `json:"tool_call_id"`
 	ModelID    string          `json:"model_id"`
+	// NOTE: assistant entries also carry a `reasoning` OBJECT
+	// ({text,encrypted,id}) and `model_fingerprint`. They are intentionally
+	// NOT modeled: encoding/json silently ignores unknown JSON keys, whereas
+	// a struct field with a mismatched type (e.g. `reasoning` typed as string)
+	// makes json.Unmarshal fail for the whole line and the entry is dropped.
 }
 
 // grokToolCall is one entry of an assistant message's tool_calls[].

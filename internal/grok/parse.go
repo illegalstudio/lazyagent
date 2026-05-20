@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -173,17 +174,18 @@ func parseGrokChatHistory(path string) grokChatResult {
 		}
 		switch e.Type {
 		case "user":
+			msgText, isReal := UserMessageText(e.Content)
+			if !isReal {
+				continue // injected <user_info>/<system-reminder> context, not a message
+			}
 			res.userCount++
 			res.lastEntry = copyGrokEntry(&e)
-			text := grokEntryText(e.Content)
-			if res.firstUserText == "" && text != "" {
-				res.firstUserText = model.Truncate(text, 300)
+			if res.firstUserText == "" {
+				res.firstUserText = model.Truncate(msgText, 300)
 			}
-			if text != "" {
-				res.recentMessages = append(res.recentMessages, model.ConversationMessage{
-					Role: "user", Text: model.Truncate(text, 300),
-				})
-			}
+			res.recentMessages = append(res.recentMessages, model.ConversationMessage{
+				Role: "user", Text: model.Truncate(msgText, 300),
+			})
 		case "assistant":
 			res.assistantCount++
 			res.lastEntry = copyGrokEntry(&e)
@@ -214,6 +216,39 @@ func parseGrokChatHistory(path string) grokChatResult {
 func copyGrokEntry(e *grokChatEntry) *grokChatEntry {
 	cp := *e
 	return &cp
+}
+
+// UserMessageText extracts the human-authored text of a chat_history "user"
+// entry. Grok injects <user_info> and <system-reminder> blocks as their own
+// type:"user" entries; those are context, not messages. The real prompt is
+// wrapped in <user_query>...</user_query>. It returns (text, true) for a real
+// user message and ("", false) for an injected-context entry.
+func UserMessageText(content json.RawMessage) (string, bool) {
+	text := strings.TrimSpace(grokEntryText(content))
+	if text == "" {
+		return "", false
+	}
+	if inner, ok := extractGrokTag(text, "user_query"); ok {
+		return strings.TrimSpace(inner), true
+	}
+	if strings.HasPrefix(text, "<system-reminder>") || strings.HasPrefix(text, "<user_info>") {
+		return "", false
+	}
+	return text, true
+}
+
+// extractGrokTag returns the text between <tag> and </tag> in s.
+func extractGrokTag(s, tag string) (string, bool) {
+	open := "<" + tag + ">"
+	i := strings.Index(s, open)
+	if i < 0 {
+		return "", false
+	}
+	rest := s[i+len(open):]
+	if j := strings.Index(rest, "</"+tag+">"); j >= 0 {
+		return rest[:j], true
+	}
+	return rest, true // unterminated tag — take the remainder
 }
 
 // grokEntryText extracts the first human-readable text from a chat entry's

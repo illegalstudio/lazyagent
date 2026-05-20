@@ -14,7 +14,8 @@ func TestExtractGrok(t *testing.T) {
 	}
 	summary := `{"info":{"id":"sess-1","cwd":"/tmp/p"},"generated_title":"Parser work"}`
 	chat := `{"type":"system","content":"ignore me"}
-{"type":"user","content":[{"type":"text","text":"find the parser bug"}]}
+{"type":"user","content":[{"type":"text","text":"<system-reminder>\nskills available\n</system-reminder>"}]}
+{"type":"user","content":[{"type":"text","text":"<user_query>find the parser bug</user_query>"}]}
 {"type":"assistant","content":"looking into the parser now"}
 {"type":"tool_result","content":"grep matched parser.go"}
 `
@@ -34,7 +35,7 @@ func TestExtractGrok(t *testing.T) {
 	if err != nil {
 		t.Fatalf("extractGrok: %v", err)
 	}
-	// user + assistant + tool_result = 3 chunks; system is skipped.
+	// user + assistant + tool_result = 3 chunks; system and <system-reminder> are skipped.
 	if len(chunks) != 3 {
 		t.Fatalf("got %d chunks, want 3", len(chunks))
 	}
@@ -55,6 +56,10 @@ func TestExtractGrok(t *testing.T) {
 		if gotRoles[i] != wantRoles[i] {
 			t.Errorf("chunk %d Role = %q, want %q", i, gotRoles[i], wantRoles[i])
 		}
+	}
+	// The user chunk must have the unwrapped text — no <user_query> tags, no <system-reminder>.
+	if chunks[0].Text != "find the parser bug" {
+		t.Errorf("user chunk Text = %q, want %q", chunks[0].Text, "find the parser bug")
 	}
 }
 
