@@ -49,4 +49,41 @@ func TestExtractGrok(t *testing.T) {
 			t.Errorf("Name = %q", c.Name)
 		}
 	}
+	gotRoles := []string{chunks[0].Role, chunks[1].Role, chunks[2].Role}
+	wantRoles := []string{"user", "assistant", "tool_result"}
+	for i := range wantRoles {
+		if gotRoles[i] != wantRoles[i] {
+			t.Errorf("chunk %d Role = %q, want %q", i, gotRoles[i], wantRoles[i])
+		}
+	}
+}
+
+func TestExtractGrok_MissingSummary(t *testing.T) {
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "%2Ftmp%2Fp", "fallback-id")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// No summary.json on purpose.
+	chat := `{"type":"user","content":[{"type":"text","text":"hello grok"}]}` + "\n"
+	chatPath := filepath.Join(sessionDir, "chat_history.jsonl")
+	if err := os.WriteFile(chatPath, []byte(chat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	src, ok := fileSource("grok", "fallback-id", chatPath)
+	if !ok {
+		t.Fatal("fileSource failed")
+	}
+	chunks, err := extractGrok(src)
+	if err != nil {
+		t.Fatalf("extractGrok must not fail when summary.json is absent: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("got %d chunks, want 1", len(chunks))
+	}
+	// With no summary.json, the session ID falls back to src.ID.
+	if chunks[0].SessionID != "fallback-id" {
+		t.Errorf("SessionID = %q, want fallback-id", chunks[0].SessionID)
+	}
 }

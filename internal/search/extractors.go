@@ -503,7 +503,6 @@ func extractGrok(src sourceState) ([]chunk, error) {
 			}
 		}
 	}
-	allowed := map[string]bool{"text": true}
 	var chunks []chunk
 	err := scanJSONL(src.Path, func(line []byte) {
 		var e grokChatLine
@@ -515,7 +514,7 @@ func extractGrok(src sourceState) ([]chunk, error) {
 		}
 		// contentText handles both the user array form and the plain-string
 		// form used by assistant/tool_result entries.
-		text := contentText(e.Content, allowed)
+		text := contentText(e.Content, map[string]bool{"text": true})
 		chunks = appendChunk(chunks, src, sessionID, cwd, name, e.Type, time.Time{}, text)
 	})
 	return chunks, err
