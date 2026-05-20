@@ -1,6 +1,7 @@
 package grok
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -282,10 +283,42 @@ func TestParseGrokSession_AssistantEntriesParsed(t *testing.T) {
 			asstMsgs++
 		}
 	}
-	if asstMsgs == 0 {
-		t.Fatal("no assistant messages in RecentMessages — assistant entries were dropped")
+	// primaryChat has 2 assistant entries: a tool-call turn (empty content,
+	// no message row) and a final answer (content → one message row).
+	if asstMsgs != 1 {
+		t.Errorf("assistant messages in RecentMessages = %d, want 1", asstMsgs)
+	}
+	if s.AssistantMessages != 2 {
+		t.Errorf("AssistantMessages = %d, want 2 (both entries counted)", s.AssistantMessages)
 	}
 	if len(s.RecentTools) == 0 {
 		t.Error("no tools captured — assistant tool_calls were dropped")
+	}
+}
+
+func TestUserMessageText(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string // raw JSON for the entry's content field
+		want    string
+		wantOK  bool
+	}{
+		{"user_query at start", `[{"type":"text","text":"<user_query>hi there</user_query>"}]`, "hi there", true},
+		{"user_query mid-string", `[{"type":"text","text":"prefix <user_query>real</user_query>"}]`, "real", true},
+		{"user_query unterminated", `[{"type":"text","text":"<user_query>tail only"}]`, "tail only", true},
+		{"system-reminder", `[{"type":"text","text":"<system-reminder>ctx</system-reminder>"}]`, "", false},
+		{"system-reminder leading whitespace", `[{"type":"text","text":"\n\n<system-reminder>ctx</system-reminder>"}]`, "", false},
+		{"user_info", `[{"type":"text","text":"<user_info>os</user_info>"}]`, "", false},
+		{"plain text", `[{"type":"text","text":"just a message"}]`, "just a message", true},
+		{"empty", `[{"type":"text","text":""}]`, "", false},
+		{"plain string content", `"plain string"`, "plain string", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := UserMessageText(json.RawMessage(tt.content))
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("UserMessageText(%s) = (%q,%v), want (%q,%v)", tt.content, got, ok, tt.want, tt.wantOK)
+			}
+		})
 	}
 }

@@ -231,6 +231,8 @@ func UserMessageText(content json.RawMessage) (string, bool) {
 	if inner, ok := extractGrokTag(text, "user_query"); ok {
 		return strings.TrimSpace(inner), true
 	}
+	// text is already TrimSpace'd above, so HasPrefix reliably catches
+	// injected blocks even when the raw entry had leading whitespace.
 	if strings.HasPrefix(text, "<system-reminder>") || strings.HasPrefix(text, "<user_info>") {
 		return "", false
 	}

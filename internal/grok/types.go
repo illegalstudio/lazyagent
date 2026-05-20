@@ -43,7 +43,7 @@ type grokChatEntry struct {
 type grokToolCall struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Arguments string `json:"arguments"` // a JSON-encoded string
+	Arguments string `json:"arguments"` // a JSON-encoded string — NOT an object; keep as string (see the reasoning note above)
 }
 
 // grokContentBlock is one block of a user entry's content array.
