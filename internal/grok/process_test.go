@@ -38,7 +38,10 @@ func TestDiscoverSessions_PrimaryAndSubagent(t *testing.T) {
 	subSummary := `{"info":{"id":"sub","cwd":"/tmp/wt"},"chat_format_version":1,
 		"updated_at":"2026-05-17T11:00:00Z","session_kind":"subagent"}`
 	writeSession(t, root, "%2Ftmp%2Fwt", "sub", map[string]string{
-		"summary.json": subSummary, "chat_history.jsonl": "",
+		"summary.json": subSummary,
+		// A subagent that did work has a user/task message — without one,
+		// discovery hides it as a never-used session.
+		"chat_history.jsonl": `{"type":"user","content":[{"type":"text","text":"<user_query>do the subtask</user_query>"}]}` + "\n",
 	})
 
 	sessions, err := discoverSessionsFromDir(root, model.NewSessionCache())
@@ -61,6 +64,34 @@ func TestDiscoverSessions_PrimaryAndSubagent(t *testing.T) {
 	}
 	if primary.Agent != "grok" {
 		t.Errorf("Agent = %q", primary.Agent)
+	}
+}
+
+func TestDiscoverSessions_HidesSessionsWithNoUserMessage(t *testing.T) {
+	root := t.TempDir()
+	freshSummary := `{"info":{"id":"fresh","cwd":"/tmp/p"},"chat_format_version":1,"updated_at":"2026-05-17T11:00:00Z"}`
+	activeSummary := `{"info":{"id":"active","cwd":"/tmp/p"},"chat_format_version":1,"updated_at":"2026-05-17T11:00:00Z"}`
+	// A freshly-opened session: directory exists, but only the system entry —
+	// the user has not written anything yet.
+	writeSession(t, root, "%2Ftmp%2Fp", "fresh", map[string]string{
+		"summary.json":       freshSummary,
+		"chat_history.jsonl": `{"type":"system","content":"system prompt"}` + "\n",
+	})
+	// An active session: the user has written a message.
+	writeSession(t, root, "%2Ftmp%2Fp", "active", map[string]string{
+		"summary.json":       activeSummary,
+		"chat_history.jsonl": primaryChat,
+	})
+
+	sessions, err := discoverSessionsFromDir(root, model.NewSessionCache())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1 (the no-message session must be hidden)", len(sessions))
+	}
+	if sessions[0].SessionID != "active" {
+		t.Errorf("surviving session = %q, want \"active\"", sessions[0].SessionID)
 	}
 }
 
