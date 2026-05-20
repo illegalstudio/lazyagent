@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/illegalstudio/lazyagent/internal/chatops"
+	"github.com/illegalstudio/lazyagent/internal/grok"
 )
 
 var reasonStyles = map[string]lipgloss.Style{
@@ -135,13 +136,17 @@ func printVerboseTable(candidates []Candidate) {
 	)))
 }
 
-// totalBytes stats each candidate's JSONL file and sums the sizes. Missing
-// or unreadable files contribute zero — we prefer an underestimate to
-// failing the report.
+// totalBytes sums each candidate's on-disk size. For Grok the candidate is a
+// directory, so its whole tree is measured; for the JSONL-per-session agents
+// a single file is stat-ed. Missing or unreadable paths contribute zero.
 func totalBytes(candidates []Candidate) int64 {
 	var total int64
 	for _, c := range candidates {
 		if c.Session.JSONLPath == "" {
+			continue
+		}
+		if c.Session.Agent == "grok" {
+			total += grok.SessionDiskBytes(c.Session.JSONLPath)
 			continue
 		}
 		info, err := os.Stat(c.Session.JSONLPath)

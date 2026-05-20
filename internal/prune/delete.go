@@ -12,6 +12,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/grok"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
@@ -24,6 +25,7 @@ func executeDelete(candidates []Candidate) (int, int) {
 	claudeRoots := claude.ClaudeProjectsDirs(cfg.ClaudeDirs)
 	piRoot := pi.PiSessionsDir()
 	codexRoot := codex.SessionsDir()
+	grokRoot := grok.GrokSessionsDir()
 	desktopRoot := claude.DesktopSessionsDir()
 
 	// Collect Codex session IDs to strip from the index in a single rewrite.
@@ -52,6 +54,11 @@ func executeDelete(candidates []Candidate) (int, int) {
 				codexIDsToStrip[s.SessionID] = struct{}{}
 				dirsToGC[filepath.Dir(s.JSONLPath)] = struct{}{}
 			}
+		case "grok":
+			err = deleteGrokSession(s, grokRoot)
+			if err == nil && s.JSONLPath != "" {
+				dirsToGC[filepath.Dir(s.JSONLPath)] = struct{}{}
+			}
 		default:
 			err = fmt.Errorf("agent %q is not supported by prune", s.Agent)
 		}
@@ -72,7 +79,7 @@ func executeDelete(candidates []Candidate) (int, int) {
 	}
 
 	// Best-effort: remove any now-empty project directories.
-	removeEmptyDirs(dirsToGC, claudeRoots, piRoot, codexRoot)
+	removeEmptyDirs(dirsToGC, claudeRoots, piRoot, codexRoot, grokRoot)
 
 	return deleted, failed
 }
@@ -110,6 +117,19 @@ func deleteCodexSession(s *model.Session, root string) error {
 		return err
 	}
 	return os.Remove(s.JSONLPath)
+}
+
+// deleteGrokSession removes an entire Grok session directory. A Grok session
+// is a directory tree (summary.json, chat_history.jsonl, updates.jsonl,
+// terminal/, …), so it is deleted recursively rather than as a single file.
+func deleteGrokSession(s *model.Session, root string) error {
+	if root == "" {
+		return fmt.Errorf("grok sessions directory not found")
+	}
+	if err := chatops.EnsureWithin(s.JSONLPath, []string{root}); err != nil {
+		return err
+	}
+	return os.RemoveAll(s.JSONLPath)
 }
 
 // removeDesktopSidecar scans the desktop sessions directory for JSON files
@@ -211,14 +231,13 @@ func removeCodexIndexEntries(indexPath string, ids map[string]struct{}) error {
 // removeEmptyDirs deletes any project directory in dirs that is now empty.
 // Only directories that sit directly inside one of the known agent roots are
 // removed, never the roots themselves.
-func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, codexRoot string) {
-	roots := make([]string, 0, len(claudeRoots)+2)
+func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, codexRoot, grokRoot string) {
+	roots := make([]string, 0, len(claudeRoots)+3)
 	roots = append(roots, claudeRoots...)
-	if piRoot != "" {
-		roots = append(roots, piRoot)
-	}
-	if codexRoot != "" {
-		roots = append(roots, codexRoot)
+	for _, r := range []string{piRoot, codexRoot, grokRoot} {
+		if r != "" {
+			roots = append(roots, r)
+		}
 	}
 
 	for dir := range dirs {
