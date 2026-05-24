@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/illegalstudio/lazyagent/internal/chatops"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 )
 
 var reasonStyles = map[string]lipgloss.Style{
@@ -136,17 +137,21 @@ func printVerboseTable(candidates []Candidate) {
 	)))
 }
 
-// totalBytes sums each candidate's on-disk size. For Grok the candidate is a
-// directory, so its whole tree is measured; for the JSONL-per-session agents
-// a single file is stat-ed. Missing or unreadable paths contribute zero.
+// totalBytes sums each candidate's on-disk size. Directory-backed agents have
+// their whole tree measured; JSONL-per-session agents stat a single file.
+// Missing or unreadable paths contribute zero.
 func totalBytes(candidates []Candidate) int64 {
 	var total int64
 	for _, c := range candidates {
 		if c.Session.JSONLPath == "" {
 			continue
 		}
-		if c.Session.Agent == "grok" {
+		switch c.Session.Agent {
+		case "grok":
 			total += grok.SessionDiskBytes(c.Session.JSONLPath)
+			continue
+		case "kimi":
+			total += kimi.SessionDiskBytes(c.Session.JSONLPath)
 			continue
 		}
 		info, err := os.Stat(c.Session.JSONLPath)
