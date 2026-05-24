@@ -14,13 +14,14 @@ lazyagent/
 ├── main.go                     # Entry point: --tui / --gui / --api / --agent + subcommands
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config
-│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Codex/Amp/Grok providers
+│   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Cursor/Codex/Amp/Grok/Kimi providers
 │   ├── model/                  # Shared types (Session, ToolCall, DesktopMeta, …)
 │   ├── amp/                    # Amp CLI thread parsing and session discovery
 │   ├── claude/                 # Claude Code JSONL parsing, Desktop sidecar, session discovery
 │   ├── codex/                  # Codex CLI JSONL parsing and session discovery
 │   ├── cursor/                 # Cursor IDE session discovery from state.vscdb (SQLite)
 │   ├── grok/                   # Grok CLI session-directory parsing and discovery
+│   ├── kimi/                   # Kimi Code CLI session-directory parsing and discovery
 │   ├── pi/                     # pi coding agent JSONL parsing, session discovery
 │   ├── opencode/               # OpenCode SQLite parsing, session discovery
 │   ├── api/                    # HTTP API server (REST + SSE)
@@ -54,7 +55,7 @@ The shared engine: session provider interface, file watcher (fsnotify-based, wit
 
 Pure types — `Session`, `ToolCall`, `ConversationMessage`, `DesktopMeta`, and the `SessionCache` that backs incremental JSONL parsing. No behavior, no imports beyond `time` and `sync`.
 
-### Per-agent providers (`internal/amp`, `claude`, `codex`, `cursor`, `grok`, `pi`, `opencode`)
+### Per-agent providers (`internal/amp`, `claude`, `codex`, `cursor`, `grok`, `kimi`, `pi`, `opencode`)
 
 Each owns the on-disk layout and parsing for its agent. They expose discovery functions that return `[]*model.Session`, integrated via the `SessionProvider` interface in `core/provider.go`.
 

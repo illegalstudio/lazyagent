@@ -43,6 +43,7 @@ The first time you launch `--api`, lazyagent prompts for a passphrase, derives a
 lazyagent --agent claude    # Claude Code CLI + Desktop
 lazyagent --agent codex     # Codex CLI only
 lazyagent --agent grok      # Grok CLI only
+lazyagent --agent kimi      # Kimi Code CLI only
 lazyagent --agent all       # every agent (default)
 ```
 

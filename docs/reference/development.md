@@ -54,7 +54,7 @@ make dev
 go test ./...
 ```
 
-Every package with behavior under test (`internal/amp`, `claude`, `codex`, `core`, `grok`, `pi`, `api`, `search`, `limits`) has real fixture files that exercise parsers and provider behavior end to end. Keep the fixtures realistic — synthetic JSONL has a way of missing the edge cases that break in production.
+Every package with behavior under test (`internal/amp`, `claude`, `codex`, `core`, `grok`, `kimi`, `pi`, `api`, `search`, `limits`) has real fixture files that exercise parsers and provider behavior end to end. Keep the fixtures realistic — synthetic JSONL has a way of missing the edge cases that break in production.
 
 ## Repository layout
 

@@ -177,6 +177,7 @@ mv session.jsonl.bak session.jsonl
 Not supported:
 
 - **Amp** — local files are re-synced from the remote; rewriting them gets overwritten on the next sync.
+- **Kimi** — session directories are readable and prunable, but compacting them is deferred until resume safety after truncating `wire.jsonl` / `context.jsonl` is validated.
 - **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
 
 ## Examples

@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-`lazyagent prune` deletes entire chat sessions: files for JSONL-backed agents, directories for Grok. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
+`lazyagent prune` deletes entire chat sessions: files for JSONL-backed agents, directories for Grok and Kimi. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
 
 For *shrinking* sessions you want to keep, see [Compact](compact.md) instead.
 
@@ -26,7 +26,7 @@ At least one of `--days` or `--orphaned` is required.
 |------|------|---------|---------|
 | `--days N` | int | *unset* | Include sessions idle more than N days |
 | `--orphaned` | bool | `false` | Include sessions whose project folder is gone |
-| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex,grok`. Empty opens the picker |
+| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex,grok,kimi`. Empty opens the picker |
 | `--dry-run` | bool | `false` | Print a grouped summary, delete nothing |
 | `--dry-run-verbose` | bool | `false` | Print one row per file, delete nothing |
 | `--yes` | bool | `false` | Skip the destructive-op disclaimer |
@@ -39,7 +39,7 @@ lazyagent prune --orphaned                      # sessions whose project folder 
 lazyagent prune --days 30 --orphaned            # both filters (OR)
 lazyagent prune --days 30 --dry-run             # preview: group by project
 lazyagent prune --days 30 --dry-run-verbose     # preview: one row per file
-lazyagent prune --days 30 --agent claude,codex,grok  # limit to specific agents
+lazyagent prune --days 30 --agent claude,codex,grok,kimi  # limit to specific agents
 lazyagent prune --days 30 --yes                 # skip the confirmation prompt
 ```
 
@@ -50,7 +50,7 @@ At least one of `--days` or `--orphaned` is required. They combine with **OR**: 
 - **`--days N`** — `LastActivity` is older than N days. Sessions without a recorded timestamp are skipped.
 - **`--orphaned`** — the session's `CWD` no longer resolves to an existing directory on disk. An empty CWD is treated as orphaned (the session can't be attributed to a project anyway).
 
-Grok sessions are stored as directories, so pruning a Grok session deletes the entire session directory recursively.
+Grok and Kimi sessions are stored as directories, so pruning one deletes the entire session directory recursively.
 
 ## Agent selection
 
@@ -65,6 +65,7 @@ If `--agent` is omitted, a bordered interactive picker opens with a checkbox for
   │   ○  ●  pi coding agent pi    │
   │   ○  ●  Codex CLI      codex  │
   │   ○  ●  Grok CLI       grok   │
+  │   ○  ●  Kimi Code      kimi   │
   └───────────────────────────────┘
    ↑/↓ move   space toggle   a toggle-all   enter confirm   q cancel
 ```
@@ -128,7 +129,7 @@ The disclaimer and prompt are both skipped when `--yes` is passed, which is the 
 
 - **Active sessions** touched in the last 5 minutes are never deleted — the originating agent might still be writing.
 - **Sub-agent transcripts** are skipped to avoid breaking their parent's file.
-- A **path guard** refuses to delete anything outside the known agent roots (`~/.claude/projects`, `~/.pi/agent/sessions`, `~/.codex/sessions`, `~/.grok/sessions`).
+- A **path guard** refuses to delete anything outside the known agent roots (`~/.claude/projects`, `~/.pi/agent/sessions`, `~/.codex/sessions`, `~/.grok/sessions`, `~/.kimi/sessions`).
 - **Codex index**: the per-session name index at `~/.codex/session_index.jsonl` is rewritten atomically (temp file + rename) so no dangling names remain.
 - **Claude Desktop sidecars**: when a CLI JSONL is deleted, the matching desktop metadata JSON (`~/Library/Application Support/Claude/claude-code-sessions/local_*.json`) is cleaned up alongside.
 - **Empty project folders** left behind after deletions are removed — but never the agent roots themselves.
@@ -139,6 +140,7 @@ The disclaimer and prompt are both skipped when `--yes` is passed, which is the 
 - **pi**
 - **codex** — including the session-name index
 - **grok** — session directory deleted recursively
+- **kimi** — session directory deleted recursively
 
 Not supported:
 
@@ -155,7 +157,7 @@ lazyagent prune --days 90
 lazyagent prune --orphaned --dry-run-verbose
 
 # Scheduled weekly sweep (script-safe)
-lazyagent prune --days 30 --orphaned --agent claude,codex,pi,grok --yes
+lazyagent prune --days 30 --orphaned --agent claude,codex,pi,grok,kimi --yes
 
 # Target a single noisy agent
 lazyagent prune --agent codex --days 14

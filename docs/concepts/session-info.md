@@ -46,6 +46,7 @@ For agents that expose a resumable CLI, lazyagent builds the exact shell command
 - pi: `pi --session <session-id>`
 - OpenCode: `opencode -s <id>`
 - Cursor: `cursor-agent --resume="<id>"`
+- Kimi Code: `kimi --resume <session-id>`
 
 Grok CLI does not currently expose a direct resume command that lazyagent can invoke, so Grok sessions omit this field. In the TUI, <kbd>c</kbd> copies the command to the clipboard when one exists. The GUI has a copy button next to the command. The API exposes it as `resume_command` on the session detail response.
 

@@ -158,6 +158,7 @@ sidebar:
 - ✅ Claude Code via `/api/oauth/usage` (the same endpoint Claude Code's `/status` uses), token resolved from env / macOS keychain / `~/.claude/.credentials.json`
 - ✅ Codex via the latest rollout JSONL under `~/.codex/sessions/` — no network call, fallback to older rollouts when the most recent has no `rate_limits` event yet
 - ✅ Grok via `/v1/billing` on `cli-chat-proxy.grok.com`, token resolved from `GROK_OAUTH_TOKEN` / `~/.grok/auth.json`
+- ✅ Kimi Code via `/coding/v1/usages` on `api.kimi.com`, token resolved from `KIMI_CODE_OAUTH_TOKEN` / `~/.kimi/credentials/kimi-code.json`
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
 
 ## Future ideas
