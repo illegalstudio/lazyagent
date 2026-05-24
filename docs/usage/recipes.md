@@ -139,7 +139,7 @@ You deleted `~/projects/abandoned-app` and want every session associated with it
 lazyagent prune --orphaned --dry-run-verbose | grep abandoned-app
 
 # Commit
-lazyagent prune --orphaned --agent claude,codex,pi,grok
+lazyagent prune --orphaned --agent claude,codex,pi,grok,kimi
 ```
 
 `--orphaned` catches anything whose CWD no longer resolves — the exact case here.
