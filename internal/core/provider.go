@@ -9,6 +9,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/opencode"
 	"github.com/illegalstudio/lazyagent/internal/pi"
@@ -174,6 +175,24 @@ func (p *GrokProvider) UseWatcher() bool               { return true }
 func (p *GrokProvider) RefreshInterval() time.Duration { return 0 }
 func (p *GrokProvider) WatchDirs() []string            { return []string{grok.GrokSessionsDir()} }
 
+// KimiProvider discovers Kimi Code CLI sessions from disk.
+type KimiProvider struct {
+	cache *model.SessionCache
+}
+
+// NewKimiProvider creates a KimiProvider with an mtime-based cache.
+func NewKimiProvider() *KimiProvider {
+	return &KimiProvider{cache: model.NewSessionCache()}
+}
+
+func (p *KimiProvider) DiscoverSessions() ([]*model.Session, error) {
+	return kimi.DiscoverSessions(p.cache)
+}
+
+func (p *KimiProvider) UseWatcher() bool               { return true }
+func (p *KimiProvider) RefreshInterval() time.Duration { return 0 }
+func (p *KimiProvider) WatchDirs() []string            { return []string{kimi.SessionsDir()} }
+
 // BuildProvider creates a SessionProvider based on agent mode and config.
 // When agentMode is "all", it reads the agents config to decide which providers
 // to include. A specific agentMode (e.g. "claude") overrides the config.
@@ -193,6 +212,8 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		return NewAmpProvider()
 	case "grok":
 		return NewGrokProvider()
+	case "kimi":
+		return NewKimiProvider()
 	default: // "all"
 		var providers []SessionProvider
 		if cfg.AgentEnabled("claude") {
@@ -215,6 +236,9 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		}
 		if cfg.AgentEnabled("grok") {
 			providers = append(providers, NewGrokProvider())
+		}
+		if cfg.AgentEnabled("kimi") {
+			providers = append(providers, NewKimiProvider())
 		}
 		if len(providers) == 0 {
 			// All disabled — return a no-op provider.

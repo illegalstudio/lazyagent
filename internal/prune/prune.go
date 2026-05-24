@@ -1,7 +1,7 @@
 // Package prune implements the `lazyagent prune` subcommand, which deletes
 // old or orphaned chat sessions from supported coding agents.
 //
-// Supported agents (v1): claude, pi, codex, grok. Amp is skipped because local
+// Supported agents (v1): claude, pi, codex, grok, kimi. Amp is skipped because local
 // thread files are re-synced from the remote. Cursor and OpenCode store
 // sessions inside SQLite databases owned by third-party apps; deleting rows
 // there is deferred to a future version.
@@ -21,7 +21,7 @@ import (
 )
 
 // SupportedAgents lists the agent names that prune can safely clean up.
-var SupportedAgents = []string{"claude", "pi", "codex", "grok"}
+var SupportedAgents = []string{"claude", "pi", "codex", "grok", "kimi"}
 
 // activeWindow skips files touched very recently (a live session might be
 // writing to them). Anything younger than this is silently excluded.
@@ -46,7 +46,7 @@ func Run(args []string) int {
 	var opts options
 	fs.IntVar(&opts.days, "days", 0, "Delete sessions whose last activity is older than N days")
 	fs.BoolVar(&opts.orphaned, "orphaned", false, "Delete sessions whose project folder no longer exists")
-	fs.StringVar(&opts.agentsArg, "agent", "", "Comma-separated list of agents (claude,pi,codex). If empty an interactive picker is shown")
+	fs.StringVar(&opts.agentsArg, "agent", "", "Comma-separated list of agents (claude,pi,codex,grok,kimi). If empty an interactive picker is shown")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "Print a per-project count table and exit without deleting")
 	fs.BoolVar(&opts.dryVerbose, "dry-run-verbose", false, "Print one line per file that would be deleted and exit without deleting")
 	fs.BoolVar(&opts.yes, "yes", false, "Skip confirmation prompt")
@@ -261,4 +261,3 @@ func isOrphan(cwd string) bool {
 	}
 	return !info.IsDir()
 }
-

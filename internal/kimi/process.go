@@ -63,6 +63,11 @@ func CredentialsPath() string {
 	return filepath.Join(root, "credentials", "kimi-code.json")
 }
 
+// WorkDirs returns Kimi's local workdir hash map (md5(path) -> path).
+func WorkDirs() map[string]string {
+	return loadWorkDirs(MetadataPath())
+}
+
 // DiscoverSessions scans ~/.kimi/sessions for Kimi Code CLI session directories.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 	return discoverSessionsFromDir(SessionsDir(), MetadataPath(), cache)

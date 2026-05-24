@@ -13,6 +13,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
@@ -26,6 +27,7 @@ func executeDelete(candidates []Candidate) (int, int) {
 	piRoot := pi.PiSessionsDir()
 	codexRoot := codex.SessionsDir()
 	grokRoot := grok.GrokSessionsDir()
+	kimiRoot := kimi.SessionsDir()
 	desktopRoot := claude.DesktopSessionsDir()
 
 	// Collect Codex session IDs to strip from the index in a single rewrite.
@@ -59,6 +61,11 @@ func executeDelete(candidates []Candidate) (int, int) {
 			if err == nil && s.JSONLPath != "" {
 				dirsToGC[filepath.Dir(s.JSONLPath)] = struct{}{}
 			}
+		case "kimi":
+			err = deleteKimiSession(s, kimiRoot)
+			if err == nil && s.JSONLPath != "" {
+				dirsToGC[filepath.Dir(s.JSONLPath)] = struct{}{}
+			}
 		default:
 			err = fmt.Errorf("agent %q is not supported by prune", s.Agent)
 		}
@@ -79,7 +86,7 @@ func executeDelete(candidates []Candidate) (int, int) {
 	}
 
 	// Best-effort: remove any now-empty project directories.
-	removeEmptyDirs(dirsToGC, claudeRoots, piRoot, codexRoot, grokRoot)
+	removeEmptyDirs(dirsToGC, claudeRoots, piRoot, codexRoot, grokRoot, kimiRoot)
 
 	return deleted, failed
 }
@@ -125,6 +132,18 @@ func deleteCodexSession(s *model.Session, root string) error {
 func deleteGrokSession(s *model.Session, root string) error {
 	if root == "" {
 		return fmt.Errorf("grok sessions directory not found")
+	}
+	if err := chatops.EnsureWithin(s.JSONLPath, []string{root}); err != nil {
+		return err
+	}
+	return os.RemoveAll(s.JSONLPath)
+}
+
+// deleteKimiSession removes an entire Kimi session directory. A Kimi session is
+// a directory tree (wire.jsonl, context.jsonl, state.json, subagents/, uploads/).
+func deleteKimiSession(s *model.Session, root string) error {
+	if root == "" {
+		return fmt.Errorf("kimi sessions directory not found")
 	}
 	if err := chatops.EnsureWithin(s.JSONLPath, []string{root}); err != nil {
 		return err
@@ -231,10 +250,10 @@ func removeCodexIndexEntries(indexPath string, ids map[string]struct{}) error {
 // removeEmptyDirs deletes any project directory in dirs that is now empty.
 // Only directories that sit directly inside one of the known agent roots are
 // removed, never the roots themselves.
-func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, codexRoot, grokRoot string) {
-	roots := make([]string, 0, len(claudeRoots)+3)
+func removeEmptyDirs(dirs map[string]struct{}, claudeRoots []string, piRoot, codexRoot, grokRoot, kimiRoot string) {
+	roots := make([]string, 0, len(claudeRoots)+4)
 	roots = append(roots, claudeRoots...)
-	for _, r := range []string{piRoot, codexRoot, grokRoot} {
+	for _, r := range []string{piRoot, codexRoot, grokRoot, kimiRoot} {
 		if r != "" {
 			roots = append(roots, r)
 		}

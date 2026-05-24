@@ -2,7 +2,7 @@ package search
 
 import "time"
 
-var supportedAgents = []string{"claude", "codex", "pi", "amp", "grok"}
+var supportedAgents = []string{"claude", "codex", "pi", "amp", "grok", "kimi"}
 
 type sourceState struct {
 	Agent   string
