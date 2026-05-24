@@ -25,7 +25,7 @@ Each agent has a **provider** that knows where its session data lives and how to
 
 Everything useful — the activity state machine, the file watcher, session caching, cost estimation, configuration — lives in one place (`internal/core`). The three interfaces (TUI, GUI, API) and the maintenance subcommands (`prune`, `compact`, `search`, `limits`) all import it, so there's no behavioral drift between them.
 
-Sessions are cached by transcript path + mtime + size, so subsequent scans only re-parse what changed. Grok uses the `chat_history.jsonl` inside each session directory as its cache key. For large JSONL transcripts the parser resumes from the last byte offset rather than re-reading the whole file when the agent format supports it.
+Sessions are cached by transcript path + mtime + size, so subsequent scans only re-parse what changed. Grok uses the `chat_history.jsonl` inside each session directory as its cache key; Kimi uses `wire.jsonl`. For large JSONL transcripts the parser resumes from the last byte offset rather than re-reading the whole file when the agent format supports it.
 
 ## Activity inference
 
@@ -33,7 +33,7 @@ lazyagent classifies each session into a state (`idle`, `thinking`, `writing`, `
 
 ## What lazyagent never does
 
-- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent limits` checks for Claude and Grok billing/rate-limit data. Everything else (monitoring, prune, compact, search, and Codex limits) is purely local.
+- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent limits` checks for Claude, Grok, and Kimi billing/rate-limit data. Everything else (monitoring, prune, compact, search, and Codex limits) is purely local.
 - It doesn't interrupt or control agents. You can't kill a session from lazyagent; it only watches.
 - It doesn't move or copy session files — except when you explicitly run `prune` or `compact`, which operate on the same files the agents read.
 - It doesn't send telemetry. No analytics, no crash reporter, no phone-home.

@@ -21,6 +21,8 @@ func ResumeCommand(agent, sessionID string) string {
 		return fmt.Sprintf("opencode -s %s", sessionID)
 	case "cursor":
 		return fmt.Sprintf("cursor-agent --resume=%q", sessionID)
+	case "kimi":
+		return fmt.Sprintf("kimi --resume %s", sessionID)
 	default:
 		return ""
 	}

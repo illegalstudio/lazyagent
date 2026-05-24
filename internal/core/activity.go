@@ -135,6 +135,12 @@ func ToolActivity(tool string) ActivityKind {
 	// Cursor (raw names) — safety net for unnormalized names
 	case "Shell":
 		return ActivityRunning
+	case "ReadFile":
+		return ActivityReading
+	case "WriteFile", "StrReplaceFile":
+		return ActivityWriting
+	case "FetchURL":
+		return ActivityBrowsing
 	case "read_file", "Read_file_v2":
 		return ActivityReading
 	case "edit_file", "write_to_file", "Edit_file_v2", "Write_to_file_v2":

@@ -98,6 +98,7 @@ Restrict monitoring to one agent. Valid values:
 | `codex` | Codex CLI |
 | `amp` | Amp CLI |
 | `grok` | Grok CLI |
+| `kimi` | Kimi Code CLI |
 | `cursor` | Cursor IDE |
 | `opencode` | OpenCode |
 | `all` | Every enabled agent (default) |
@@ -106,6 +107,7 @@ Restrict monitoring to one agent. Valid values:
 lazyagent --agent claude     # only Claude
 lazyagent --agent codex      # only Codex
 lazyagent --agent grok       # only Grok
+lazyagent --agent kimi       # only Kimi Code
 lazyagent --agent all        # default — every agent
 ```
 
@@ -155,7 +157,7 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 
 ### `search`
 
-`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
+`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok, Kimi) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
 
 ```bash
 lazyagent search "race condition"
@@ -169,16 +171,17 @@ Full reference, including the index location, ranking, resume commands, and Grok
 
 ### `limits`
 
-`limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, and Grok, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window.
+`limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
 
 ```bash
-lazyagent limits                 # all three agents
+lazyagent limits                 # all supported limits providers
 lazyagent limits --agent claude  # only Claude Code
 lazyagent limits --agent codex   # only Codex
 lazyagent limits --agent grok    # only Grok
+lazyagent limits --agent kimi    # only Kimi Code
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call). Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls.
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call). Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
@@ -241,6 +244,9 @@ The maintenance subcommands define their own exit codes; see their respective pa
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
+| `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi/credentials/kimi-code.json` |
+| `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |

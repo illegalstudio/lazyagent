@@ -14,19 +14,22 @@ import (
 // these are safe to shrink (see 2026-05-20-grok-compact-phase0-findings.md):
 //
 //   - updates.jsonl       — ACP render/telemetry stream, ~70% of session size,
-//                           not replayed on resume → deep string truncation.
+//     not replayed on resume → deep string truncation.
 //   - chat_history.jsonl  — model-facing transcript; only tool_result.content
-//                           is truncated (same trade-off as Claude compact).
+//     is truncated (same trade-off as Claude compact).
 //   - rewind_points.jsonl — checkpoint snapshots; truncating disables Grok's
-//                           rewind feature for the session.
+//     rewind feature for the session.
 var grokBulkJSONL = []string{"updates.jsonl", "chat_history.jsonl", "rewind_points.jsonl"}
 
 // sessionSizeBytes returns the on-disk size of a session: the live directory
-// total (excluding .bak sidecars) for Grok, a single file size for the
-// JSONL-per-session agents.
+// total (excluding .bak sidecars) for directory-backed agents, a single file
+// size for JSONL-per-session agents.
 func sessionSizeBytes(s *model.Session) int64 {
 	if s.Agent == "grok" {
 		return grokLiveDirBytes(s.JSONLPath)
+	}
+	if s.Agent == "kimi" {
+		return kimiLiveDirBytes(s.JSONLPath)
 	}
 	info, err := os.Stat(s.JSONLPath)
 	if err != nil {

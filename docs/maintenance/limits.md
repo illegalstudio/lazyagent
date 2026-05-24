@@ -1,36 +1,37 @@
 ---
 title: "Show rate-limit usage"
-description: "On-demand snapshot of Claude Code (5h + 7d), Codex (5h + 7d), and Grok (monthly billing) rate-limit windows, with a pace indicator vs. linear consumption."
+description: "On-demand snapshot of Claude Code, Codex, Grok, and Kimi rate-limit or billing windows, with a pace indicator vs. linear consumption."
 sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, and Grok, with a *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll. Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window.
+`lazyagent limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi, with a *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll. Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
 
 ## Synopsis
 
 ```
-lazyagent limits [--agent claude|codex|grok|all]
+lazyagent limits [--agent claude|codex|grok|kimi|all]
 ```
 
 ## Flags
 
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
-| `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, or `all` |
+| `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, `kimi`, or `all` |
 | `--help` | bool | `false` | Print usage and exit |
 
-Only `claude`, `codex`, and `grok` are supported — they're the only agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
+Only `claude`, `codex`, `grok`, and `kimi` are supported — they're the agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
 
 ## Quick reference
 
 ```bash
-lazyagent limits                   # all three agents (default)
+lazyagent limits                   # all supported limits providers (default)
 lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
 lazyagent limits --agent grok      # only Grok
+lazyagent limits --agent kimi      # only Kimi Code
 lazyagent limits --help            # full usage + disclaimers
 ```
 
@@ -96,7 +97,7 @@ In an interactive terminal the bars and pace label are colored. When piped or re
 
 ## How it gets the data
 
-The three providers work very differently — there's a single command, but three paths under the hood.
+The providers work differently — there's a single command, but several paths under the hood.
 
 ### Claude Code
 
@@ -135,19 +136,32 @@ The response carries one monthly window's worth of state — the included credit
 
 When the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `Source: $83.25 of $600.00 used (on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* monthly budget.
 
+### Kimi Code
+
+A single HTTPS GET to `https://api.kimi.com/coding/v1/usages` with the user's OAuth bearer token. This is the same endpoint Kimi Code CLI's interactive `/status` slash command queries. If `KIMI_CODE_BASE_URL` is set, lazyagent appends `/usages` to that base URL instead.
+
+The OAuth token is read in this priority order:
+
+1. **`KIMI_CODE_OAUTH_TOKEN`** environment variable — useful for CI or for overriding the on-disk credential file
+2. **`~/.kimi/credentials/kimi-code.json`** — the file Kimi Code CLI writes after login
+
+lazyagent does **not** refresh Kimi OAuth tokens. If the access token has expired or been rejected, the command surfaces the server's `401` and tells you to run `kimi login` or open Kimi Code CLI again.
+
+The response carries a top-level `usage` quota plus zero or more rolling `limits[]` windows. lazyagent maps `usage` to a weekly window and maps each `limits[]` entry by its advertised duration, for example `300` minutes becomes the `5-hour` window. Absolute quota counts and the parallelism cap, when present, appear in the `Source:` line.
+
 ## When an agent isn't installed
 
-All three providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`, and for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`).
+All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`, for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), and for Kimi it's an OAuth token in `~/.kimi/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`).
 
-| State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` |
-|-------|-------------------------|------------------|-----------------|----------------|
-| All three installed | Three reports printed | Claude printed | Codex printed | Grok printed |
-| Subset installed | Installed providers printed, others silently skipped | Claude printed or error | Codex printed or error | Grok printed or error |
-| None installed | Single guidance message on stderr, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 |
+| State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` | `--agent kimi` |
+|-------|-------------------------|------------------|-----------------|----------------|----------------|
+| All installed | All reports printed | Claude printed | Codex printed | Grok printed | Kimi printed |
+| Subset installed | Installed providers printed, others silently skipped | Claude printed or error | Codex printed or error | Grok printed or error | Kimi printed or error |
+| None installed | Single guidance message on stderr, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 | Friendly error, exit 1 |
 
 The default `--agent all` mode is forgiving: a missing agent is not an error, it just doesn't show up. Explicit `--agent X` is strict: if you asked for it, missing it is an error worth surfacing.
 
-## Disclaimers (Claude Code, Grok)
+## Disclaimers (Claude Code, Grok, Kimi)
 
 `/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` UI and is subject to:
 
@@ -163,7 +177,13 @@ For **Grok**, `/v1/billing` is similarly **not** part of xAI's documented public
 - **Subscription scope** — the response reflects the billing plan associated with the OAuth token (SuperGrok and similar). Users without a billing plan, or pure API-key users on `api.x.ai`, won't see meaningful data here.
 - **Bearer reuse** — lazyagent sends the same JWT the Grok CLI uses. Treat it as a credential; the same caveats about token-rotation and revocation apply.
 
-The "don't poll" guidance applies equally to Grok: run `lazyagent limits` interactively, not in a `watch` loop.
+For **Kimi**, `/coding/v1/usages` is similarly not documented as a public API. As of this writing it is used internally by Kimi Code CLI's `/status` slash command and is subject to:
+
+- **No stability guarantee** — endpoint path, response shape, and field names may change without notice. lazyagent fails gracefully when this happens.
+- **Subscription scope** — the response reflects the plan associated with the Kimi Code OAuth token.
+- **Bearer reuse** — lazyagent sends the same access token Kimi Code CLI uses, but does not refresh it. Treat it as a credential.
+
+The "don't poll" guidance applies equally to Grok and Kimi: run `lazyagent limits` interactively, not in a `watch` loop.
 
 ## Exit codes
 
@@ -173,7 +193,7 @@ The "don't poll" guidance applies equally to Grok: run `lazyagent limits` intera
 | `1` | At least one agent failed (token missing, endpoint error, no Codex sessions, …) — details on stderr |
 | `2` | Invalid flags (e.g. unknown `--agent` value) |
 
-Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` prefix, so you can pipe stdout to a parser without losing the error context.
+Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` / `Error (kimi): …` prefix, so you can pipe stdout to a parser without losing the error context.
 
 ## Environment
 
@@ -181,6 +201,8 @@ Even on partial failure (`1`), the successful agents' output is printed to stdou
 |----------|--------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token for the Claude call. Used in priority before the macOS keychain or the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token for the Grok call. Used in priority before `~/.grok/auth.json` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before `~/.kimi/credentials/kimi-code.json` |
+| `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL. lazyagent appends `/usages` |
 
 ## See also
 

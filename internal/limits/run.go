@@ -1,5 +1,5 @@
 // Package limits implements the `lazyagent limits` subcommand: a one-shot
-// snapshot of the user's Claude Code, Codex, and Grok rate-limit / billing
+// snapshot of the user's Claude Code, Codex, Grok, and Kimi rate-limit / billing
 // windows, plus a "pace" indicator that compares actual consumption to
 // a perfectly linear consumption rate.
 //
@@ -17,6 +17,10 @@
 // cli-chat-proxy.grok.com — the same endpoint the Grok CLI's `/usage show`
 // slash command calls. As of this writing xAI does not document it publicly.
 // Same caveats as Claude: on-demand only, fail gracefully.
+//
+// IMPORTANT (Kimi): the source for Kimi is /coding/v1/usages on api.kimi.com —
+// the same endpoint Kimi Code CLI's `/status` slash command calls. lazyagent
+// uses the current access token as-is and does not refresh OAuth credentials.
 package limits
 
 import (
@@ -46,16 +50,17 @@ func Run(args []string) int {
 	fs.SetOutput(os.Stderr)
 
 	var opts options
-	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, all")
+	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, kimi, all")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
 
 Usage:
-  lazyagent limits                  Show limits for Claude Code, Codex, and Grok
+  lazyagent limits                  Show limits for Claude Code, Codex, Grok, and Kimi
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
   lazyagent limits --agent grok     Show only Grok limits
+  lazyagent limits --agent kimi     Show only Kimi Code limits
 
 Output explains:
   - Used %:    how much of the window has been consumed
@@ -76,9 +81,13 @@ Authentication:
             1. GROK_OAUTH_TOKEN env var
             2. ~/.grok/auth.json
           If none is found, run `+"`grok login`"+`.
+  Kimi    reads its OAuth token from, in order:
+            1. KIMI_CODE_OAUTH_TOKEN env var
+            2. ~/.kimi/credentials/kimi-code.json
+          If none is found, run `+"`kimi login`"+`.
 
-Disclaimer (Claude, Grok):
-  Both providers expose their usage through undocumented endpoints used by
+Disclaimer (Claude, Grok, Kimi):
+  These providers expose their usage through undocumented endpoints used by
   their respective official CLIs. lazyagent calls them only on explicit user
   invocation. They may break or be revoked by their vendors without notice.
 
@@ -137,8 +146,8 @@ Flags:
 	// All agents were missing AND no real errors fired: tell the user once,
 	// rather than letting them stare at an empty stdout and wonder what happened.
 	if printed == 0 && !explicit && missing == len(agents) {
-		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, or Grok was detected).")
-		fmt.Fprintln(os.Stderr, "Run `claude` / `grok login` to authenticate, or run a Codex CLI session first.")
+		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, or Kimi was detected).")
+		fmt.Fprintln(os.Stderr, "Run `claude` / `grok login` / `kimi login` to authenticate, or run a Codex CLI session first.")
 		exitCode = 1
 	}
 
@@ -156,6 +165,8 @@ func notInstalledMessage(agent string) string {
 		return "Codex is not installed (no sessions under ~/.codex/sessions). Run a Codex CLI session first."
 	case "grok":
 		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
+	case "kimi":
+		return "Kimi Code CLI is not installed or not logged in (no ~/.kimi/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
 	default:
 		return fmt.Sprintf("%s is not installed.", agent)
 	}
@@ -169,6 +180,8 @@ func fetchReport(ctx context.Context, agent string) (Report, error) {
 		return fetchCodexReport()
 	case "grok":
 		return fetchGrokReport(ctx)
+	case "kimi":
+		return fetchKimiReport(ctx)
 	default:
 		return Report{}, fmt.Errorf("unsupported agent %q", agent)
 	}
@@ -178,10 +191,10 @@ func resolveAgents(arg string) ([]string, error) {
 	arg = strings.TrimSpace(strings.ToLower(arg))
 	switch arg {
 	case "", "all":
-		return []string{"claude", "codex", "grok"}, nil
-	case "claude", "codex", "grok":
+		return []string{"claude", "codex", "grok", "kimi"}, nil
+	case "claude", "codex", "grok", "kimi":
 		return []string{arg}, nil
 	default:
-		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, grok, or all)", arg)
+		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, grok, kimi, or all)", arg)
 	}
 }

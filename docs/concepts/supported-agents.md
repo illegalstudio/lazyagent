@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-lazyagent supports eight agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
+lazyagent supports nine agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
 
 | Agent | Path | Format | Prefix |
 |-------|------|--------|--------|
@@ -17,6 +17,7 @@ lazyagent supports eight agents out of the box. Each has a dedicated provider th
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
 | [Grok CLI](https://x.ai/cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
+| Kimi Code CLI | `~/.kimi/sessions/<md5-workdir>/<uuid>/` + `~/.kimi/kimi.json` | Directory per session (JSONL + JSON) | `K` |
 
 The prefix appears next to each session in the TUI list, the GUI panel, and the API response so you can tell at a glance which agent produced a session.
 
@@ -32,6 +33,7 @@ lazyagent --agent amp
 lazyagent --agent pi
 lazyagent --agent opencode
 lazyagent --agent grok
+lazyagent --agent kimi
 lazyagent --agent all       # default
 ```
 
@@ -75,8 +77,15 @@ Grok writes one *directory* per session, two levels deep under `~/.grok/sessions
 
 **Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are treated as sidechains and hidden from the default list, the same as Claude's sub-agent sessions.
 
+### Kimi Code CLI
+
+Kimi writes one directory per session under `~/.kimi/sessions/<md5-workdir>/<session-uuid>/`. The parent directory is the MD5 of the local working directory path; lazyagent resolves it through `~/.kimi/kimi.json` so the UI can show the real CWD.
+
+Each session directory includes `wire.jsonl` (event stream), `context.jsonl` (transcript), `state.json` (custom title and session metadata), and optional subagent/upload directories. lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters; `context.jsonl` powers `lazyagent search`.
+
+Kimi's local token counters include input, cache-read, cache-creation, and output tokens, so lazyagent shows token totals. Cost is only estimated when the model name matches a known pricing entry.
+
 ## What's not supported (yet)
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
-- The destructive maintenance commands (`prune`, `compact`) intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
-- The [`limits`](../maintenance/limits.md) command supports only Claude Code, Codex, and Grok — they're the only agents lazyagent observes that expose stable rate-limit or billing windows (5-hour + 7-day for Claude/Codex, monthly for Grok).
+- The destructive maintenance commands intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). Kimi is covered by both `prune` and `compact`; compaction rewrites its session JSONL files and nested subagent outputs while leaving metadata and prompts intact. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.

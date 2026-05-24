@@ -7,7 +7,7 @@ sidebar:
 
 `lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
 
-It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, and **Grok**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
+It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, **Grok**, and **Kimi Code**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
 ## Synopsis
 
@@ -23,7 +23,7 @@ lazyagent search [QUERY] [--agent LIST]
 
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
-| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp,grok`, or `all` |
+| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp,grok,kimi`, or `all` |
 | `--limit N` | int | `20` | Maximum chat sessions to show |
 | `--snippets N` | int | `2` | Maximum snippet lines per session |
 | `--reindex` | bool | `false` | Drop the local index and rebuild it before searching |
@@ -34,7 +34,7 @@ lazyagent search [QUERY] [--agent LIST]
 ```bash
 lazyagent search "race condition"               # all agents
 lazyagent search --agent codex "parser bug"     # one agent
-lazyagent search --agent claude,codex "auth"    # subset
+lazyagent search --agent claude,codex,kimi "auth" # subset
 lazyagent search --limit 5 "regex"              # tighter result list
 lazyagent search --snippets 4 "OAuth"           # more context per session
 lazyagent search --reindex "config"             # force a full rebuild
@@ -54,7 +54,7 @@ Ranking uses FTS5's built-in `bm25(chunks)` — the most relevant matches appear
 
 ## Output
 
-For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A, G) for visual scanning across mixed result sets.
+For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A, G, K) for visual scanning across mixed result sets.
 
 Pipe-safe behavior: when stdout is not a terminal the interactive resume prompt is skipped, so `lazyagent search query | grep ...` and `| jq` work cleanly. Headers and snippets still go to stdout; warnings (e.g. "indexing failed for X session: …") go to stderr.
 
@@ -74,6 +74,7 @@ Type a 1-based result number to open that session in the originating agent when 
 | codex | `codex resume <session-id>` |
 | amp | `amp threads continue <session-id>` |
 | pi | `pi --session <session-id>` |
+| kimi | `kimi --resume <session-id>` |
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
 
@@ -108,6 +109,7 @@ The next `lazyagent search` invocation will rebuild it.
 - **pi** — pi coding agent (`~/.pi/agent/sessions/`)
 - **amp** — Amp CLI (`~/.local/share/amp/threads/`)
 - **grok** — Grok CLI (`~/.grok/sessions/`)
+- **kimi** — Kimi Code CLI (`~/.kimi/sessions/`)
 
 Not supported:
 

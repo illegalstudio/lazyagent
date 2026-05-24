@@ -13,6 +13,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
 
@@ -32,6 +33,8 @@ func mutatorFor(agent string) lineMutator {
 		return compactCodexLine
 	case "pi":
 		return compactPiLine
+	case "kimi":
+		return compactKimiLine
 	default:
 		return func(map[string]any, int64) int64 { return 0 }
 	}
@@ -199,6 +202,8 @@ func estimateSizes(candidates []Candidate, threshold int64) {
 		var err error
 		if c.Session.Agent == "grok" {
 			after, err = estimateGrokSession(c.Session.JSONLPath, threshold)
+		} else if c.Session.Agent == "kimi" {
+			after, err = estimateKimiSession(c.Session.JSONLPath, threshold)
 		} else {
 			after, err = estimateRewrite(c.Session.JSONLPath, c.Session.Agent, threshold)
 		}
@@ -230,6 +235,9 @@ func guardPath(path string) error {
 		roots = append(roots, d)
 	}
 	if d := grok.GrokSessionsDir(); d != "" {
+		roots = append(roots, d)
+	}
+	if d := kimi.SessionsDir(); d != "" {
 		roots = append(roots, d)
 	}
 	return chatops.EnsureWithin(path, roots)
@@ -276,6 +284,8 @@ func executeCompact(candidates []Candidate, opts options) (int, int, int64) {
 		var err error
 		if c.Session.Agent == "grok" {
 			newSize, err = compactGrokSession(c.Session.JSONLPath, opts.threshold, opts.backup)
+		} else if c.Session.Agent == "kimi" {
+			newSize, err = compactKimiSession(c.Session.JSONLPath, opts.threshold, opts.backup)
 		} else {
 			newSize, err = rewriteFile(c.Session.JSONLPath, mutatorFor(c.Session.Agent), opts.threshold, opts.backup)
 		}

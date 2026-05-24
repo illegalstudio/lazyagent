@@ -834,6 +834,8 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 		agentPrefix = "C "
 	} else if s.Agent == "grok" {
 		agentPrefix = "G "
+	} else if s.Agent == "kimi" {
+		agentPrefix = "K "
 	} else if s.Desktop != nil {
 		agentPrefix = "D "
 	}

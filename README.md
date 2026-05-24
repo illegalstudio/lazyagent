@@ -11,7 +11,7 @@
 
 **A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
 
-Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
+Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
@@ -24,9 +24,9 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 📢 **Chat maintenance is here!** Subcommands that keep your agent transcripts (and your rate limits) under control:
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
-- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, and Grok.
-- **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok) with highlighted snippets and an incremental local index.
-- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing snapshot for Claude Code (5h + 7d), Codex (5h + 7d), and Grok (monthly), with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
+- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
+- **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
+- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing snapshot for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), and Kimi Code, with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 
@@ -78,6 +78,7 @@ make build
 lazyagent                        Launch the terminal UI (monitors all agents)
 lazyagent --agent claude         Monitor only Claude Code sessions
 lazyagent --agent grok           Monitor only Grok CLI sessions
+lazyagent --agent kimi           Monitor only Kimi Code CLI sessions
 lazyagent --api                  Start the HTTP API (Bearer-token protected)
 lazyagent --gui                  Launch the macOS menu bar app
 lazyagent --tui --gui --api      Run everything together

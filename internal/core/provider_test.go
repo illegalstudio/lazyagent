@@ -103,10 +103,24 @@ func TestBuildProvider_Grok(t *testing.T) {
 	}
 }
 
+func TestBuildProvider_Kimi(t *testing.T) {
+	p := BuildProvider("kimi", DefaultConfig())
+	if _, ok := p.(*KimiProvider); !ok {
+		t.Fatalf("BuildProvider(\"kimi\") = %T, want *KimiProvider", p)
+	}
+}
+
 func TestDefaultConfig_GrokEnabled(t *testing.T) {
 	cfg := DefaultConfig()
 	if !cfg.AgentEnabled("grok") {
 		t.Error("grok must be enabled by default")
+	}
+}
+
+func TestDefaultConfig_KimiEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("kimi") {
+		t.Error("kimi must be enabled by default")
 	}
 }
 

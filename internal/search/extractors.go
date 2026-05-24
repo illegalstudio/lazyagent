@@ -15,6 +15,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/pi"
 )
 
@@ -101,6 +102,8 @@ func listSources(agent string, cfg core.Config) ([]sourceState, error) {
 		return walkFiles(agent, amp.ThreadsDir(), ".json")
 	case "grok":
 		return listGrokSources(), nil
+	case "kimi":
+		return listKimiSources(), nil
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", agent)
 	}
@@ -153,6 +156,8 @@ func extractChunks(src sourceState, cfg core.Config) ([]chunk, error) {
 		return extractAmp(src)
 	case "grok":
 		return extractGrok(src)
+	case "kimi":
+		return extractKimi(src)
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", src.Agent)
 	}
@@ -526,4 +531,35 @@ func extractGrok(src sourceState) ([]chunk, error) {
 		chunks = appendChunk(chunks, src, sessionID, cwd, name, role, time.Time{}, text)
 	})
 	return chunks, err
+}
+
+// listKimiSources returns one source per Kimi session. context.jsonl is the
+// preferred transcript source; wire.jsonl is the fallback when context is absent.
+func listKimiSources() []sourceState {
+	var out []sourceState
+	for _, dir := range kimi.SessionDirs() {
+		path := filepath.Join(dir, "context.jsonl")
+		if _, err := os.Stat(path); err != nil {
+			path = filepath.Join(dir, "wire.jsonl")
+		}
+		if src, ok := fileSource("kimi", filepath.Base(dir), path); ok {
+			out = append(out, src)
+		}
+	}
+	return out
+}
+
+func extractKimi(src sourceState) ([]chunk, error) {
+	sessionDir := filepath.Dir(src.Path)
+	workDirs := kimi.WorkDirs()
+	workDir := workDirs[filepath.Base(filepath.Dir(sessionDir))]
+	kimiChunks, err := kimi.ExtractContextChunks(sessionDir, workDir)
+	if err != nil {
+		return nil, err
+	}
+	chunks := make([]chunk, 0, len(kimiChunks))
+	for _, kc := range kimiChunks {
+		chunks = appendChunk(chunks, src, kc.SessionID, kc.CWD, kc.Name, kc.Role, time.Time{}, kc.Text)
+	}
+	return chunks, nil
 }
