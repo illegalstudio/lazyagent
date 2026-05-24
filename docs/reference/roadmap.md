@@ -151,6 +151,13 @@ sidebar:
 - ✅ Search, prune, and compact support for Grok session directories
 - ✅ Monthly Grok billing snapshot in `lazyagent limits`
 
+## v0.9.x — Kimi support
+
+- ✅ Kimi Code CLI session discovery from `~/.kimi/sessions/`
+- ✅ `--agent kimi` flag and `K` prefix in session lists
+- ✅ Search, prune, and compact support for Kimi session directories
+- ✅ Kimi usage snapshot in `lazyagent limits`
+
 ## v0.9.x — Rate-limit visibility
 
 - ✅ `lazyagent limits` — on-demand snapshot of 5-hour, weekly, and monthly usage windows

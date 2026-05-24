@@ -88,4 +88,4 @@ Kimi's local token counters include input, cache-read, cache-creation, and outpu
 ## What's not supported (yet)
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
-- The destructive maintenance commands intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). `compact` also omits Kimi until resume safety after truncation is validated. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
+- The destructive maintenance commands intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). Kimi is covered by both `prune` and `compact`; compaction rewrites its session JSONL files and nested subagent outputs while leaving metadata and prompts intact. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.

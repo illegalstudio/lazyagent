@@ -72,7 +72,7 @@ A small toolbox of CLI helpers shared by the maintenance commands: the interacti
 The destructive maintenance commands. Both are thin orchestrators:
 
 - **`prune`** discovers candidates via the standard providers, applies age/orphan filters, and deletes files. Per-agent deletion handles sidecar metadata (Claude Desktop) and name-index rewrites (Codex).
-- **`compact`** rewrites JSONL transcripts and Grok session directories, applies per-agent truncation rules to oversized fields, and rewrites atomically with validation.
+- **`compact`** rewrites JSONL transcripts plus Grok/Kimi session directories, applies per-agent truncation rules to oversized fields, and rewrites atomically with validation.
 
 ## Activity state machine
 

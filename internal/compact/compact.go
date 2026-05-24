@@ -26,6 +26,7 @@ var supportedAgents = []chatops.Agent{
 	{Key: "pi", Label: "pi coding agent", Color: "#F38BA8"},
 	{Key: "codex", Label: "Codex CLI", Color: "#A6E3A1"},
 	{Key: "grok", Label: "Grok", Color: "#89B4FA"},
+	{Key: "kimi", Label: "Kimi Code", Color: "#CBA6F7"},
 }
 
 // defaultThresholdBytes is the maximum length (in bytes) of a single JSON
@@ -64,7 +65,7 @@ func Run(args []string) int {
 	fs.IntVar(&opts.days, "days", 0, "Only compact sessions whose last activity is older than N days (0 = no age filter)")
 	fs.IntVar(&minSize, "min-size-kb", minSizeBytes/1024, "Skip files smaller than this many KiB")
 	fs.IntVar(&threshold, "threshold-kb", defaultThresholdBytes/1024, "Truncate JSON string values larger than this many KiB")
-	fs.StringVar(&opts.agentsArg, "agent", "", "Comma-separated agent keys (claude,codex). If empty an interactive picker is shown")
+	fs.StringVar(&opts.agentsArg, "agent", "", "Comma-separated agent keys (claude,pi,codex,grok,kimi). If empty an interactive picker is shown")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "Print a per-file before/after size table, do not modify any file")
 	fs.BoolVar(&opts.dryVerbose, "dry-run-verbose", false, "Same as --dry-run with one row per file (no grouping)")
 	fs.BoolVar(&opts.yes, "yes", false, "Skip confirmation prompt")
@@ -225,7 +226,7 @@ func resolveAgents(arg string) ([]string, error) {
 
 // Candidate is a session flagged for compaction.
 type Candidate struct {
-	Session   *model.Session
+	Session    *model.Session
 	SizeBefore int64
 	SizeAfter  int64 // populated by estimateSizes (dry-run) or executeCompact (real)
 }
