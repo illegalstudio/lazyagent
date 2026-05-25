@@ -56,6 +56,7 @@ func codexRollouts() ([]string, error) {
 
 // codexRateLimits is the relevant subset of an event_msg/token_count payload.
 type codexRateLimits struct {
+	LimitID   string            `json:"limit_id"`
 	Primary   *codexLimitWindow `json:"primary"`
 	Secondary *codexLimitWindow `json:"secondary"`
 }
@@ -66,7 +67,7 @@ type codexLimitWindow struct {
 	ResetsAt      int64   `json:"resets_at"` // unix seconds
 }
 
-// scanRolloutForLimits returns the last rate_limits block found in path, or nil if none.
+// scanRolloutForLimits returns the last usable rate_limits block found in path, or nil if none.
 // Codex streams an event_msg/token_count event after each turn, with rate_limits embedded
 // in the payload. We want the most recent one in the file.
 func scanRolloutForLimits(path string) (*codexRateLimits, error) {
@@ -94,13 +95,54 @@ func scanRolloutForLimits(path string) (*codexRateLimits, error) {
 			continue
 		}
 		if env.Type == "event_msg" && env.Payload.Type == "token_count" && env.Payload.RateLimits != nil {
-			last = env.Payload.RateLimits
+			if codexRateLimitsZeroModelSpecific(env.Payload.RateLimits) {
+				last = nil
+				continue
+			}
+			if codexRateLimitsUsable(env.Payload.RateLimits) {
+				last = env.Payload.RateLimits
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return last, nil
+}
+
+func codexRateLimitsUsable(l *codexRateLimits) bool {
+	if l == nil {
+		return false
+	}
+	if !codexLimitWindowUsable(l.Primary) && !codexLimitWindowUsable(l.Secondary) {
+		return false
+	}
+	return true
+}
+
+func codexRateLimitsZeroModelSpecific(l *codexRateLimits) bool {
+	if l == nil || l.LimitID == "" || l.LimitID == "codex" {
+		return false
+	}
+	// Newer Codex builds can emit model-specific limit blocks that report
+	// both windows as 0.0%; don't let those hide the canonical Codex window.
+	return codexRateLimitsUsageZero(l)
+}
+
+func codexLimitWindowUsable(w *codexLimitWindow) bool {
+	if w == nil {
+		return false
+	}
+	return w.WindowMinutes > 0 && w.ResetsAt > 0
+}
+
+func codexRateLimitsUsageZero(l *codexRateLimits) bool {
+	for _, w := range []*codexLimitWindow{l.Primary, l.Secondary} {
+		if codexLimitWindowUsable(w) && w.UsedPercent != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func fetchCodexReport() (Report, error) {
@@ -140,10 +182,10 @@ func fetchCodexReport() (Report, error) {
 		Source:   fmt.Sprintf("Source: %s", sourcePath),
 		Note:     "Note: limits are read from the latest Codex session rollout, not fetched live. They reflect the server's last response.",
 	}
-	if limits.Primary != nil {
+	if codexLimitWindowUsable(limits.Primary) {
 		r.Windows = append(r.Windows, codexWindowToWindow("5-hour", *limits.Primary))
 	}
-	if limits.Secondary != nil {
+	if codexLimitWindowUsable(limits.Secondary) {
 		r.Windows = append(r.Windows, codexWindowToWindow("7-day", *limits.Secondary))
 	}
 	if len(r.Windows) == 0 {
