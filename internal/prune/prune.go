@@ -2,7 +2,7 @@
 // old or orphaned chat sessions from supported coding agents.
 //
 // Supported agents (v1): claude, pi, codex, grok, kimi. Amp is skipped because local
-// thread files are re-synced from the remote. Cursor and OpenCode store
+// thread files are re-synced from the remote. Cursor, OpenCode, and Kilo store
 // sessions inside SQLite databases owned by third-party apps; deleting rows
 // there is deferred to a future version.
 package prune

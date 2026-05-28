@@ -119,7 +119,7 @@
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
         {#if detail.agent}
           <dt class="text-subtext">Agent</dt>
-          <dd class="text-text">{detail.agent === "pi" ? "π pi" : detail.agent === "codex" ? "X codex" : detail.agent === "amp" ? "A amp" : detail.agent === "kimi" ? "K kimi" : detail.agent}</dd>
+          <dd class="text-text">{detail.agent === "pi" ? "π pi" : detail.agent === "codex" ? "X codex" : detail.agent === "amp" ? "A amp" : detail.agent === "kilo" ? "L kilo" : detail.agent === "kimi" ? "K kimi" : detail.agent}</dd>
         {/if}
         {#if detail.source === "desktop"}
           <dt class="text-subtext">Source</dt>

@@ -110,10 +110,24 @@ func TestBuildProvider_Kimi(t *testing.T) {
 	}
 }
 
+func TestBuildProvider_Kilo(t *testing.T) {
+	p := BuildProvider("kilo", DefaultConfig())
+	if _, ok := p.(*KiloProvider); !ok {
+		t.Fatalf("BuildProvider(\"kilo\") = %T, want *KiloProvider", p)
+	}
+}
+
 func TestDefaultConfig_GrokEnabled(t *testing.T) {
 	cfg := DefaultConfig()
 	if !cfg.AgentEnabled("grok") {
 		t.Error("grok must be enabled by default")
+	}
+}
+
+func TestDefaultConfig_KiloEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("kilo") {
+		t.Error("kilo must be enabled by default")
 	}
 }
 

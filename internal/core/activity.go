@@ -147,7 +147,7 @@ func ToolActivity(tool string) ActivityKind {
 		return ActivityWriting
 	case "codebase_search", "Codebase_search", "Glob_file_search", "Grep_search":
 		return ActivitySearching
-	// opencode / pi (snake_case) — safety net for unnormalized names
+	// opencode / kilo / pi (snake_case) — safety net for unnormalized names
 	case "read":
 		return ActivityReading
 	case "write", "edit":
