@@ -55,6 +55,7 @@ func DefaultConfig() Config {
 			"codex":    true,
 			"amp":      true,
 			"grok":     true,
+			"kilo":     true,
 			"kimi":     true,
 		},
 		ExcludeCWDSubstrings: []string{},

@@ -33,7 +33,7 @@ It's the default because it's the most information-dense interface. The layout i
 
 ## Visual indicators
 
-- **Agent prefix** — a one-character prefix (π, D, C, X, A, O, G, K) identifies which agent produced the session. See [Supported agents](../concepts/supported-agents.md).
+- **Agent prefix** — a one-character prefix (π, D, C, X, A, O, L, G, K) identifies which agent produced the session. See [Supported agents](../concepts/supported-agents.md).
 - **Activity badge** — a colored state label (`idle`, `thinking`, `writing`, …). See [Activity states](../concepts/activity-states.md).
 - **Braille spinner** — animates while the session is actively executing.
 - **Sparkline** — a Unicode braille mini-chart of the last N minutes of activity.

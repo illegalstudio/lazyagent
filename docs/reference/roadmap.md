@@ -80,6 +80,12 @@ sidebar:
 - ✅ Tool name normalization and activity mapping
 - ✅ Subagent detection via `parent_id`
 
+## v0.6.1 — Kilo support
+
+- ✅ Kilo session discovery from OpenCode-compatible SQLite
+- ✅ `--agent kilo` flag and `L` prefix
+- ✅ Reused OpenCode parser with separate data directory and DB name
+
 ## v0.7 — Cursor support
 
 - ✅ Cursor session discovery from `state.vscdb`

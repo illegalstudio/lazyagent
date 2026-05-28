@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-lazyagent supports nine agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
+lazyagent supports ten agent sources out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
 
 | Agent | Path | Format | Prefix |
 |-------|------|--------|--------|
@@ -16,6 +16,7 @@ lazyagent supports nine agents out of the box. Each has a dedicated provider tha
 | [Amp CLI](https://ampcode.com/) | `~/.local/share/amp/threads/*.json` | Per-thread JSON | `A` |
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
+| [Kilo](https://kilo.ai/) | `~/.local/share/kilo/kilo.db` | SQLite | `L` |
 | [Grok CLI](https://x.ai/cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
 | Kimi Code CLI | `~/.kimi/sessions/<md5-workdir>/<uuid>/` + `~/.kimi/kimi.json` | Directory per session (JSONL + JSON) | `K` |
 
@@ -32,6 +33,7 @@ lazyagent --agent codex
 lazyagent --agent amp
 lazyagent --agent pi
 lazyagent --agent opencode
+lazyagent --agent kilo
 lazyagent --agent grok
 lazyagent --agent kimi
 lazyagent --agent all       # default
@@ -69,6 +71,10 @@ Pi writes JSONL into `~/.pi/agent/sessions/--<encoded-cwd>--/`. The encoding is 
 
 OpenCode uses SQLite with relational tables (`session`, `message`, `part`). lazyagent polls every 3 seconds and detects sub-agents via `parent_id`. Tool names are normalized to the same activity taxonomy as the other agents.
 
+### Kilo
+
+Kilo's CLI stores sessions in an OpenCode-compatible SQLite database at `~/.local/share/kilo/kilo.db`. lazyagent reuses the OpenCode SQLite parser, polls every 3 seconds, detects sub-agents via `parent_id`, and normalizes tool names into the shared activity taxonomy. The `KILO_DATA_DIR` environment variable can override the data directory.
+
 ### Grok CLI
 
 Grok writes one *directory* per session, two levels deep under `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an `updates.jsonl` stream, and several smaller files. lazyagent reads `summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard URL percent-encoding of the parent directory name.
@@ -88,4 +94,4 @@ Kimi's local token counters include input, cache-read, cache-creation, and outpu
 ## What's not supported (yet)
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
-- The destructive maintenance commands intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). Kimi is covered by both `prune` and `compact`; compaction rewrites its session JSONL files and nested subagent outputs while leaving metadata and prompts intact. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
+- The destructive maintenance commands intentionally omit Cursor, OpenCode, and Kilo (third-party SQLite databases) and Amp (remote-resynced local files). Kimi is covered by both `prune` and `compact`; compaction rewrites its session JSONL files and nested subagent outputs while leaving metadata and prompts intact. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.

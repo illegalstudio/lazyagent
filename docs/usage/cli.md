@@ -98,6 +98,7 @@ Restrict monitoring to one agent. Valid values:
 | `codex` | Codex CLI |
 | `amp` | Amp CLI |
 | `grok` | Grok CLI |
+| `kilo` | Kilo |
 | `kimi` | Kimi Code CLI |
 | `cursor` | Cursor IDE |
 | `opencode` | OpenCode |
@@ -107,6 +108,7 @@ Restrict monitoring to one agent. Valid values:
 lazyagent --agent claude     # only Claude
 lazyagent --agent codex      # only Codex
 lazyagent --agent grok       # only Grok
+lazyagent --agent kilo       # only Kilo
 lazyagent --agent kimi       # only Kimi Code
 lazyagent --agent all        # default — every agent
 ```
@@ -157,7 +159,7 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 
 ### `search`
 
-`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok, Kimi) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
+`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok, Kimi) using an incremental SQLite FTS5 index under the user cache directory. Cursor, OpenCode, and Kilo are excluded because their history lives in third-party SQLite databases.
 
 ```bash
 lazyagent search "race condition"

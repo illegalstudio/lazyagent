@@ -187,7 +187,7 @@ mv session.jsonl.bak session.jsonl
 Not supported:
 
 - **Amp** — local files are re-synced from the remote; rewriting them gets overwritten on the next sync.
-- **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
+- **Cursor**, **OpenCode**, and **Kilo** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
 
 ## Examples
 

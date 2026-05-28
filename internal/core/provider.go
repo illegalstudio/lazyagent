@@ -9,6 +9,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
 	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kilo"
 	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/opencode"
@@ -83,6 +84,29 @@ func (p *OpenCodeProvider) UseWatcher() bool               { return false }
 func (p *OpenCodeProvider) RefreshInterval() time.Duration { return 3 * time.Second }
 func (p *OpenCodeProvider) WatchDirs() []string {
 	if d := opencode.OpenCodeDataDir(); d != "" {
+		return []string{d}
+	}
+	return nil
+}
+
+// KiloProvider discovers Kilo sessions from SQLite.
+type KiloProvider struct {
+	cache *kilo.SessionCache
+}
+
+// NewKiloProvider creates a KiloProvider.
+func NewKiloProvider() *KiloProvider {
+	return &KiloProvider{cache: kilo.NewSessionCache()}
+}
+
+func (p *KiloProvider) DiscoverSessions() ([]*model.Session, error) {
+	return kilo.DiscoverSessions(p.cache)
+}
+
+func (p *KiloProvider) UseWatcher() bool               { return false }
+func (p *KiloProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *KiloProvider) WatchDirs() []string {
+	if d := kilo.KiloDataDir(); d != "" {
 		return []string{d}
 	}
 	return nil
@@ -204,6 +228,8 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		return NewPiProvider()
 	case "opencode":
 		return NewOpenCodeProvider()
+	case "kilo":
+		return NewKiloProvider()
 	case "cursor":
 		return NewCursorProvider()
 	case "codex":
@@ -224,6 +250,9 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		}
 		if cfg.AgentEnabled("opencode") {
 			providers = append(providers, NewOpenCodeProvider())
+		}
+		if cfg.AgentEnabled("kilo") {
+			providers = append(providers, NewKiloProvider())
 		}
 		if cfg.AgentEnabled("cursor") {
 			providers = append(providers, NewCursorProvider())

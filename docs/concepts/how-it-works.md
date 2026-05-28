@@ -14,7 +14,7 @@ lazyagent doesn't wrap, inject, or modify any agent. It reads whatever each agen
   ─────────────────     ───────────────────────       ──────────────
   claude, codex, …  →   JSONL / JSON files       →    SessionProvider
   grok, pi, amp, …      session directories            ↓
-  cursor, opencode      SQLite databases               Session model
+  cursor, opencode, kilo → SQLite databases      →     Session model
                                                         ↓
                                                        TUI / GUI / API
 ```

@@ -11,6 +11,7 @@ func TestResumeCommand(t *testing.T) {
 		{"amp", "abc-123", "amp threads continue abc-123"},
 		{"pi", "abc-123", "pi --session abc-123"},
 		{"opencode", "abc-123", "opencode -s abc-123"},
+		{"kilo", "abc-123", "kilo --session=abc-123"},
 		{"cursor", "abc-123", `cursor-agent --resume="abc-123"`},
 		{"unknown", "abc-123", ""},
 		{"claude", "", ""},

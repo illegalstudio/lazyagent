@@ -145,7 +145,7 @@ The disclaimer and prompt are both skipped when `--yes` is passed, which is the 
 Not supported:
 
 - **Amp** — its local files are re-synced from the remote. Deleting them just triggers a re-download on the next sync.
-- **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Deletion would require mutating those databases, which is deferred to a future version.
+- **Cursor**, **OpenCode**, and **Kilo** — sessions live inside third-party SQLite databases. Deletion would require mutating those databases, which is deferred to a future version.
 
 ## Examples
 
