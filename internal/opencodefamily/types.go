@@ -1,4 +1,4 @@
-package opencode
+package opencodefamily
 
 import "encoding/json"
 
@@ -29,10 +29,10 @@ type messageData struct {
 }
 
 type tokensData struct {
-	Input     int        `json:"input"`
-	Output    int        `json:"output"`
-	Reasoning int        `json:"reasoning"`
-	Cache     cacheData  `json:"cache"`
+	Input     int       `json:"input"`
+	Output    int       `json:"output"`
+	Reasoning int       `json:"reasoning"`
+	Cache     cacheData `json:"cache"`
 }
 
 type cacheData struct {
