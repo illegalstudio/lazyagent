@@ -7,7 +7,7 @@ sidebar:
 
 `lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
 
-It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, **Grok**, and **Kimi Code**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
+It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, **Grok**, and **Kimi Code**. Cursor, OpenCode, and Kilo are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
 ## Synopsis
 
@@ -113,7 +113,7 @@ The next `lazyagent search` invocation will rebuild it.
 
 Not supported:
 
-- **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Reading from them at search time would require coupling to their schema; for now they're left to their own in-app search.
+- **Cursor**, **OpenCode**, and **Kilo** — sessions live inside third-party SQLite databases. Reading from them at search time would require coupling to their schema; for now they're left to their own in-app search.
 
 ## Examples
 

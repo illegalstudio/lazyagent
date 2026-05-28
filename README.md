@@ -11,7 +11,7 @@
 
 **A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
 
-Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
+Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Kilo](https://kilo.ai/), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 

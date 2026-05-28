@@ -29,6 +29,7 @@ Scope the scan to a single agent with `--agent`:
 lazyagent --agent claude   # Claude Code CLI and Desktop
 lazyagent --agent codex    # Codex CLI only
 lazyagent --agent grok     # Grok CLI only
+lazyagent --agent kilo     # Kilo only
 lazyagent --agent kimi     # Kimi Code CLI only
 ```
 

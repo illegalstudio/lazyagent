@@ -45,6 +45,7 @@ For agents that expose a resumable CLI, lazyagent builds the exact shell command
 - Amp: `amp threads continue <thread-id>`
 - pi: `pi --session <session-id>`
 - OpenCode: `opencode -s <id>`
+- Kilo: `kilo --session=<id>`
 - Cursor: `cursor-agent --resume="<id>"`
 - Kimi Code: `kimi --resume <session-id>`
 
