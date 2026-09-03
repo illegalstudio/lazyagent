@@ -30,7 +30,7 @@ lazyagent computes a single `Session` record per conversation, regardless of whi
 | Desktop session title | Claude Desktop metadata |
 | Permission mode (Desktop) | Claude Desktop metadata |
 | Remote control URL | JSONL (Claude `bridge_status` entries) |
-| Resume command | Computed per agent when available |
+| Normal and YOLO resume commands | Computed per agent when available |
 
 ## Custom names
 
@@ -38,19 +38,30 @@ Every session can be renamed (<kbd>r</kbd> in TUI or GUI, `PUT /api/sessions/{id
 
 ## Resume command
 
-For agents that expose a resumable CLI, lazyagent builds the exact shell command that would resume the selected session:
+Lazyagent builds both normal and YOLO resume commands when the agent exposes a
+distinct permissive mode:
 
-- Claude Code: `claude --resume <session-id>`
-- Codex CLI: `codex resume <session-id>`
-- Amp: `amp threads continue <thread-id>`
-- pi: `pi --session <session-id>`
-- OpenCode: `opencode -s <id>`
-- Kilo: `kilo --session=<id>`
-- Cursor: `cursor-agent --resume="<id>"`
-- Grok: `grok --resume '<session-id>'`
-- Kimi Code: `kimi --resume <session-id>`
+| Agent | Normal | YOLO |
+|-------|--------|------|
+| Claude Code | `claude --resume <id>` | `claude --dangerously-skip-permissions --resume <id>` |
+| Codex CLI | `codex resume <id>` | `codex --yolo resume <id>` |
+| Amp | `amp threads continue <id>` | `amp --dangerously-allow-all threads continue <id>` |
+| pi | `pi --session <id>` | Not available |
+| OpenCode | `opencode -s <id>` | `opencode --auto -s <id>` |
+| Kilo | `kilo --session=<id>` | `kilo --auto --session=<id>` |
+| Cursor | `cursor-agent --resume="<id>"` | `cursor-agent --force --resume="<id>"` |
+| Grok | `grok --resume '<id>'` | `grok --yolo --resume '<id>'` |
+| Kimi Code | `kimi --resume <id>` | `kimi --yolo --resume <id>` |
 
-In the TUI, <kbd>c</kbd> copies the command to the clipboard when one exists. The GUI has a copy button next to the command. The API exposes it as `resume_command` on the session detail response.
+`YOLO` is lazyagent's common label for the most permissive mode exposed by
+each CLI. The exact guarantees are tool-specific: flags such as `--auto` and
+`--force` do not necessarily have the same approval or sandbox semantics as a
+full permission bypass, and configured deny rules may still apply. pi has no
+separate toggle, so lazyagent exposes only its normal resume command.
+
+In the TUI, <kbd>c</kbd> copies the normal command and <kbd>C</kbd> copies the
+YOLO command. The GUI exposes open and copy actions for both variants. The API
+returns `resume_command` and `resume_command_yolo` in the session detail.
 
 ## Cost estimation
 

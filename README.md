@@ -58,8 +58,8 @@ That said, lazyagent and its API are **fully open source**. If you'd rather not 
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
 - **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
 - **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly, Models + API pools), with a detailed pace view available via `--detailed`.
-- **[`lazyagent sessions`](docs/usage/sessions.md)**: list every session recorded for the current directory, across all agents, and reopen one with the originating agent's CLI. Interactive picker, `--json` for scripts. The old `history` name remains available as an alias.
-- **[`lazyagent latest`](docs/usage/latest.md)** — resume the current directory's most recent session immediately, with the originating agent's CLI. No table, no prompt.
+- **[`lazyagent sessions`](docs/usage/sessions.md)**: list every session recorded for the current directory, across all agents, and reopen one normally or in YOLO mode. Interactive picker, `--json` for scripts. The old `history` name remains available as an alias.
+- **[`lazyagent latest`](docs/usage/latest.md)**: resume the current directory's most recent session immediately, normally or with `--yolo`. No table, no prompt.
 - **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across the cleanup commands, with every rewrite validated and backed up by default.
@@ -74,7 +74,7 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### Desktop App
 ![lazyagent macOS desktop app](assets/gui-dashboard-2026-08.png)
 
-Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab, native menus — with a card-grid dashboard (`compact | rich | live` density switch), per-card Resume/Editor actions with a right-click menu, and a Settings panel (terminal choice, editor, agents, API passphrase). Attach again to return it to the menu bar.
+Detach the panel and lazyagent becomes a full desktop app with a Dock icon, Cmd-Tab, native menus, a card-grid dashboard (`compact | rich | live` density switch), per-card normal and YOLO Resume actions, an Editor action with a right-click menu, and a Settings panel (terminal choice, editor, agents, API passphrase). Attach again to return it to the menu bar.
 
 ### HTTP API
 ![lazyagent API playground](assets/api.png)
@@ -156,9 +156,12 @@ lazyagent --tui --gui --api  Run everything together
 lazyagent prune --days N     Delete chat sessions older than N days
 lazyagent compact            Shrink chat files by truncating bulky payloads
 lazyagent search "query"     Search chat transcripts with snippets
+lazyagent search --yolo "q"  Open a selected search result in YOLO mode
 lazyagent sessions           List and reopen sessions for the current directory
+lazyagent sessions --yolo    Reopen a selected session in YOLO mode
 lazyagent history            Alias for lazyagent sessions
 lazyagent latest             Resume the most recent session here
+lazyagent latest --yolo      Resume the most recent session in YOLO mode
 lazyagent limits             Show 5h / weekly / monthly usage summary
 lazyagent passphrase         Set or rotate the HTTP API passphrase
 lazyagent --help             Show full help

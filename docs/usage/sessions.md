@@ -13,7 +13,7 @@ own CLI.
 ## Synopsis
 
 ```
-lazyagent sessions [--agent NAME] [--json] [--dir PATH]
+lazyagent sessions [--agent NAME] [--json] [--dir PATH] [--yolo]
 ```
 
 `lazyagent history` is retained as a legacy alias. It accepts the same flags
@@ -28,7 +28,7 @@ output and `--all` flag have been removed.
 │   codex   yesterday   31  webhook config models             │
 │   grok    3d ago      12  docs limits                       │
 └─────────────────────────────────────────────────────────────┘
-  ↑/↓ move · enter open · c copy resume cmd · q quit
+  ↑/↓ move · enter normal · y YOLO · c/C copy normal/YOLO · q quit
 ```
 
 Each row shows the agent, relative last-activity time, message count, and a
@@ -39,14 +39,17 @@ user message).
 |-----|--------|
 | `↑`/`k`, `↓`/`j` | Move the cursor |
 | `enter` | Reopen the session in this terminal |
+| `n` | Reopen the session in normal mode |
+| `y` | Reopen the session in YOLO mode |
 | `c` | Copy the resume command to the clipboard |
+| `C` | Copy the YOLO resume command to the clipboard |
 | `q` / `esc` / `ctrl+c` | Quit without opening |
 
 **Opening** runs the agent's resume command (e.g. `claude --resume <id>`)
 with this terminal attached, from the session's own working directory when
-it still exists. Agents lazyagent can exec directly: Claude Code, Codex,
-Amp, pi, Grok, and Kimi. For OpenCode, Kilo, and Cursor the resume command
-is copied to the clipboard instead.
+it still exists. Lazyagent can execute the resume command directly for every
+supported agent. pi has no distinct YOLO flag, so `y`, `C`, or `--yolo` on a
+pi session reports that YOLO mode is unavailable.
 
 ## Flags
 
@@ -55,6 +58,7 @@ is copied to the clipboard instead.
 | `--agent NAME` | string | `all` | Restrict the listing to one agent |
 | `--json` | bool | `false` | Print the list as JSON on stdout and exit (no picker) |
 | `--dir PATH` | string | current dir | List sessions for another directory |
+| `--yolo` | bool | `false` | Make YOLO the default mode for opening with `enter`; `n` still opens normally |
 
 ## JSON output
 
@@ -69,12 +73,13 @@ is copied to the clipboard instead.
     "cwd": "/Users/me/projects/foo",
     "last_activity": "2026-07-20T09:12:33Z",
     "messages": 84,
-    "resume_command": "claude --resume abc123"
+    "resume_command": "claude --resume abc123",
+    "resume_command_yolo": "claude --dangerously-skip-permissions --resume abc123"
   }
 ]
 ```
 
-Every object always contains all seven fields. Fields that do not apply are
+Every object always contains all eight fields. Fields that do not apply are
 emitted as empty strings rather than omitted, so scripts can rely on a stable
 shape.
 
@@ -87,6 +92,7 @@ shape.
 | `last_activity` | string | Last activity timestamp in RFC 3339 format |
 | `messages` | integer | Number of messages recorded for the session |
 | `resume_command` | string | Command to resume the session, or `""` when the agent exposes none |
+| `resume_command_yolo` | string | YOLO resume command, or `""` when the agent has no distinct YOLO mode |
 
 ## Performance
 

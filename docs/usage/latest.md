@@ -14,7 +14,7 @@ CLI, with no table or prompt. It opens the first session shown by
 ## Synopsis
 
 ```
-lazyagent latest [--agent NAME] [--dir PATH]
+lazyagent latest [--agent NAME] [--dir PATH] [--yolo]
 ```
 
 ```
@@ -24,9 +24,11 @@ Opening: claude --resume 3f2a…
 
 The resume command runs with this terminal attached, from the session's own
 working directory when it still exists. Agents lazyagent can exec directly:
-Claude Code, Codex, Amp, pi, Grok, and Kimi; for other agents a "no resume
-command" notice is printed instead. "Most recent" means latest activity in
+Claude Code, Codex, Amp, pi, OpenCode, Kilo, Cursor, Grok, and Kimi. "Most recent" means latest activity in
 the transcript (lazyagent does not record a separate creation time).
+
+Pass `--yolo` to apply the selected agent's permissive flag. pi has no
+distinct YOLO mode, so a pi session exits with a clear unavailable-mode error.
 
 ## Flags
 
@@ -34,6 +36,7 @@ the transcript (lazyagent does not record a separate creation time).
 |------|------|---------|---------|
 | `--agent NAME` | string | `all` | Consider only one agent's sessions |
 | `--dir PATH` | string | current dir | Resume the latest session for another directory |
+| `--yolo` | bool | `false` | Resume with the selected agent's YOLO mode |
 
 ## Exit codes
 

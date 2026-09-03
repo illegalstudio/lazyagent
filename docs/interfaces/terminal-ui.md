@@ -27,6 +27,7 @@ It's the default because it's the most information-dense interface. The layout i
 | <kbd>/</kbd> | Search sessions by project path |
 | <kbd>o</kbd> | Open the selected session's CWD in your editor |
 | <kbd>c</kbd> | Copy the resume command to the clipboard, when available |
+| <kbd>C</kbd> | Copy the YOLO resume command, when the agent exposes one |
 | <kbd>l</kbd> | Open or close the limits view |
 | <kbd>r</kbd> | Rename the session; refresh while the limits view is open |
 | <kbd>esc</kbd> | Close detail overlay / dismiss search |
