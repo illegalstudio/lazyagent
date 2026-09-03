@@ -57,16 +57,84 @@ func TestPickerNavigationAndOpen(t *testing.T) {
 	}
 }
 
-func TestPickerEnterFallsBackToCopy(t *testing.T) {
-	// opencode: display command exists, executable argv does not → copy.
+func TestPickerEnterOpensOpenCode(t *testing.T) {
 	m := pickerModel{sessions: []*model.Session{{Agent: "opencode", SessionID: "x"}}, titles: []string{"t"}}
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(pickerModel)
-	if m.action != actionCopy {
-		t.Fatalf("action = %v, want actionCopy", m.action)
+	if m.action != actionOpen {
+		t.Fatalf("action = %v, want actionOpen", m.action)
 	}
 	if cmd == nil {
-		t.Fatal("expected tea.Quit after copy")
+		t.Fatal("expected tea.Quit after open")
+	}
+}
+
+func TestPickerYOpensYolo(t *testing.T) {
+	m := pickerModel{sessions: []*model.Session{{Agent: "claude", SessionID: "x"}}, titles: []string{"t"}}
+	next, cmd := m.Update(keyRune('y'))
+	m = next.(pickerModel)
+	if m.action != actionOpen || m.resumeMode != core.ResumeYolo {
+		t.Fatalf("action = %v, mode = %v, want YOLO open", m.action, m.resumeMode)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after YOLO open")
+	}
+}
+
+func TestPickerExplicitNormalOverridesYoloDefault(t *testing.T) {
+	m := pickerModel{
+		sessions:   []*model.Session{{Agent: "claude", SessionID: "x"}},
+		titles:     []string{"t"},
+		resumeMode: core.ResumeYolo,
+	}
+	next, cmd := m.Update(keyRune('n'))
+	m = next.(pickerModel)
+	if m.action != actionOpen || m.resumeMode != core.ResumeNormal {
+		t.Fatalf("action = %v, mode = %v, want normal open", m.action, m.resumeMode)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after normal open")
+	}
+}
+
+func TestPickerEnterUsesYoloDefault(t *testing.T) {
+	m := pickerModel{
+		sessions:   []*model.Session{{Agent: "claude", SessionID: "x"}},
+		titles:     []string{"t"},
+		resumeMode: core.ResumeYolo,
+	}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(pickerModel)
+	if m.action != actionOpen || m.resumeMode != core.ResumeYolo {
+		t.Fatalf("action = %v, mode = %v, want YOLO open", m.action, m.resumeMode)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after YOLO open")
+	}
+}
+
+func TestPickerCopyKeysIgnoreDefaultMode(t *testing.T) {
+	m := pickerModel{
+		sessions:   []*model.Session{{Agent: "claude", SessionID: "x"}},
+		titles:     []string{"t"},
+		resumeMode: core.ResumeYolo,
+	}
+	next, _ := m.Update(keyRune('c'))
+	m = next.(pickerModel)
+	if m.action != actionCopy || m.resumeMode != core.ResumeNormal {
+		t.Fatalf("c selected action = %v, mode = %v, want normal copy", m.action, m.resumeMode)
+	}
+}
+
+func TestPickerYoloUnavailableForPi(t *testing.T) {
+	m := pickerModel{sessions: []*model.Session{{Agent: "pi", SessionID: "x"}}, titles: []string{"t"}}
+	next, cmd := m.Update(keyRune('y'))
+	m = next.(pickerModel)
+	if cmd != nil || m.action != actionQuit {
+		t.Fatalf("YOLO pi selection should stay open, action = %v, cmd = %v", m.action, cmd)
+	}
+	if !strings.Contains(m.status, "no YOLO mode") {
+		t.Fatalf("status = %q, want unavailable YOLO message", m.status)
 	}
 }
 
@@ -150,7 +218,7 @@ func TestPickerEnterOnGrokOpensAndQuits(t *testing.T) {
 }
 
 func TestPickerCKeyOnCopyableSessionCopiesAndQuits(t *testing.T) {
-	// opencode has a display resume command (copyable) but no executable argv.
+	// Copy remains available independently of direct execution support.
 	m := pickerModel{sessions: []*model.Session{{Agent: "opencode", SessionID: "o"}}, titles: []string{"t"}}
 	next, cmd := m.Update(keyRune('c'))
 	m = next.(pickerModel)
@@ -572,8 +640,7 @@ func TestPickerCKeyFreezesSelectionAgainstLaterBatch(t *testing.T) {
 	now := time.Now()
 	m := pickerModel{loading: true, total: 2}
 
-	// Batch A: an opencode session (copyable, not directly executable) is
-	// the only, so top, row.
+	// Batch A: an opencode session is the only, so top, row.
 	next, _ := m.Update(sessionBatchMsg{
 		sessions: []*model.Session{{Agent: "opencode", SessionID: "a", LastActivity: now.Add(-time.Hour)}},
 		titles:   []string{"A"},

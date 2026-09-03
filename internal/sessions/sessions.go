@@ -27,6 +27,7 @@ func Run(args []string) int {
 	agent := fs.String("agent", "all", "Agent to list: claude, pi, opencode, kilo, cursor, codex, amp, grok, kimi, all")
 	jsonOut := fs.Bool("json", false, "Print the session list as JSON and exit")
 	dirFlag := fs.String("dir", "", "List sessions for this directory instead of the current one")
+	yolo := fs.Bool("yolo", false, "Use the agent-specific YOLO mode when reopening a session with Enter")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent sessions — list sessions for a directory and reopen one
@@ -40,6 +41,7 @@ Usage:
   lazyagent sessions --agent claude
   lazyagent sessions --json
   lazyagent sessions --dir ~/projects/foo
+  lazyagent sessions --yolo
 
 Flags:
 `)
@@ -105,7 +107,11 @@ Flags:
 	// --json and the no-TTY fallback below still give. Signed off as
 	// acceptable specifically for the interactive path.
 	if !*jsonOut && isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stderr.Fd()) {
-		return runInteractive(provider, match, dir, names, hasCacheDir, cacheDir)
+		mode := core.ResumeNormal
+		if *yolo {
+			mode = core.ResumeYolo
+		}
+		return runInteractive(provider, match, dir, names, hasCacheDir, cacheDir, mode)
 	}
 
 	all, err := core.DiscoverMatching(provider, match)
@@ -156,9 +162,9 @@ Flags:
 // time the picker exited -- see runPicker's streamComplete and the
 // maybeSave comment below), so a user's chosen action is never delayed by
 // unfinished background discovery.
-func runInteractive(provider core.SessionProvider, match func(string) bool, dir string, names *core.SessionNames, hasCacheDir bool, cacheDir string) int {
+func runInteractive(provider core.SessionProvider, match func(string) bool, dir string, names *core.SessionNames, hasCacheDir bool, cacheDir string, defaultMode core.ResumeMode) int {
 	dirLabel := abbreviateHome(dir)
-	chosen, action, streamComplete, err := runPicker(provider, match, dir, dirLabel, names)
+	chosen, action, mode, streamComplete, err := runPicker(provider, match, dir, dirLabel, names, defaultMode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -182,11 +188,11 @@ func runInteractive(provider core.SessionProvider, match func(string) bool, dir 
 		maybeSave()
 		return 0
 	case actionOpen:
-		code := openSession(chosen)
+		code := openSession(chosen, mode)
 		maybeSave()
 		return code
 	case actionCopy:
-		cmdStr := core.ResumeCommand(chosen.Agent, chosen.SessionID)
+		cmdStr := core.ResumeCommandWithMode(chosen.Agent, chosen.SessionID, mode)
 		code := 0
 		if err := core.CopyToClipboard(cmdStr); err != nil {
 			fmt.Fprintf(os.Stderr, "Copy failed: %v\nCommand: %s\n", err, cmdStr)
@@ -205,10 +211,14 @@ func runInteractive(provider core.SessionProvider, match func(string) bool, dir 
 // openSession execs the agent's resume command in the current terminal,
 // running from the session's own CWD when it still exists (claude --resume
 // locates sessions by project directory).
-func openSession(s *model.Session) int {
-	argv := core.ResumeArgv(s.Agent, s.SessionID)
+func openSession(s *model.Session, mode core.ResumeMode) int {
+	argv := core.ResumeArgvWithMode(s.Agent, s.SessionID, mode)
 	if argv == nil {
-		fmt.Fprintf(os.Stderr, "No resume command available for %s sessions.\n", s.Agent)
+		if mode == core.ResumeYolo && core.ResumeArgv(s.Agent, s.SessionID) != nil {
+			fmt.Fprintf(os.Stderr, "No YOLO resume mode available for %s sessions.\n", s.Agent)
+		} else {
+			fmt.Fprintf(os.Stderr, "No resume command available for %s sessions.\n", s.Agent)
+		}
 		return 1
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
@@ -220,7 +230,7 @@ func openSession(s *model.Session) int {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Fprintf(os.Stderr, "%s %s\n", chatops.StyleMuted.Render("Opening:"), core.ResumeCommand(s.Agent, s.SessionID))
+	fmt.Fprintf(os.Stderr, "%s %s\n", chatops.StyleMuted.Render("Opening:"), core.ResumeCommandWithMode(s.Agent, s.SessionID, mode))
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1

@@ -55,9 +55,9 @@ var agentColors = map[string]lipgloss.Color{
 
 var (
 	stylePickerBox = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(chatops.ColBorderDim).
-		Padding(0, 1)
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(chatops.ColBorderDim).
+			Padding(0, 1)
 	styleCursor = lipgloss.NewStyle().Foreground(chatops.ColPrimary).Bold(true)
 	styleStatus = lipgloss.NewStyle().Foreground(chatops.ColWarn)
 )
@@ -67,7 +67,7 @@ type pickerModel struct {
 	titles   []string // pre-computed row titles, same indexing as sessions
 	cursor   int
 	action   pickerAction
-	// chosen is the concrete session the user acted on (enter/c), captured
+	// chosen is the concrete session the user acted on, captured
 	// at the moment of the decision rather than re-derived later from
 	// sessions[cursor]. A batch can still be in flight on p.msgs when the
 	// user decides -- both a sessionBatchMsg and the QuitMsg from tea.Quit
@@ -77,7 +77,11 @@ type pickerModel struct {
 	// looked at. Capturing it here means runPicker never has to re-derive
 	// it from a cursor that may have moved.
 	chosen *model.Session
-	status string
+	// resumeMode is the mode selected for the open or copy action. It also
+	// supplies the default used by enter when the picker was launched
+	// with lazyagent sessions --yolo.
+	resumeMode core.ResumeMode
+	status     string
 	// decided is set the moment updateKey sets a terminal action
 	// (actionOpen/actionCopy/actionQuit). Once true, applyBatch and
 	// applyStreamDone become no-ops: the decision has already been made
@@ -188,45 +192,63 @@ func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = ""
 	case "enter":
-		// During loading the list can still be empty (no batch has arrived
-		// yet): nothing to act on, so no-op rather than index out of range.
-		if len(m.sessions) == 0 {
-			return m, nil
-		}
-		s := m.sessions[m.cursor]
-		switch {
-		case core.ResumeArgv(s.Agent, s.SessionID) != nil:
-			m.action = actionOpen
-			m.chosen = s
-			m.decided = true
-			return m, tea.Quit
-		case core.ResumeCommand(s.Agent, s.SessionID) != "":
-			// Not executable from here, but the command exists: copy it.
-			m.action = actionCopy
-			m.chosen = s
-			m.decided = true
-			return m, tea.Quit
-		default:
-			m.status = fmt.Sprintf("no resume available for %s sessions", s.Agent)
-		}
+		return m.chooseOpen(m.resumeMode)
+	case "n":
+		return m.chooseOpen(core.ResumeNormal)
+	case "y":
+		return m.chooseOpen(core.ResumeYolo)
 	case "c":
-		if len(m.sessions) == 0 {
-			return m, nil
-		}
-		s := m.sessions[m.cursor]
-		if core.ResumeCommand(s.Agent, s.SessionID) != "" {
-			m.action = actionCopy
-			m.chosen = s
-			m.decided = true
-			return m, tea.Quit
-		}
-		m.status = fmt.Sprintf("no resume command for %s sessions", s.Agent)
+		return m.chooseCopy(core.ResumeNormal)
+	case "C":
+		return m.chooseCopy(core.ResumeYolo)
 	case "q", "esc", "ctrl+c":
 		m.action = actionQuit
 		m.decided = true
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m pickerModel) chooseOpen(mode core.ResumeMode) (tea.Model, tea.Cmd) {
+	// During loading the list can still be empty. There is nothing to act on
+	// until the first batch arrives.
+	if len(m.sessions) == 0 {
+		return m, nil
+	}
+	s := m.sessions[m.cursor]
+	if core.ResumeArgvWithMode(s.Agent, s.SessionID, mode) == nil {
+		if mode == core.ResumeYolo && core.ResumeArgv(s.Agent, s.SessionID) != nil {
+			m.status = fmt.Sprintf("no YOLO mode available for %s sessions", s.Agent)
+		} else {
+			m.status = fmt.Sprintf("no resume available for %s sessions", s.Agent)
+		}
+		return m, nil
+	}
+	m.action = actionOpen
+	m.chosen = s
+	m.resumeMode = mode
+	m.decided = true
+	return m, tea.Quit
+}
+
+func (m pickerModel) chooseCopy(mode core.ResumeMode) (tea.Model, tea.Cmd) {
+	if len(m.sessions) == 0 {
+		return m, nil
+	}
+	s := m.sessions[m.cursor]
+	if core.ResumeCommandWithMode(s.Agent, s.SessionID, mode) == "" {
+		if mode == core.ResumeYolo && core.ResumeCommand(s.Agent, s.SessionID) != "" {
+			m.status = fmt.Sprintf("no YOLO mode available for %s sessions", s.Agent)
+		} else {
+			m.status = fmt.Sprintf("no resume command for %s sessions", s.Agent)
+		}
+		return m, nil
+	}
+	m.action = actionCopy
+	m.chosen = s
+	m.resumeMode = mode
+	m.decided = true
+	return m, tea.Quit
 }
 
 // rowBudget returns how many session rows View can render: the terminal
@@ -393,7 +415,10 @@ func (m pickerModel) footerText() string {
 	if m.loading {
 		return fmt.Sprintf("  loading agents… (%d/%d)", m.doneCount, m.total)
 	}
-	return "  ↑/↓ move · enter open · c copy resume cmd · q quit"
+	if m.resumeMode == core.ResumeYolo {
+		return "  ↑/↓ move · enter YOLO · n normal · y YOLO · c/C copy normal/YOLO · q quit"
+	}
+	return "  ↑/↓ move · enter normal · y YOLO · c/C copy normal/YOLO · q quit"
 }
 
 func agentColor(agent string) lipgloss.Color {
@@ -434,14 +459,14 @@ func memberCount(p core.SessionProvider) int {
 // already arrived by the time the picker exited. Run uses it to decide
 // whether saving provider caches is safe — see Run's comment on cache-save
 // timing on the picker path.
-func runPicker(provider core.SessionProvider, match func(string) bool, dir, dirLabel string, names *core.SessionNames) (chosen *model.Session, action pickerAction, streamComplete bool, err error) {
+func runPicker(provider core.SessionProvider, match func(string) bool, dir, dirLabel string, names *core.SessionNames, mode core.ResumeMode) (chosen *model.Session, action pickerAction, resumeMode core.ResumeMode, streamComplete bool, err error) {
 	// dir was already validated by Run (os.Stat + this same targetVariants
 	// call both succeeded there) before runPicker is ever reached, so this
 	// error is not expected in practice; degrade to "nothing matches"
 	// rather than propagate a surprising failure out of the picker.
 	variants, _ := targetVariants(dir)
 
-	m := pickerModel{dirLabel: dirLabel, now: time.Now(), loading: true, total: memberCount(provider)}
+	m := pickerModel{dirLabel: dirLabel, now: time.Now(), loading: true, total: memberCount(provider), resumeMode: mode}
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stderr))
 
 	go func() {
@@ -460,19 +485,19 @@ func runPicker(provider core.SessionProvider, match func(string) bool, dir, dirL
 
 	final, runErr := p.Run()
 	if runErr != nil {
-		return nil, actionQuit, false, fmt.Errorf("session picker: %w", runErr)
+		return nil, actionQuit, core.ResumeNormal, false, fmt.Errorf("session picker: %w", runErr)
 	}
 	res := final.(pickerModel)
 	streamComplete = !res.loading
 	if res.action == actionQuit || res.action == actionEmpty {
-		return nil, res.action, streamComplete, nil
+		return nil, res.action, res.resumeMode, streamComplete, nil
 	}
 	// res.chosen, not res.sessions[res.cursor]: the session was captured at
 	// the moment of the decision (see pickerModel.chosen's doc comment), so
 	// it's correct even if a batch that was already in flight got merged in
 	// afterward (applyBatch is a no-op post-decision, but chosen is what
 	// actually protects the returned session's identity).
-	return res.chosen, res.action, streamComplete, nil
+	return res.chosen, res.action, res.resumeMode, streamComplete, nil
 }
 
 // relTime renders t relative to now, degrading to an absolute date after

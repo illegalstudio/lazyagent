@@ -89,6 +89,20 @@ func TestBuildDetailLines_TruncatesChineseConversationByCells(t *testing.T) {
 	}
 }
 
+func TestBuildDetailLinesIncludesYoloResume(t *testing.T) {
+	session := &model.Session{
+		Agent: "codex", SessionID: "abc", CWD: "/tmp/project", LastActivity: time.Now(),
+	}
+	m := testModel(t, session)
+	lines := strings.Join(m.buildDetailLines(session, 120), "\n")
+	if !strings.Contains(lines, "codex resume abc") {
+		t.Fatal("normal resume command missing from details")
+	}
+	if !strings.Contains(lines, "codex --yolo resume abc") {
+		t.Fatal("YOLO resume command missing from details")
+	}
+}
+
 func TestSearchBackspaceDeletesWholeChineseRune(t *testing.T) {
 	m := testModel(t)
 	m.searchMode = true

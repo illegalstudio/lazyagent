@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 // RunLatest implements `lazyagent latest`. It resumes the most recently
@@ -16,6 +18,7 @@ func RunLatest(args []string) int {
 
 	agent := fs.String("agent", "all", "Agent to consider: claude, pi, opencode, kilo, cursor, codex, amp, grok, kimi, all")
 	dirFlag := fs.String("dir", "", "Resume the latest session for this directory instead of the current one")
+	yolo := fs.Bool("yolo", false, "Use the agent-specific YOLO mode")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent latest — resume the most recent session for a directory
@@ -29,6 +32,7 @@ Usage:
   lazyagent latest
   lazyagent latest --agent claude
   lazyagent latest --dir ~/projects/foo
+  lazyagent latest --yolo
 
 Flags:
 `)
@@ -64,5 +68,9 @@ Flags:
 		return 1
 	}
 
-	return openSession(filtered[0])
+	mode := core.ResumeNormal
+	if *yolo {
+		mode = core.ResumeYolo
+	}
+	return openSession(filtered[0], mode)
 }
