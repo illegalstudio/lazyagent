@@ -57,8 +57,8 @@
     else if (e.key === "Escape") { e.preventDefault(); renaming = false; }
   }
 
-  function resume() {
-    SessionService.ResumeInTerminal(session.sessionId).catch(() => {});
+  function resume(yolo = false) {
+    SessionService.ResumeInTerminal(session.sessionId, yolo).catch(() => {});
   }
   function openEditor() {
     SessionService.OpenInEditor(session.cwd, session.agent).catch(() => {});
@@ -138,11 +138,22 @@
 
   <div class="flex items-center gap-1.5 px-2.5 py-1.5 border-t border-border bg-[#181825]
     {density === 'compact' ? 'hidden group-hover:flex' : ''}">
-    <button
-      class="rounded-md bg-accent/90 hover:bg-accent text-surface text-[10.5px] font-semibold px-2 py-0.5"
-      onclick={resume}
-      title="Resume this session in a new Terminal window"
-    >▶ Resume</button>
+    {#if session.resumeAvailable}
+      <div class="flex overflow-hidden rounded-md">
+        <button
+          class="bg-accent/90 hover:bg-accent text-surface text-[10.5px] font-semibold px-2 py-0.5"
+          onclick={() => resume(false)}
+          title="Resume this session in a new terminal window"
+        >▶ Resume</button>
+        {#if session.yoloResumeAvailable}
+          <button
+            class="border-l border-surface/30 bg-activity-writing/90 hover:bg-activity-writing text-surface text-[9.5px] font-bold px-1.5 py-0.5"
+            onclick={() => resume(true)}
+            title="Resume using this agent's YOLO flag"
+          >YOLO</button>
+        {/if}
+      </div>
+    {/if}
     <button
       class="rounded-md bg-surface-hover hover:bg-surface-active text-text text-[10.5px] px-2 py-0.5"
       onclick={openEditor}

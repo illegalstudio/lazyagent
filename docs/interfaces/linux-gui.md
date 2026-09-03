@@ -28,6 +28,10 @@ The build currently targets GTK3 and WebKitGTK 4.1. Native packages install or r
 
 For Resume and terminal `$EDITOR` actions, the default `terminal` setting follows the desktop preference via `xdg-terminal-exec` when available. Lazyagent then falls back to the Debian alternatives entry and common emulators including Kitty, Ghostty, WezTerm, Alacritty, GNOME Console/Terminal, Konsole, XFCE Terminal, and xterm. Selecting `kitty` in Settings forces Kitty.
 
+Resume actions are available in normal and YOLO variants from session cards,
+the context menu, and session details. YOLO applies the agent-specific
+permissive flag. pi only exposes the normal action.
+
 GUI editors are still launched directly from the configured `editor` command or `$VISUAL`.
 
 ## Tray compatibility

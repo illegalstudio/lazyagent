@@ -148,23 +148,25 @@ func (s *SessionService) emitUpdate() {
 
 // SessionItem is a lightweight session representation for the list view.
 type SessionItem struct {
-	SessionID     string    `json:"sessionId"`
-	Agent         string    `json:"agent"`
-	Source        string    `json:"source"`
-	CWD           string    `json:"cwd"`
-	ShortName     string    `json:"shortName"`
-	AgentName     string    `json:"agentName"`
-	CustomName    string    `json:"customName"`
-	Activity      string    `json:"activity"`
-	IsActive      bool      `json:"isActive"`
-	Model         string    `json:"model"`
-	GitBranch     string    `json:"gitBranch"`
-	CostUSD       float64   `json:"costUsd"`
-	LastActivity  time.Time `json:"lastActivity"`
-	TotalMessages int       `json:"totalMessages"`
-	SparklineData []int     `json:"sparklineData"`
-	CurrentTool   string    `json:"currentTool"`
-	LastMessage   string    `json:"lastMessage"`
+	SessionID           string    `json:"sessionId"`
+	Agent               string    `json:"agent"`
+	Source              string    `json:"source"`
+	CWD                 string    `json:"cwd"`
+	ShortName           string    `json:"shortName"`
+	AgentName           string    `json:"agentName"`
+	CustomName          string    `json:"customName"`
+	Activity            string    `json:"activity"`
+	IsActive            bool      `json:"isActive"`
+	Model               string    `json:"model"`
+	GitBranch           string    `json:"gitBranch"`
+	CostUSD             float64   `json:"costUsd"`
+	LastActivity        time.Time `json:"lastActivity"`
+	TotalMessages       int       `json:"totalMessages"`
+	SparklineData       []int     `json:"sparklineData"`
+	CurrentTool         string    `json:"currentTool"`
+	LastMessage         string    `json:"lastMessage"`
+	ResumeAvailable     bool      `json:"resumeAvailable"`
+	YoloResumeAvailable bool      `json:"yoloResumeAvailable"`
 }
 
 // SessionFull is the detailed session representation.
@@ -188,6 +190,7 @@ type SessionFull struct {
 	PermissionMode      string             `json:"permissionMode,omitempty"`
 	RemoteURL           string             `json:"remoteUrl,omitempty"`
 	ResumeCommand       string             `json:"resumeCommand,omitempty"`
+	ResumeCommandYolo   string             `json:"resumeCommandYolo,omitempty"`
 }
 
 // ToolItem is a tool call for the detail view.
@@ -210,23 +213,25 @@ func (s *SessionService) buildSessionItem(sess *model.Session, activity core.Act
 		source = "desktop"
 	}
 	return SessionItem{
-		SessionID:     sess.SessionID,
-		Agent:         sess.Agent,
-		Source:        source,
-		CWD:           sess.CWD,
-		ShortName:     core.ShortName(sess.CWD, nameLen),
-		AgentName:     sess.Name,
-		CustomName:    s.manager.SessionName(sess.SessionID),
-		Activity:      string(activity),
-		IsActive:      core.IsActiveActivity(activity),
-		Model:         sess.Model,
-		GitBranch:     sess.GitBranch,
-		CostUSD:       core.EffectiveCost(sess.Model, sess.CostUSD, sess.InputTokens, sess.OutputTokens, sess.CacheCreationTokens, sess.CacheReadTokens),
-		LastActivity:  sess.LastActivity,
-		TotalMessages: sess.TotalMessages,
-		SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
-		CurrentTool:   sess.CurrentTool,
-		LastMessage:   lastMessageSnippet(sess),
+		SessionID:           sess.SessionID,
+		Agent:               sess.Agent,
+		Source:              source,
+		CWD:                 sess.CWD,
+		ShortName:           core.ShortName(sess.CWD, nameLen),
+		AgentName:           sess.Name,
+		CustomName:          s.manager.SessionName(sess.SessionID),
+		Activity:            string(activity),
+		IsActive:            core.IsActiveActivity(activity),
+		Model:               sess.Model,
+		GitBranch:           sess.GitBranch,
+		CostUSD:             core.EffectiveCost(sess.Model, sess.CostUSD, sess.InputTokens, sess.OutputTokens, sess.CacheCreationTokens, sess.CacheReadTokens),
+		LastActivity:        sess.LastActivity,
+		TotalMessages:       sess.TotalMessages,
+		SparklineData:       core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
+		CurrentTool:         sess.CurrentTool,
+		LastMessage:         lastMessageSnippet(sess),
+		ResumeAvailable:     core.ResumeArgv(sess.Agent, sess.SessionID) != nil,
+		YoloResumeAvailable: core.YoloResumeArgv(sess.Agent, sess.SessionID) != nil,
 	}
 }
 
@@ -298,6 +303,7 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 	}
 	full.RemoteURL = sess.RemoteURL
 	full.ResumeCommand = core.ResumeCommand(sess.Agent, sess.SessionID)
+	full.ResumeCommandYolo = core.YoloResumeCommand(sess.Agent, sess.SessionID)
 	return full
 }
 
@@ -422,14 +428,17 @@ func (s *SessionService) Refresh() {
 }
 
 // ResumeInTerminal opens a new terminal window in the session's working
-// directory running the agent's resume command. No-op for agents without
-// an executable resume command (core.ResumeArgv returns nil for those).
-func (s *SessionService) ResumeInTerminal(sessionID string) {
+// directory running either the normal or agent-specific YOLO resume command.
+func (s *SessionService) ResumeInTerminal(sessionID string, yolo bool) {
 	detail := s.manager.SessionDetail(sessionID)
 	if detail == nil {
 		return
 	}
-	argv := core.ResumeArgv(detail.Session.Agent, sessionID)
+	mode := core.ResumeNormal
+	if yolo {
+		mode = core.ResumeYolo
+	}
+	argv := core.ResumeArgvWithMode(detail.Session.Agent, sessionID, mode)
 	if argv == nil || detail.Session.CWD == "" {
 		return
 	}

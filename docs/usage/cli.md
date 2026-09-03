@@ -152,8 +152,10 @@ lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
 lazyagent search --agent codex api # search subcommand
 lazyagent sessions --agent codex   # sessions subcommand
+lazyagent sessions --yolo          # picker with YOLO as the default resume mode
 lazyagent history --agent codex    # alias for sessions
 lazyagent latest                   # resume the newest session here
+lazyagent latest --yolo            # resume the newest session in YOLO mode
 lazyagent limits --agent claude    # limits subcommand
 lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
@@ -169,9 +171,10 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 lazyagent search "race condition"
 lazyagent search --agent codex "parser"
 lazyagent search --reindex "config"
+lazyagent search --yolo "config"
 ```
 
-After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions resume with `grok --resume '<session-id>'`. Piped output stays non-interactive.
+After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Add `--yolo` to use the agent-specific permissive variant. Grok sessions resume with `grok --resume '<session-id>'`. Piped output stays non-interactive.
 
 Full reference, including the index location, ranking, and resume commands: [`search`](../maintenance/search.md).
 

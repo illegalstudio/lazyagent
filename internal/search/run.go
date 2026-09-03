@@ -22,6 +22,7 @@ type options struct {
 	snippets int
 	reindex  bool
 	dbPath   string
+	yolo     bool
 }
 
 func Run(args []string) int {
@@ -34,6 +35,7 @@ func Run(args []string) int {
 	fs.IntVar(&opts.snippets, "snippets", 2, "Maximum snippets per chat session")
 	fs.BoolVar(&opts.reindex, "reindex", false, "Rebuild the local search index before searching")
 	fs.StringVar(&opts.dbPath, "db", "", "Override search index path (for testing)")
+	fs.BoolVar(&opts.yolo, "yolo", false, "Use the agent-specific YOLO mode when opening a result")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `lazyagent search — search chat transcripts
@@ -43,6 +45,7 @@ Usage:
   lazyagent search --agent codex "parser bug"
   lazyagent search --agent grok "parser bug"
   lazyagent search --agent kimi "parser bug"
+  lazyagent search --yolo "parser bug"
 
 If query is omitted, lazyagent prompts for it.
 
@@ -105,7 +108,11 @@ Flags:
 		results = results[:opts.limit]
 	}
 	renderResults(results, query)
-	if code := promptOpenResult(results); code != 0 {
+	mode := core.ResumeNormal
+	if opts.yolo {
+		mode = core.ResumeYolo
+	}
+	if code := promptOpenResult(results, mode); code != 0 {
 		return code
 	}
 	return 0
@@ -166,6 +173,8 @@ func normalizeArgs(args []string) []string {
 	boolFlags := map[string]bool{
 		"-reindex":  true,
 		"--reindex": true,
+		"-yolo":     true,
+		"--yolo":    true,
 		"-h":        true,
 		"--help":    true,
 	}
@@ -192,11 +201,15 @@ func normalizeArgs(args []string) []string {
 	return append(flags, query...)
 }
 
-func promptOpenResult(results []sessionResult) int {
+func promptOpenResult(results []sessionResult, mode core.ResumeMode) int {
 	if len(results) == 0 || !isatty.IsTerminal(os.Stdin.Fd()) || !isatty.IsTerminal(os.Stdout.Fd()) {
 		return 0
 	}
-	fmt.Printf("\n%s ", chatops.StyleMuted.Render("Open a chat? Enter result #, or press Enter to quit:"))
+	prompt := "Open a chat? Enter result #, or press Enter to quit:"
+	if mode == core.ResumeYolo {
+		prompt = "Open a chat in YOLO mode? Enter result #, or press Enter to quit:"
+	}
+	fmt.Printf("\n%s ", chatops.StyleMuted.Render(prompt))
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil {
@@ -211,13 +224,17 @@ func promptOpenResult(results []sessionResult) int {
 		fmt.Fprintf(os.Stderr, "Invalid selection %q.\n", answer)
 		return 2
 	}
-	return openResult(results[n-1])
+	return openResult(results[n-1], mode)
 }
 
-func openResult(result sessionResult) int {
-	cmd, display := resumeCommand(result.Agent, result.SessionID)
+func openResult(result sessionResult, mode core.ResumeMode) int {
+	cmd, display := resumeCommand(result.Agent, result.SessionID, mode)
 	if cmd == nil {
-		fmt.Fprintf(os.Stderr, "No resume command available for %s sessions.\n", result.Agent)
+		if mode == core.ResumeYolo && core.ResumeArgv(result.Agent, result.SessionID) != nil {
+			fmt.Fprintf(os.Stderr, "No YOLO resume mode available for %s sessions.\n", result.Agent)
+		} else {
+			fmt.Fprintf(os.Stderr, "No resume command available for %s sessions.\n", result.Agent)
+		}
 		return 1
 	}
 	if result.CWD != "" {
@@ -236,10 +253,10 @@ func openResult(result sessionResult) int {
 	return 0
 }
 
-func resumeCommand(agent, sessionID string) (*exec.Cmd, string) {
-	argv := core.ResumeArgv(agent, sessionID)
+func resumeCommand(agent, sessionID string, mode core.ResumeMode) (*exec.Cmd, string) {
+	argv := core.ResumeArgvWithMode(agent, sessionID, mode)
 	if argv == nil {
 		return nil, ""
 	}
-	return exec.Command(argv[0], argv[1:]...), core.ResumeCommand(agent, sessionID)
+	return exec.Command(argv[0], argv[1:]...), core.ResumeCommandWithMode(agent, sessionID, mode)
 }

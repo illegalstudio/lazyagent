@@ -113,10 +113,10 @@ Subcommands:
   lazyagent compact --help      Show compact options (--threshold-kb, --dry-run, ...)
   lazyagent search "query"      Search chat transcripts with highlighted snippets
   lazyagent sessions            List sessions for the current directory and reopen one
-  lazyagent sessions --help     Show sessions options (--agent, --json, --dir)
+  lazyagent sessions --help     Show sessions options (--agent, --json, --dir, --yolo)
   lazyagent history             Alias for lazyagent sessions
   lazyagent latest              Resume the most recent session for the current directory
-  lazyagent latest --help       Show latest options (--agent, --dir)
+  lazyagent latest --help       Show latest options (--agent, --dir, --yolo)
   lazyagent limits              Show rate-limit / billing usage summary
   lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|all, --detailed)
   lazyagent passphrase          Set or rotate the HTTP API passphrase
@@ -130,6 +130,7 @@ TUI keybindings:
   ↑/k, ↓/j    Navigate sessions       tab       Switch panel focus
   +/-          Adjust time window       f         Cycle activity filter
   /            Search by project path   o         Open in editor ($VISUAL)
+  c/C          Copy normal/YOLO resume command
   l            Open limits              r         Rename / refresh limits
   q/ctrl+c     Quit
 

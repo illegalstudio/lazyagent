@@ -95,7 +95,7 @@ type Model struct {
 
 	// Inline "copied!" indicator
 	copiedAt    time.Time
-	copiedField string // "remote" or "resume"
+	copiedField string // "remote", "resume", or "resume-yolo"
 
 	// Update notification shown in footer
 	updateVersion string
@@ -120,35 +120,37 @@ type Model struct {
 }
 
 type keyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Tab    key.Binding
-	Quit   key.Binding
-	Rename key.Binding
-	Plus   key.Binding
-	Minus  key.Binding
-	Filter key.Binding
-	Search key.Binding
-	Esc    key.Binding
-	Open   key.Binding
-	Copy   key.Binding
-	Limits key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	Tab      key.Binding
+	Quit     key.Binding
+	Rename   key.Binding
+	Plus     key.Binding
+	Minus    key.Binding
+	Filter   key.Binding
+	Search   key.Binding
+	Esc      key.Binding
+	Open     key.Binding
+	Copy     key.Binding
+	CopyYolo key.Binding
+	Limits   key.Binding
 }
 
 var keys = keyMap{
-	Up:     key.NewBinding(key.WithKeys("up", "k")),
-	Down:   key.NewBinding(key.WithKeys("down", "j")),
-	Tab:    key.NewBinding(key.WithKeys("tab")),
-	Quit:   key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Rename: key.NewBinding(key.WithKeys("r")),
-	Plus:   key.NewBinding(key.WithKeys("+", "=")),
-	Minus:  key.NewBinding(key.WithKeys("-")),
-	Filter: key.NewBinding(key.WithKeys("f")),
-	Search: key.NewBinding(key.WithKeys("/")),
-	Esc:    key.NewBinding(key.WithKeys("esc")),
-	Open:   key.NewBinding(key.WithKeys("o")),
-	Copy:   key.NewBinding(key.WithKeys("c")),
-	Limits: key.NewBinding(key.WithKeys("l")),
+	Up:       key.NewBinding(key.WithKeys("up", "k")),
+	Down:     key.NewBinding(key.WithKeys("down", "j")),
+	Tab:      key.NewBinding(key.WithKeys("tab")),
+	Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c")),
+	Rename:   key.NewBinding(key.WithKeys("r")),
+	Plus:     key.NewBinding(key.WithKeys("+", "=")),
+	Minus:    key.NewBinding(key.WithKeys("-")),
+	Filter:   key.NewBinding(key.WithKeys("f")),
+	Search:   key.NewBinding(key.WithKeys("/")),
+	Esc:      key.NewBinding(key.WithKeys("esc")),
+	Open:     key.NewBinding(key.WithKeys("o")),
+	Copy:     key.NewBinding(key.WithKeys("c")),
+	CopyYolo: key.NewBinding(key.WithKeys("C")),
+	Limits:   key.NewBinding(key.WithKeys("l")),
 }
 
 func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
@@ -567,6 +569,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.copiedAt = time.Now()
 						m.copiedField = "resume"
 					}
+				}
+			}
+
+		case key.Matches(msg, keys.CopyYolo):
+			if len(m.visible) > 0 && m.cursor < len(m.visible) {
+				s := m.visible[m.cursor]
+				if cmd := core.YoloResumeCommand(s.Agent, s.SessionID); cmd != "" {
+					if core.CopyToClipboard(cmd) == nil {
+						m.copiedAt = time.Now()
+						m.copiedField = "resume-yolo"
+					}
+				} else if core.ResumeCommand(s.Agent, s.SessionID) != "" {
+					m.flashMsg = fmt.Sprintf("No YOLO resume mode available for %s sessions.", s.Agent)
 				}
 			}
 
@@ -1159,6 +1174,13 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 		}
 		add(row("Resume", resumeVal))
 	}
+	if cmd := core.YoloResumeCommand(s.Agent, s.SessionID); cmd != "" {
+		resumeVal := lipgloss.NewStyle().Foreground(m.theme.Warning).Render(cmd)
+		if m.copiedField == "resume-yolo" && time.Since(m.copiedAt) < 2*time.Second {
+			resumeVal += lipgloss.NewStyle().Foreground(m.theme.Muted).Render("  copied!")
+		}
+		add(row("Resume YOLO", resumeVal))
+	}
 
 	wtStr := "no"
 	if s.IsWorktree {
@@ -1289,7 +1311,7 @@ func (m Model) renderHelp() string {
 		m.sty.helpKey.Render("l")+m.sty.help.Render(" limits"),
 		m.sty.helpKey.Render("/")+m.sty.help.Render(" search"),
 		m.sty.helpKey.Render("o")+m.sty.help.Render(" open"),
-		m.sty.helpKey.Render("c")+m.sty.help.Render(" copy cmd"),
+		m.sty.helpKey.Render("c/C")+m.sty.help.Render(" copy normal/YOLO"),
 		m.sty.helpKey.Render("r")+m.sty.help.Render(" rename"),
 		m.sty.helpKey.Render("q")+m.sty.help.Render(" quit"),
 	)

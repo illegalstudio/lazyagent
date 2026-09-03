@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 func TestFTSQuery(t *testing.T) {
@@ -77,6 +79,14 @@ func TestNormalizeArgsAllowsFlagsAfterQuery(t *testing.T) {
 	}
 }
 
+func TestNormalizeArgsHoistsYoloAfterQuery(t *testing.T) {
+	got := strings.Join(normalizeArgs([]string{"code", "review", "--yolo"}), " ")
+	want := "--yolo code review"
+	if got != want {
+		t.Fatalf("normalizeArgs() = %q, want %q", got, want)
+	}
+}
+
 func TestResumeCommand(t *testing.T) {
 	tests := []struct {
 		agent, executable, wantArgs, wantDisplay string
@@ -86,7 +96,7 @@ func TestResumeCommand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.agent, func(t *testing.T) {
-			cmd, display := resumeCommand(tt.agent, "abc123")
+			cmd, display := resumeCommand(tt.agent, "abc123", core.ResumeNormal)
 			if cmd == nil {
 				t.Fatal("resumeCommand returned nil")
 			}
@@ -101,5 +111,18 @@ func TestResumeCommand(t *testing.T) {
 				t.Fatalf("display = %q, want %q", display, tt.wantDisplay)
 			}
 		})
+	}
+}
+
+func TestYoloResumeCommand(t *testing.T) {
+	cmd, display := resumeCommand("cursor", "abc123", core.ResumeYolo)
+	if cmd == nil {
+		t.Fatal("resumeCommand returned nil")
+	}
+	if got := strings.Join(cmd.Args, " "); got != "cursor-agent --force --resume=abc123" {
+		t.Fatalf("args = %q", got)
+	}
+	if display != `cursor-agent --force --resume="abc123"` {
+		t.Fatalf("display = %q", display)
 	}
 }

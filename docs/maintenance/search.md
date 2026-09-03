@@ -14,7 +14,7 @@ It works with the agents that store transcripts as plain text files: **Claude Co
 ```
 lazyagent search [QUERY] [--agent LIST]
                  [--limit N] [--snippets N]
-                 [--reindex]
+                 [--reindex] [--yolo]
 ```
 
 `QUERY` is the search expression. If omitted in an interactive terminal, lazyagent prompts for it; piped input is read from stdin instead.
@@ -27,6 +27,7 @@ lazyagent search [QUERY] [--agent LIST]
 | `--limit N` | int | `20` | Maximum chat sessions to show |
 | `--snippets N` | int | `2` | Maximum snippet lines per session |
 | `--reindex` | bool | `false` | Drop the local index and rebuild it before searching |
+| `--yolo` | bool | `false` | Open the selected result with the agent-specific YOLO mode |
 | `--db PATH` | string | *unset* | Override the index file location (testing only) |
 
 ## Quick reference
@@ -38,6 +39,7 @@ lazyagent search --agent claude,codex,kimi "auth" # subset
 lazyagent search --limit 5 "regex"              # tighter result list
 lazyagent search --snippets 4 "OAuth"           # more context per session
 lazyagent search --reindex "config"             # force a full rebuild
+lazyagent search --yolo "config"                # open the selected result in YOLO mode
 echo "deadlock" | lazyagent search              # query from stdin
 ```
 
@@ -76,6 +78,10 @@ Type a 1-based result number to open that session in the originating agent when 
 | pi | `pi --session <session-id>` |
 | grok | `grok --resume '<session-id>'` |
 | kimi | `kimi --resume <session-id>` |
+
+With `--yolo`, the prompt explicitly says that the selected result will open
+in YOLO mode and lazyagent adds the appropriate flag. pi has no distinct YOLO
+mode, so selecting a pi result reports that the mode is unavailable.
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
 

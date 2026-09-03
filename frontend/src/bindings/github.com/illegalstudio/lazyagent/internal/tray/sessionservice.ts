@@ -186,11 +186,10 @@ export function Refresh(): $CancellablePromise<void> {
 
 /**
  * ResumeInTerminal opens a new terminal window in the session's working
- * directory running the agent's resume command. No-op for agents without
- * an executable resume command (core.ResumeArgv returns nil for those).
+ * directory running either the normal or agent-specific YOLO resume command.
  */
-export function ResumeInTerminal(sessionID: string): $CancellablePromise<void> {
-    return $Call.ByID(1408127766, sessionID);
+export function ResumeInTerminal(sessionID: string, yolo: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1408127766, sessionID, yolo);
 }
 
 /**

@@ -284,9 +284,14 @@ Full details for a single session.
     {"role": "user", "text": "Add the API endpoint", "timestamp": "2026-03-08T15:28:00Z"},
     {"role": "assistant", "text": "I'll create the endpoint...", "timestamp": "2026-03-08T15:28:05Z"}
   ],
-  "resume_command": "claude --resume abc123"
+  "resume_command": "claude --resume abc123",
+  "resume_command_yolo": "claude --dangerously-skip-permissions --resume abc123"
 }
 ```
+
+`resume_command` remains the normal, backward-compatible command.
+`resume_command_yolo` contains the agent-specific permissive variant
+and is omitted when the agent has no distinct YOLO mode, as with pi.
 
 The `timestamp` field in `recent_tools` and `recent_messages` is optional and omitted when the time is unknown. Agents such as Grok record no per-item timestamp in their transcripts; only the most recent tool call and the most recent message carry a timestamp (the session's last-activity time — the best available).
 

@@ -132,7 +132,7 @@ sidebar:
 - ✅ Cross-platform clipboard support (macOS, Wayland, X11)
 - ✅ <kbd>c</kbd> key in TUI to copy resume command to clipboard
 - ✅ Resume command shown in GUI session detail with copy button
-- ✅ `resume_command` field in REST API session detail response
+- ✅ `resume_command` and `resume_command_yolo` fields in REST API session detail response
 
 ## v0.8.3 — Amp remote sync
 
