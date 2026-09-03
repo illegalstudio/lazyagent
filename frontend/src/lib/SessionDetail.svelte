@@ -25,6 +25,18 @@
     }
   }
 
+  function resume(yolo = false) {
+    if (detail) {
+      SessionService.ResumeInTerminal(detail.sessionId, yolo).catch(() => {});
+    }
+  }
+
+  function copyResume(yolo = false) {
+    if (!detail) return;
+    const command = yolo ? detail.resumeCommandYolo : detail.resumeCommand;
+    if (command) Clipboard.SetText(command).catch(() => {});
+  }
+
   function startRename() {
     if (!detail) return;
     renaming = true;
@@ -185,11 +197,38 @@
         {#if detail.resumeCommand}
           <dt class="text-subtext">Resume</dt>
           <dd class="text-text truncate flex items-center gap-1">
-            <code class="text-accent text-[11px]">{detail.resumeCommand}</code>
+            <code class="min-w-0 truncate text-accent text-[11px]">{detail.resumeCommand}</code>
             <button
-              class="rounded px-1.5 py-0.5 text-[10px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
-              onclick={() => Clipboard.SetText(detail.resumeCommand)}
+              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
+              onclick={() => resume(false)}
+              title="Resume in a new terminal window"
+            >
+              Open
+            </button>
+            <button
+              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
+              onclick={() => copyResume(false)}
               title="Copy resume command"
+            >
+              Copy
+            </button>
+          </dd>
+        {/if}
+        {#if detail.resumeCommandYolo}
+          <dt class="text-activity-writing">Resume YOLO</dt>
+          <dd class="text-text truncate flex items-center gap-1">
+            <code class="min-w-0 truncate text-activity-writing text-[11px]">{detail.resumeCommandYolo}</code>
+            <button
+              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-activity-writing bg-activity-writing/10 hover:bg-activity-writing/20 transition-colors no-drag"
+              onclick={() => resume(true)}
+              title="Resume using this agent's YOLO flag"
+            >
+              Open
+            </button>
+            <button
+              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-activity-writing bg-activity-writing/10 hover:bg-activity-writing/20 transition-colors no-drag"
+              onclick={() => copyResume(true)}
+              title="Copy YOLO resume command"
             >
               Copy
             </button>

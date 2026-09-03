@@ -18,6 +18,8 @@ export interface SessionItem {
   source: string;
   currentTool: string;
   lastMessage: string;
+  resumeAvailable: boolean;
+  yoloResumeAvailable: boolean;
 }
 
 export interface SessionFull extends SessionItem {
@@ -34,6 +36,8 @@ export interface SessionFull extends SessionItem {
   lastFileWriteAt: string;
   recentTools: { name: string; timestamp: string; ago: string }[];
   recentMessages: { role: string; text: string; timestamp: string }[];
+  resumeCommand?: string;
+  resumeCommandYolo?: string;
 }
 
 export const sessions = writable<SessionItem[]>([]);

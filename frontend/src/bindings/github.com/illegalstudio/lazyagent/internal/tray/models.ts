@@ -62,6 +62,8 @@ export class SessionFull {
     "sparklineData": number[];
     "currentTool": string;
     "lastMessage": string;
+    "resumeAvailable": boolean;
+    "yoloResumeAvailable": boolean;
     "version": string;
     "isWorktree": boolean;
     "mainRepo": string;
@@ -80,6 +82,7 @@ export class SessionFull {
     "permissionMode"?: string;
     "remoteUrl"?: string;
     "resumeCommand"?: string;
+    "resumeCommandYolo"?: string;
 
     /** Creates a new SessionFull instance. */
     constructor($$source: Partial<SessionFull> = {}) {
@@ -134,6 +137,12 @@ export class SessionFull {
         if (!("lastMessage" in $$source)) {
             this["lastMessage"] = "";
         }
+        if (!("resumeAvailable" in $$source)) {
+            this["resumeAvailable"] = false;
+        }
+        if (!("yoloResumeAvailable" in $$source)) {
+            this["yoloResumeAvailable"] = false;
+        }
         if (!("version" in $$source)) {
             this["version"] = "";
         }
@@ -182,17 +191,17 @@ export class SessionFull {
      */
     static createFrom($$source: any = {}): SessionFull {
         const $$createField14_0 = $$createType0;
-        const $$createField28_0 = $$createType2;
-        const $$createField29_0 = $$createType4;
+        const $$createField30_0 = $$createType2;
+        const $$createField31_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
             $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
         }
         if ("recentTools" in $$parsedSource) {
-            $$parsedSource["recentTools"] = $$createField28_0($$parsedSource["recentTools"]);
+            $$parsedSource["recentTools"] = $$createField30_0($$parsedSource["recentTools"]);
         }
         if ("recentMessages" in $$parsedSource) {
-            $$parsedSource["recentMessages"] = $$createField29_0($$parsedSource["recentMessages"]);
+            $$parsedSource["recentMessages"] = $$createField31_0($$parsedSource["recentMessages"]);
         }
         return new SessionFull($$parsedSource as Partial<SessionFull>);
     }
@@ -219,6 +228,8 @@ export class SessionItem {
     "sparklineData": number[];
     "currentTool": string;
     "lastMessage": string;
+    "resumeAvailable": boolean;
+    "yoloResumeAvailable": boolean;
 
     /** Creates a new SessionItem instance. */
     constructor($$source: Partial<SessionItem> = {}) {
@@ -272,6 +283,12 @@ export class SessionItem {
         }
         if (!("lastMessage" in $$source)) {
             this["lastMessage"] = "";
+        }
+        if (!("resumeAvailable" in $$source)) {
+            this["resumeAvailable"] = false;
+        }
+        if (!("yoloResumeAvailable" in $$source)) {
+            this["yoloResumeAvailable"] = false;
         }
 
         Object.assign(this, $$source);
