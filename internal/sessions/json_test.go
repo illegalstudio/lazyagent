@@ -40,6 +40,9 @@ func TestWriteJSONFields(t *testing.T) {
 	if e["resume_command"] != "claude --resume abc" {
 		t.Errorf("resume_command = %v", e["resume_command"])
 	}
+	if e["resume_command_yolo"] != "claude --dangerously-skip-permissions --resume abc" {
+		t.Errorf("resume_command_yolo = %v", e["resume_command_yolo"])
+	}
 	if _, ok := e["last_activity"]; !ok {
 		t.Error("missing last_activity")
 	}
@@ -51,7 +54,7 @@ func TestWriteJSONAllFieldsPresentEvenWhenEmpty(t *testing.T) {
 		{Agent: "grok", SessionID: "g1", CWD: "/proj/grok", LastActivity: last, TotalMessages: 1},
 		{Agent: "claude", SessionID: "c1", CWD: "/proj/claude", LastActivity: last, TotalMessages: 2},
 	}
-	wantKeys := []string{"agent", "session_id", "name", "cwd", "last_activity", "messages", "resume_command"}
+	wantKeys := []string{"agent", "session_id", "name", "cwd", "last_activity", "messages", "resume_command", "resume_command_yolo"}
 	var buf bytes.Buffer
 	// nameFor returns "" for every session (unnamed), exercising the omitted-name case too.
 	if err := writeJSON(&buf, list, func(*model.Session) string { return "" }); err != nil {
@@ -84,6 +87,9 @@ func TestWriteJSONAllFieldsPresentEvenWhenEmpty(t *testing.T) {
 	}
 	if out[0]["resume_command"] != "grok --resume 'g1'" {
 		t.Errorf("grok row resume_command = %v, want grok --resume 'g1'", out[0]["resume_command"])
+	}
+	if out[0]["resume_command_yolo"] != "grok --yolo --resume 'g1'" {
+		t.Errorf("grok row resume_command_yolo = %v", out[0]["resume_command_yolo"])
 	}
 	if out[1]["name"] != "" {
 		t.Errorf("claude row name = %v, want empty string", out[1]["name"])

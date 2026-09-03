@@ -489,6 +489,7 @@ type SessionFull struct {
 	PermissionMode      string             `json:"permission_mode,omitempty"`
 	RemoteURL           string             `json:"remote_url,omitempty"`
 	ResumeCommand       string             `json:"resume_command,omitempty"`
+	ResumeCommandYolo   string             `json:"resume_command_yolo,omitempty"`
 }
 
 // ToolItem represents a recent tool call.
@@ -601,6 +602,7 @@ func (s *Server) buildSessionFull(detail *core.SessionDetailView) SessionFull {
 		PermissionMode:      desktopPermission(sess),
 		RemoteURL:           sess.RemoteURL,
 		ResumeCommand:       core.ResumeCommand(sess.Agent, sess.SessionID),
+		ResumeCommandYolo:   core.YoloResumeCommand(sess.Agent, sess.SessionID),
 	}
 }
 

@@ -247,6 +247,30 @@ func TestGetSessionNotFound(t *testing.T) {
 	}
 }
 
+func TestGetSessionIncludesNormalAndYoloResumeCommands(t *testing.T) {
+	now := time.Now()
+	_, ts := newTestServerWithSessions(t, []*model.Session{{
+		Agent: "claude", SessionID: "abc", CWD: t.TempDir(), LastActivity: now,
+	}})
+	defer ts.Close()
+
+	resp := authedGet(t, ts.URL+"/api/sessions/abc")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var detail SessionFull
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if detail.ResumeCommand != "claude --resume abc" {
+		t.Fatalf("resume command = %q", detail.ResumeCommand)
+	}
+	if detail.ResumeCommandYolo != "claude --dangerously-skip-permissions --resume abc" {
+		t.Fatalf("YOLO resume command = %q", detail.ResumeCommandYolo)
+	}
+}
+
 func TestGetStats(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
