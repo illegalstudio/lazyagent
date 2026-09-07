@@ -163,6 +163,7 @@ lazyagent history            Alias for lazyagent sessions
 lazyagent latest             Resume the most recent session here
 lazyagent latest --yolo      Resume the most recent session in YOLO mode
 lazyagent limits             Show 5h / weekly / monthly usage summary
+lazyagent limits --json      Same data as JSON, for scripts and widgets
 lazyagent passphrase         Set or rotate the HTTP API passphrase
 lazyagent --help             Show full help
 ```

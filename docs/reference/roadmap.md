@@ -175,6 +175,7 @@ sidebar:
 - ✅ Kimi Code via `/coding/v1/usages` on `api.kimi.com`, token resolved from `KIMI_CODE_OAUTH_TOKEN` / `~/.kimi-code/credentials/kimi-code.json`
 - ✅ Cursor via `/api/usage-summary` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the Auto/Composer and usage-based API pools as two rows against Cursor's own per-pool percentages
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
+- ✅ `lazyagent limits --json` — stable machine-readable report (windows, pace, severity, reset times, per-agent errors) for widgets and scripts
 
 ## v0.10 — Outbound webhooks
 

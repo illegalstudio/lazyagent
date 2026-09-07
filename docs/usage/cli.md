@@ -10,7 +10,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
-- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
+- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace or `--json` for scripts
 - [`lazyagent sessions`](sessions.md) — list sessions for the current directory and reopen one
 
 ## Synopsis
@@ -180,7 +180,7 @@ Full reference, including the index location, ranking, and resume commands: [`se
 
 ### `limits`
 
-`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two monthly rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
+`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`); `--json` prints the same data, plus per-agent errors, as one JSON object for scripts and status-bar widgets. Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two monthly rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
 ```bash
 lazyagent limits                 # summary table for all supported limits providers
@@ -190,6 +190,7 @@ lazyagent limits --agent codex   # only Codex
 lazyagent limits --agent grok    # only Grok
 lazyagent limits --agent kimi    # only Kimi Code
 lazyagent limits --agent cursor  # only Cursor (Models + API pools)
+lazyagent limits --json          # machine-readable report for scripts and widgets
 ```
 
 Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls. Cursor data comes from `/api/usage-summary` on `cursor.com` — the same endpoint the Cursor dashboard uses for its usage headline — read with the session token from Cursor's local `state.vscdb`; it reports the Auto/Composer and usage-based API pools as separate percentages, shown as two rows.

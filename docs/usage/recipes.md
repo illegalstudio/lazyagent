@@ -60,6 +60,7 @@ lazyagent limits --agent claude  # just Claude
 lazyagent limits --agent grok    # just Grok (monthly billing)
 lazyagent limits --agent kimi    # just Kimi Code
 lazyagent limits --agent cursor  # just Cursor (Models + API pools)
+lazyagent limits --json          # the same data as JSON, for scripts and widgets
 ```
 
 In the `--detailed` output, the `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
