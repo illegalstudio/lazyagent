@@ -194,6 +194,7 @@ sidebar:
 - ✅ Native DEB, RPM, and Arch packages with desktop/AppStream metadata
 - ✅ Portable AppImage artifact
 - ✅ GitHub release CI built against the Ubuntu 22.04 compatibility baseline
+- ✅ Cursor session discovery and `lazyagent limits` on Linux and Windows, reading `state.vscdb` from the platform's VS Code user-data location instead of the macOS path
 
 ## Future ideas
 

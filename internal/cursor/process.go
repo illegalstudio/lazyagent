@@ -47,15 +47,6 @@ func NewSessionCache() *SessionCache {
 	return &SessionCache{entries: make(map[string]*cachedSession)}
 }
 
-// stateDBPath returns the path to Cursor's global state.vscdb.
-func stateDBPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb")
-}
-
 // StateDBDir returns the directory containing state.vscdb for WatchDirs.
 func StateDBDir() string {
 	p := stateDBPath()

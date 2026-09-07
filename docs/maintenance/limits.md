@@ -283,7 +283,7 @@ The response carries a top-level `usage` quota plus zero or more rolling `limits
 
 Cursor is the odd one out: it's an IDE, not a CLI, so its usage lives in the web dashboard rather than a `/status` endpoint. lazyagent reads it the way Cursor's own dashboard does — with the session token Cursor stores locally.
 
-Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
+Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring, under `~/Library/Application Support/Cursor` on macOS, `~/.config/Cursor` on Linux, or `%APPDATA%\Cursor` on Windows): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
 
 With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
 
