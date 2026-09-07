@@ -12,10 +12,9 @@ import (
 // through here, so a wrong platform path hides Cursor entirely rather than
 // producing an error.
 func stateDBPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
+	// The home directory is only needed on macOS and Linux; a failed lookup
+	// must not hide an APPDATA-based Windows path.
+	home, _ := os.UserHomeDir()
 	return stateDBPathFor(runtime.GOOS, home, os.Getenv("XDG_CONFIG_HOME"), os.Getenv("APPDATA"))
 }
 
@@ -25,13 +24,15 @@ func stateDBPath() string {
 //   - macOS:   ~/Library/Application Support/Cursor
 //   - Linux:   $XDG_CONFIG_HOME/Cursor, defaulting to ~/.config/Cursor
 //   - Windows: %APPDATA%\Cursor
+//
+// It returns "" when the input that platform depends on is missing.
 func stateDBPathFor(goos, home, xdgConfigHome, appData string) string {
-	if home == "" {
-		return ""
-	}
 	var base string
 	switch goos {
 	case "darwin":
+		if home == "" {
+			return ""
+		}
 		base = filepath.Join(home, "Library", "Application Support", "Cursor")
 	case "windows":
 		if appData == "" {
@@ -40,6 +41,9 @@ func stateDBPathFor(goos, home, xdgConfigHome, appData string) string {
 		base = filepath.Join(appData, "Cursor")
 	default:
 		if xdgConfigHome == "" {
+			if home == "" {
+				return ""
+			}
 			xdgConfigHome = filepath.Join(home, ".config")
 		}
 		base = filepath.Join(xdgConfigHome, "Cursor")

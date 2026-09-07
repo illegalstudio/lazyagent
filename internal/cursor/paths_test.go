@@ -22,7 +22,10 @@ func TestStateDBPathFor(t *testing.T) {
 		{"freebsd follows linux", "freebsd", "/home/me", "", "", filepath.Join("/home/me", ".config", tail)},
 		{"windows", "windows", `C:\Users\me`, "", `C:\Users\me\AppData\Roaming`, filepath.Join(`C:\Users\me\AppData\Roaming`, tail)},
 		{"windows without APPDATA", "windows", `C:\Users\me`, "", "", ""},
-		{"no home", "linux", "", "", "", ""},
+		{"windows without home still uses APPDATA", "windows", "", "", `C:\Users\me\AppData\Roaming`, filepath.Join(`C:\Users\me\AppData\Roaming`, tail)},
+		{"linux without home but with XDG_CONFIG_HOME", "linux", "", "/etc/xdg-home", "", filepath.Join("/etc/xdg-home", tail)},
+		{"linux without home", "linux", "", "", "", ""},
+		{"darwin without home", "darwin", "", "", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
