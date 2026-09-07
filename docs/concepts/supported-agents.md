@@ -11,7 +11,7 @@ lazyagent supports ten agent sources out of the box. Each has a dedicated provid
 |-------|------|--------|--------|
 | [Claude Code CLI](https://claude.ai/code) | `~/.claude/projects/*/` | JSONL | — |
 | [Claude Code Desktop](https://claude.ai/code) | `~/.claude/projects/*/` + `~/Library/Application Support/Claude/claude-code-sessions/` | JSONL + JSON sidecar | `D` |
-| [Cursor](https://cursor.com/) | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` | SQLite | `C` |
+| [Cursor](https://cursor.com/) | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (macOS), `~/.config/Cursor/User/globalStorage/state.vscdb` (Linux), `%APPDATA%\Cursor\User\globalStorage\state.vscdb` (Windows) | SQLite | `C` |
 | [Codex CLI](https://developers.openai.com/codex/) | `~/.codex/sessions/YYYY/MM/DD/*.jsonl` + `~/.codex/session_index.jsonl` | JSONL | `X` |
 | [Amp CLI](https://ampcode.com/) | `~/.local/share/amp/threads/*.json` | Per-thread JSON | `A` |
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
@@ -51,7 +51,7 @@ Extra Claude base directories (e.g. when `CLAUDE_CONFIG_DIR` points elsewhere) c
 
 ### Cursor
 
-Cursor stores everything in a single SQLite database (`state.vscdb`) as key-value entries: `composerData:<id>` for session metadata and `bubbleId:<id>:<bubble>` for message blocks. lazyagent polls this file every 3 seconds (no file watcher — WAL-mode writes don't trigger fsevents cleanly) and invalidates its cache based on journal position.
+Cursor stores everything in a single SQLite database (`state.vscdb`) as key-value entries. The database lives where VS Code keeps user data on each platform: `~/Library/Application Support/Cursor` on macOS, `$XDG_CONFIG_HOME/Cursor` (default `~/.config/Cursor`) on Linux, and `%APPDATA%\Cursor` on Windows, always under `User/globalStorage/`. The entries are `composerData:<id>` for session metadata and `bubbleId:<id>:<bubble>` for message blocks. lazyagent polls this file every 3 seconds (no file watcher — WAL-mode writes don't trigger fsevents cleanly) and invalidates its cache based on journal position.
 
 CWD is inferred from the Cursor workspace URI if available, otherwise from the first file path mentioned in the session.
 

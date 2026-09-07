@@ -175,6 +175,7 @@ sidebar:
 - ✅ Kimi Code via `/coding/v1/usages` on `api.kimi.com`, token resolved from `KIMI_CODE_OAUTH_TOKEN` / `~/.kimi-code/credentials/kimi-code.json`
 - ✅ Cursor via `/api/usage-summary` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the Auto/Composer and usage-based API pools as two rows against Cursor's own per-pool percentages
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
+- ✅ `lazyagent limits --json` — stable machine-readable report (windows, pace, severity, reset times, per-agent errors) for widgets and scripts
 
 ## v0.10 — Outbound webhooks
 
@@ -193,6 +194,7 @@ sidebar:
 - ✅ Native DEB, RPM, and Arch packages with desktop/AppStream metadata
 - ✅ Portable AppImage artifact
 - ✅ GitHub release CI built against the Ubuntu 22.04 compatibility baseline
+- ✅ Cursor session discovery and `lazyagent limits` on Linux and Windows, reading `state.vscdb` from the platform's VS Code user-data location instead of the macOS path
 
 ## Future ideas
 

@@ -118,7 +118,7 @@ Subcommands:
   lazyagent latest              Resume the most recent session for the current directory
   lazyagent latest --help       Show latest options (--agent, --dir, --yolo)
   lazyagent limits              Show rate-limit / billing usage summary
-  lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|all, --detailed)
+  lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|cursor|all, --detailed, --json)
   lazyagent passphrase          Set or rotate the HTTP API passphrase
   lazyagent passphrase --show   Print the current bearer token without prompting
 

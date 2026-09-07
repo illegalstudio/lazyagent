@@ -16,7 +16,7 @@ The same limits are viewable interactively without leaving lazyagent: in the **T
 ## Synopsis
 
 ```
-lazyagent limits [--agent claude|codex|grok|kimi|cursor|all] [--detailed]
+lazyagent limits [--agent claude|codex|grok|kimi|cursor|all] [--detailed] [--json]
 ```
 
 ## Flags
@@ -25,6 +25,7 @@ lazyagent limits [--agent claude|codex|grok|kimi|cursor|all] [--detailed]
 |------|------|---------|---------|
 | `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, `kimi`, `cursor`, or `all` |
 | `--detailed` | bool | `false` | Print the detailed per-window report with bars, reset times, sources, notes, and pace |
+| `--json` | bool | `false` | Print every window, pace, severity, reset time, and per-agent error as JSON (see [JSON output](#json-output)) |
 | `--help` | bool | `false` | Print usage and exit |
 
 Only `claude`, `codex`, `grok`, `kimi`, and `cursor` are supported — they're the agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
@@ -39,6 +40,7 @@ lazyagent limits --agent codex     # only Codex
 lazyagent limits --agent grok      # only Grok
 lazyagent limits --agent kimi      # only Kimi Code
 lazyagent limits --agent cursor    # only Cursor (Models + API pools)
+lazyagent limits --json            # machine-readable report for scripts and widgets
 lazyagent limits --help            # full usage + disclaimers
 ```
 
@@ -119,6 +121,103 @@ Codex
 
 In an interactive terminal the bars and pace label are colored. When piped or redirected, lazyagent strips ANSI escapes automatically.
 
+## JSON output
+
+`--json` prints a single object to stdout and nothing else, so the output can be piped straight into `jq`, a status-bar widget, or a dashboard. It carries everything the `--detailed` view shows plus the summary-table cells, so `--detailed` has no effect when combined with it. Field names are part of the CLI contract and every key is always present; empty lists encode as `[]`.
+
+```bash
+lazyagent limits --json | jq '.reports[] | {agent, used: .summary.week_global.used_percent}'
+```
+
+```json
+{
+  "generated_at": "2026-09-07T13:44:48+02:00",
+  "reports": [
+    {
+      "agent": "claude",
+      "provider": "Claude Code",
+      "short_name": "Claude",
+      "source": "",
+      "note": "Note: reads /api/oauth/usage, an undocumented Claude endpoint. May break or be revoked by Anthropic without notice.",
+      "windows": [
+        {
+          "label": "5-hour",
+          "window_minutes": 300,
+          "used_percent": 21,
+          "expected_percent": 39.9,
+          "pace_known": true,
+          "pace_ratio": 0.53,
+          "pace_label": "underutilizing",
+          "used_severity": "ok",
+          "resets_at": "2026-09-07T14:30:00Z",
+          "reset_in_seconds": 9912,
+          "reset_relative": "in 2h 45m"
+        }
+      ],
+      "summary": {
+        "five_hour": { "used_percent": 21, "expected_percent": 39.9, "severity": "ok", "text": "21.0% used / 39.9% exp" },
+        "week_global": null
+      }
+    }
+  ],
+  "errors": [
+    {
+      "agent": "kimi",
+      "kind": "not_installed",
+      "message": "Kimi Code CLI is not installed or not logged in (no ~/.kimi-code/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
+    }
+  ]
+}
+```
+
+Top level:
+
+| Field | Meaning |
+|-------|---------|
+| `generated_at` | When the reports were fetched, RFC 3339 in the local zone |
+| `reports` | One entry per metered pool, in the canonical order `claude`, `codex`, `grok`, `kimi`, `cursor`. Cursor contributes two entries (`Cursor Models`, `Cursor API`) that share `"agent": "cursor"` |
+| `errors` | Agents that produced no report, in the same order |
+
+Each report:
+
+| Field | Meaning |
+|-------|---------|
+| `agent` | Stable id to key on: `claude`, `codex`, `grok`, `kimi`, `cursor` |
+| `provider` | Display name used by the detailed view (`Claude Code`, `Cursor Models`, …) |
+| `short_name` | Label used by the summary table (`Claude`, `Kimi`, …) |
+| `source`, `note` | The provenance line and the disclaimer from the detailed view, or `""` |
+| `windows` | Every window the provider exposes, see below |
+| `summary.five_hour`, `summary.week_global` | The two summary-table cells, each `{used_percent, expected_percent, severity, text}` or `null` when the provider has no such window (what the table prints as `--`) |
+
+Each window:
+
+| Field | Meaning |
+|-------|---------|
+| `label` | Provider wording: `5-hour`, `7-day`, `weekly`, `monthly`, … |
+| `window_minutes` | Window length, `0` when the provider does not state it |
+| `used_percent` | Quota consumed, 0-100 |
+| `expected_percent` | Where a perfectly linear pace would be for the elapsed window time |
+| `pace_known` | `false` when the window has just reset (less than 1% elapsed) or has no reset time; the pace fields are then `0` and `""` |
+| `pace_ratio`, `pace_label` | `used / expected` and its bucket: `underutilizing`, `on track`, `overutilizing` |
+| `used_severity` | Absolute-usage bucket matching the detailed bars: `ok` (≤ 50%), `info` (≤ 75%), `warn` (≤ 90%), `danger` |
+| `resets_at` | RFC 3339 reset time, or `null` when unknown |
+| `reset_in_seconds` | Seconds until reset, `0` when unknown or already passed |
+| `reset_relative` | The `in 3h 17m` string from the detailed view, or `""` |
+
+Summary-cell `severity` blends pace and absolute usage the same way the table colors do: `danger` when used ≥ 90% or over pace, `warn` when used ≥ 75%, `ok` when comfortably under pace, `default` when on track.
+
+Each error:
+
+| Field | Meaning |
+|-------|---------|
+| `agent` | Which agent failed |
+| `kind` | `not_installed` (no credentials or footprint on this machine), `unavailable` (installed, but nothing to pace, such as an unlimited Cursor plan), or `error` (network, expired token, unexpected response) |
+| `message` | The same actionable text the human output prints on stderr |
+
+Unlike the human output, `--json` lists `not_installed` and `unavailable` agents even under `--agent all`, so a consumer can hide a provider that is simply absent instead of treating it as broken. The [exit codes](#exit-codes) are unchanged: a `not_installed` entry only fails the command when that agent was requested explicitly or when nothing at all was found.
+
+The polling caveat below applies doubly to anything built on `--json`: refresh on demand or on a generous timer, never in a tight loop.
+
 ## How it gets the data
 
 The providers work differently — there's a single command, but several paths under the hood.
@@ -184,7 +283,7 @@ The response carries a top-level `usage` quota plus zero or more rolling `limits
 
 Cursor is the odd one out: it's an IDE, not a CLI, so its usage lives in the web dashboard rather than a `/status` endpoint. lazyagent reads it the way Cursor's own dashboard does — with the session token Cursor stores locally.
 
-Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
+Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring, under `~/Library/Application Support/Cursor` on macOS, `~/.config/Cursor` on Linux, or `%APPDATA%\Cursor` on Windows): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
 
 With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
 
@@ -248,7 +347,7 @@ The "don't poll" guidance applies equally to Grok, Kimi, and Cursor: run `lazyag
 | `1` | At least one agent failed (token missing, endpoint error, Codex login missing, …) — details on stderr |
 | `2` | Invalid flags (e.g. unknown `--agent` value) |
 
-Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` / `Error (kimi): …` / `Error (cursor): …` prefix, so you can pipe stdout to a parser without losing the error context.
+Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` / `Error (kimi): …` / `Error (cursor): …` prefix, so you can pipe stdout to a parser without losing the error context. With `--json`, errors are part of the stdout object under `errors` and nothing is written to stderr; the exit code follows the same rules.
 
 ## Environment
 

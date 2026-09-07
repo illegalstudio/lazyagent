@@ -62,6 +62,39 @@ var errAgentUnavailable = errors.New("agent unavailable")
 type options struct {
 	agent    string
 	detailed bool
+	json     bool
+}
+
+// agentReport pairs a report with the agent id it was fetched for. The Report
+// itself only carries the display name ("Cursor Models"), and JSON consumers
+// need the stable id ("cursor") to key on.
+type agentReport struct {
+	agent  string
+	report Report
+}
+
+// Error kinds recorded by collect. They double as the "kind" value in the JSON
+// output, so they are stable strings rather than an enum.
+const (
+	errKindNotInstalled = "not_installed"
+	errKindUnavailable  = "unavailable"
+	errKindError        = "error"
+)
+
+// agentError records why one agent produced no report.
+type agentError struct {
+	agent string
+	kind  string
+	err   error
+}
+
+// message returns the user-facing text for the error, matching what the
+// human output prints on stderr for the same case.
+func (e agentError) message() string {
+	if e.kind == errKindNotInstalled {
+		return notInstalledMessage(e.agent)
+	}
+	return e.err.Error()
 }
 
 // Run is the entry point invoked by main.go for `lazyagent limits ...`.
@@ -72,6 +105,7 @@ func Run(args []string) int {
 	var opts options
 	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, kimi, cursor, all")
 	fs.BoolVar(&opts.detailed, "detailed", false, "Show the detailed per-window report with bars, reset times, sources, and notes")
+	fs.BoolVar(&opts.json, "json", false, "Print every window, pace, and per-agent error as JSON (for scripts and widgets)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
@@ -79,6 +113,7 @@ func Run(args []string) int {
 Usage:
   lazyagent limits                  Show a summary table for Claude Code, Codex, Grok, Kimi, and Cursor
   lazyagent limits --detailed       Show detailed per-window reports with pace and reset times
+  lazyagent limits --json           Print the full report as JSON (windows, pace, reset times, errors)
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
   lazyagent limits --agent grok     Show only Grok limits
@@ -89,6 +124,12 @@ Summary output:
   The default table shows used % and expected % for the 5-hour window and the
   weekly/global window. Expected % is the linear pace for elapsed window time.
   Missing windows are shown as --.
+
+JSON output:
+  --json prints one object with "reports" (every window with used %, expected %,
+  pace, severity, and reset time) and "errors" (agents that produced no report,
+  each tagged not_installed, unavailable, or error). Nothing else is written to
+  stdout, and --detailed is redundant because the JSON is always complete.
 
 Detailed output explains:
   - Used %:    how much of the window has been consumed
@@ -149,50 +190,42 @@ Flags:
 	defer cancel()
 
 	now := time.Now()
-	var out strings.Builder
-	exitCode := 0
-	var reports []Report
-	missing := 0
 	explicit := len(agents) == 1
-	for _, a := range agents {
-		rs, err := fetchReports(ctx, a)
-		if err != nil {
-			if errors.Is(err, errAgentNotInstalled) {
-				missing++
-				if explicit {
-					fmt.Fprintln(os.Stderr, notInstalledMessage(a))
-					exitCode = 1
-				}
-				// In `all` mode, silently skip — we'll print a single combined
-				// message at the end if nothing was shown.
-				continue
-			}
-			if errors.Is(err, errAgentUnavailable) {
-				missing++
-				if explicit {
-					// The wrapped error already carries a user-facing, actionable
-					// message (unlike the generic not-installed text).
-					fmt.Fprintf(os.Stderr, "%v\n", err)
-					exitCode = 1
-				}
-				// In `all` mode, skip silently like a missing agent.
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "Error (%s): %v\n", a, err)
-			exitCode = 1
-			continue
+	results, errs := collect(ctx, agents)
+	exitCode := exitCodeFor(results, errs, len(agents), explicit)
+
+	if opts.json {
+		if err := writeJSON(os.Stdout, results, errs, now); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
 		}
-		reports = append(reports, rs...)
+		return exitCode
 	}
 
-	// All agents were missing AND no real errors fired: tell the user once,
-	// rather than letting them stare at an empty stdout and wonder what happened.
-	if len(reports) == 0 && !explicit && missing == len(agents) {
+	// Missing and unavailable agents are only worth a message when the user
+	// asked for that agent by name. In `all` mode they are skipped silently,
+	// and a single combined message covers the case where nothing was found.
+	for _, ae := range errs {
+		switch ae.kind {
+		case errKindNotInstalled, errKindUnavailable:
+			if explicit {
+				fmt.Fprintln(os.Stderr, ae.message())
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Error (%s): %v\n", ae.agent, ae.err)
+		}
+	}
+	if allMissing(results, errs, len(agents), explicit) {
 		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, Kimi, or Cursor was detected).")
 		fmt.Fprintln(os.Stderr, "Run `claude` / `codex` / `grok login` / `kimi login`, or sign in to Cursor.")
-		exitCode = 1
 	}
 
+	reports := make([]Report, 0, len(results))
+	for _, ar := range results {
+		reports = append(reports, ar.report)
+	}
+
+	var out strings.Builder
 	if len(reports) > 0 {
 		if opts.detailed {
 			for i, report := range reports {
@@ -208,6 +241,62 @@ Flags:
 
 	fmt.Print(out.String())
 	return exitCode
+}
+
+// collect fetches every requested agent in order and classifies each failure.
+// It never prints; the caller decides what each error kind means for its
+// output format.
+func collect(ctx context.Context, agents []string) ([]agentReport, []agentError) {
+	var results []agentReport
+	var errs []agentError
+	for _, a := range agents {
+		rs, err := fetchReports(ctx, a)
+		if err != nil {
+			kind := errKindError
+			switch {
+			case errors.Is(err, errAgentNotInstalled):
+				kind = errKindNotInstalled
+			case errors.Is(err, errAgentUnavailable):
+				kind = errKindUnavailable
+			}
+			errs = append(errs, agentError{agent: a, kind: kind, err: err})
+			continue
+		}
+		for _, r := range rs {
+			results = append(results, agentReport{agent: a, report: r})
+		}
+	}
+	return results, errs
+}
+
+// allMissing reports the `--agent all` case where every agent was skipped as
+// not installed or unavailable and nothing else went wrong.
+func allMissing(results []agentReport, errs []agentError, requested int, explicit bool) bool {
+	if explicit || len(results) > 0 {
+		return false
+	}
+	missing := 0
+	for _, ae := range errs {
+		if ae.kind == errKindNotInstalled || ae.kind == errKindUnavailable {
+			missing++
+		}
+	}
+	return missing == requested
+}
+
+// exitCodeFor applies the documented exit-code rules, shared by the human and
+// JSON outputs: 1 when any agent failed outright, when an explicitly requested
+// agent is missing or unavailable, or when `--agent all` found nothing at all.
+func exitCodeFor(results []agentReport, errs []agentError, requested int, explicit bool) int {
+	for _, ae := range errs {
+		if ae.kind == errKindError || explicit {
+			return 1
+		}
+	}
+	if allMissing(results, errs, requested, explicit) {
+		return 1
+	}
+	return 0
 }
 
 // notInstalledMessage returns the user-facing string when --agent X is explicit
