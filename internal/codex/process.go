@@ -570,9 +570,7 @@ func parseJSONLReader(r io.Reader, path string, offset int64, base *model.Sessio
 		}
 	}
 
-	// Rollouts can contain individual records much larger than Scanner's
-	// token limit, for example item_completed events with embedded output.
-	reader := bufio.NewReaderSize(r, 64*1024)
+	reader := bufio.NewReaderSize(r, rolloutBufferSize)
 
 	bytesConsumed := offset
 	var last lastMeaningful
@@ -581,27 +579,27 @@ func parseJSONLReader(r io.Reader, path string, offset int64, base *model.Sessio
 	}
 
 	for {
-		line, readErr := reader.ReadBytes('\n')
-		if readErr != nil && readErr != io.EOF {
+		line, consumed, terminated, readErr := readRolloutRecord(reader)
+		if readErr != nil {
 			return nil, 0, fmt.Errorf("read codex session %q: %w", path, readErr)
 		}
-		if len(line) == 0 {
+		if consumed == 0 {
 			break
 		}
 
 		var env jsonlEnvelope
 		if err := json.Unmarshal(line, &env); err != nil {
-			if readErr == io.EOF {
+			if !terminated {
 				// The writer may still be appending this record. Leave the
 				// offset at its start so the next refresh can read it again.
 				break
 			}
-			bytesConsumed += int64(len(line))
+			bytesConsumed += consumed
 			continue
 		}
 		// Count actual bytes, including CRLF, and accept complete JSON at
 		// EOF even when the final newline has not been written yet.
-		bytesConsumed += int64(len(line))
+		bytesConsumed += consumed
 
 		ts, _ := time.Parse(time.RFC3339Nano, env.Timestamp)
 		if !ts.IsZero() {

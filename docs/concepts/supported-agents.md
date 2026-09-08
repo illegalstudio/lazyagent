@@ -61,7 +61,7 @@ CWD is inferred from the Cursor workspace URI if available, otherwise from the f
 
 Codex writes one JSONL per session under `~/.codex/sessions/YYYY/MM/DD/`. A separate `~/.codex/session_index.jsonl` carries the user-chosen thread names, which lazyagent joins into the session list.
 
-Session discovery reads records larger than 4 MiB, including embedded tool output, so large records do not hide later activity. If the last record is still being written, lazyagent retries it on the next refresh.
+Session discovery reads records larger than 4 MiB, including embedded tool output, so large records do not hide later activity. Large records are processed with bounded memory: unused payloads are streamed past and message previews are truncated. If the last record is still being written, lazyagent retries it on the next refresh.
 
 ### Amp CLI
 
