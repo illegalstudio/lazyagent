@@ -61,6 +61,8 @@ CWD is inferred from the Cursor workspace URI if available, otherwise from the f
 
 Codex writes one JSONL per session under `~/.codex/sessions/YYYY/MM/DD/`. A separate `~/.codex/session_index.jsonl` carries the user-chosen thread names, which lazyagent joins into the session list.
 
+Session discovery reads records larger than 4 MiB, including embedded tool output, so large records do not hide later activity. Large records are processed with bounded memory: unused payloads are streamed past and message previews are truncated. If the last record is still being written, lazyagent retries it on the next refresh.
+
 ### Amp CLI
 
 Amp keeps a JSON blob per thread under `~/.local/share/amp/threads/*.json`. Newer Amp versions no longer write this locally — they sync from the server on demand. lazyagent works around this by running `amp threads export` every 15 seconds, diffing the result, and refreshing the local cache so you still see live threads.

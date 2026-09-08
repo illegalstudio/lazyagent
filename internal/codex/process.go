@@ -555,6 +555,10 @@ func parseJSONL(path string, offset int64, base *model.Session) (*model.Session,
 		}
 	}
 
+	return parseJSONLReader(f, path, offset, base)
+}
+
+func parseJSONLReader(r io.Reader, path string, offset int64, base *model.Session) (*model.Session, int64, error) {
 	var session *model.Session
 	if base != nil {
 		session = base.Clone()
@@ -566,8 +570,7 @@ func parseJSONL(path string, offset int64, base *model.Session) (*model.Session,
 		}
 	}
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	reader := bufio.NewReaderSize(r, rolloutBufferSize)
 
 	bytesConsumed := offset
 	var last lastMeaningful
@@ -575,13 +578,28 @@ func parseJSONL(path string, offset int64, base *model.Session) (*model.Session,
 		last = lastMeaningful{Kind: statusKind(base.Status), Timestamp: base.LastActivity, ToolName: base.CurrentTool}
 	}
 
-	for scanner.Scan() {
-		bytesConsumed += int64(len(scanner.Bytes())) + 1
+	for {
+		line, consumed, terminated, readErr := readRolloutRecord(reader)
+		if readErr != nil {
+			return nil, 0, fmt.Errorf("read codex session %q: %w", path, readErr)
+		}
+		if consumed == 0 {
+			break
+		}
 
 		var env jsonlEnvelope
-		if err := json.Unmarshal(scanner.Bytes(), &env); err != nil {
+		if err := json.Unmarshal(line, &env); err != nil {
+			if !terminated {
+				// The writer may still be appending this record. Leave the
+				// offset at its start so the next refresh can read it again.
+				break
+			}
+			bytesConsumed += consumed
 			continue
 		}
+		// Count actual bytes, including CRLF, and accept complete JSON at
+		// EOF even when the final newline has not been written yet.
+		bytesConsumed += consumed
 
 		ts, _ := time.Parse(time.RFC3339Nano, env.Timestamp)
 		if !ts.IsZero() {
@@ -687,10 +705,6 @@ func parseJSONL(path string, offset int64, base *model.Session) (*model.Session,
 	}
 	if !last.Timestamp.IsZero() {
 		session.LastActivity = last.Timestamp
-	}
-
-	if fi, err := f.Stat(); err == nil && bytesConsumed > fi.Size() {
-		bytesConsumed = fi.Size()
 	}
 
 	return session, bytesConsumed, nil
