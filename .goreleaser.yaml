@@ -153,6 +153,11 @@ homebrew_casks:
       owner: illegalstudio
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    # Commit as the App that authenticates the push, rather than goreleaser's
+    # default bot, so the tap history shows one consistent automation identity.
+    commit_author:
+      name: illegal-bot[bot]
+      email: 327907755+illegal-bot[bot]@users.noreply.github.com
     homepage: https://github.com/illegalstudio/lazyagent
     description: Desktop app for monitoring coding agent sessions (includes the CLI)
 
@@ -165,6 +170,11 @@ brews:
       owner: illegalstudio
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    # Commit as the App that authenticates the push, rather than goreleaser's
+    # default bot, so the tap history shows one consistent automation identity.
+    commit_author:
+      name: illegal-bot[bot]
+      email: 327907755+illegal-bot[bot]@users.noreply.github.com
     homepage: https://github.com/illegalstudio/lazyagent
     description: Lazy TUI for monitoring coding agent sessions
     caveats: "Installs the `lazyagent` command (CLI-only build, no GUI)."
