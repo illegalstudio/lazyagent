@@ -135,7 +135,7 @@
         Log in to Claude Code, Codex, Grok, Kimi, or Cursor and refresh.
       </div>
     {:else}
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2.5">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(min(260px,100%),1fr))] gap-2.5">
         {#each view.Reports as report}
           <div class="rounded-lg border border-border bg-surface-hover/30 p-2.5">
             <div class="mb-2 text-[11px] font-bold uppercase tracking-wide text-accent">
