@@ -10,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 )
 
 func TestReadKimiTokenFromBytes(t *testing.T) {
@@ -33,12 +36,12 @@ func TestReadKimiTokenFromBytes_Empty(t *testing.T) {
 
 func TestReadKimiToken_EnvOverride(t *testing.T) {
 	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "env-token")
-	got, err := readKimiToken(context.Background())
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
-	if got != "env-token" {
-		t.Fatalf("got %q, want env-token", got)
+	if got.Value != "env-token" {
+		t.Fatalf("got %q, want env-token", got.Value)
 	}
 }
 
@@ -48,12 +51,12 @@ func TestReadKimiToken_File(t *testing.T) {
 	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
 	writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"file-token"}`)
 
-	got, err := readKimiToken(context.Background())
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
-	if got != "file-token" {
-		t.Fatalf("got %q, want file-token", got)
+	if got.Value != "file-token" {
+		t.Fatalf("got %q, want file-token", got.Value)
 	}
 }
 
@@ -67,12 +70,12 @@ func TestReadKimiToken_ScopedSlot(t *testing.T) {
 	writeKimiConfig(t, root, `https://api.kimi.ai/coding/v1`, "oauth/kimi-code-env-0e4f99c69cc27850", "https://auth.kimi.ai")
 	writeKimiSlot(t, root, "kimi-code-env-0e4f99c69cc27850.json", `{"access_token":"scoped-token"}`)
 
-	got, err := readKimiToken(context.Background())
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
-	if got != "scoped-token" {
-		t.Fatalf("got %q, want scoped-token", got)
+	if got.Value != "scoped-token" {
+		t.Fatalf("got %q, want scoped-token", got.Value)
 	}
 }
 
@@ -119,12 +122,15 @@ func TestReadKimiToken_RefreshesExpiredSlot(t *testing.T) {
 
 	slot := writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old-refresh","expires_at":1,"device_id":"keep-me"}`)
 
-	got, err := readKimiToken(context.Background())
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
-	if got != "new-access" {
-		t.Fatalf("got %q, want new-access", got)
+	if got.Value != "new-access" {
+		t.Fatalf("got %q, want new-access", got.Value)
+	}
+	if got.Warn != "" {
+		t.Fatalf("Warn = %q, want none after a successful write-back", got.Warn)
 	}
 	if gotForm.Get("grant_type") != "refresh_token" || gotForm.Get("refresh_token") != "old-refresh" {
 		t.Fatalf("refresh form = %v", gotForm)
@@ -169,12 +175,12 @@ func TestReadKimiToken_RefreshFailureKeepsStaleToken(t *testing.T) {
 	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
 	writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old","expires_at":1}`)
 
-	got, err := readKimiToken(context.Background())
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
-	if got != "stale" {
-		t.Fatalf("got %q, want the stale token", got)
+	if got.Value != "stale" {
+		t.Fatalf("got %q, want the stale token", got.Value)
 	}
 }
 
@@ -293,4 +299,124 @@ func TestFetchKimiReportUnauthorized(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("fetchKimiReport() error = %v, want 401", err)
 	}
+}
+
+// A write-back failure must not be silent: the usage call still works with the
+// fresh token, but the slot is left holding a superseded refresh token.
+func TestReadKimiToken_WarnsWhenRefreshCannotBePersisted(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in":900}`))
+	}))
+	defer auth.Close()
+	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
+
+	slot := writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old","expires_at":1}`)
+	denyWrites(t, filepath.Dir(slot))
+
+	got, err := readKimiToken(context.Background(), kimi.ResolveEnvironment())
+	if err != nil {
+		t.Fatalf("readKimiToken() error = %v", err)
+	}
+	if got.Value != "new-access" {
+		t.Fatalf("got %q, want the refreshed token", got.Value)
+	}
+	if !strings.Contains(got.Warn, "could not be written") || !strings.Contains(got.Warn, "kimi login") {
+		t.Fatalf("Warn = %q, want an actionable persistence warning", got.Warn)
+	}
+}
+
+// The warning reaches the report, so running `limits` actually surfaces it.
+func TestFetchKimiReport_SurfacesPersistenceWarning(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in":900}`))
+	}))
+	defer auth.Close()
+	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
+	usage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"usage":{"limit":"100","remaining":"100","resetTime":"2026-05-28T12:15:14Z"}}`))
+	}))
+	defer usage.Close()
+	t.Setenv("KIMI_CODE_BASE_URL", usage.URL)
+
+	slot := writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old","expires_at":1}`)
+	denyWrites(t, filepath.Dir(slot))
+
+	report, err := fetchKimiReport(context.Background())
+	if err != nil {
+		t.Fatalf("fetchKimiReport() error = %v", err)
+	}
+	if !strings.Contains(report.Note, "could not be written") {
+		t.Fatalf("Note = %q, want the persistence warning", report.Note)
+	}
+}
+
+// Concurrent readers must produce exactly one refresh grant per slot: the
+// refresh token rotates, so a second grant with the same token would race.
+func TestReadKimiToken_ConcurrentRefreshesGrantOnce(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+
+	var mu sync.Mutex
+	grants := 0
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		grants++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in":900}`))
+	}))
+	defer auth.Close()
+	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
+	writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old","expires_at":1}`)
+
+	env := kimi.ResolveEnvironment()
+	var wg sync.WaitGroup
+	tokens := make([]string, 4)
+	for i := range tokens {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			got, err := readKimiToken(context.Background(), env)
+			if err != nil {
+				t.Errorf("readKimiToken() error = %v", err)
+				return
+			}
+			tokens[i] = got.Value
+		}(i)
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if grants != 1 {
+		t.Fatalf("refresh grants = %d, want exactly 1", grants)
+	}
+	for i, token := range tokens {
+		if token != "new-access" {
+			t.Fatalf("token %d = %q, want new-access", i, token)
+		}
+	}
+}
+
+// denyWrites makes dir read-only for the rest of the test, so the temp-file +
+// rename write-back fails the way a read-only or full filesystem would.
+func denyWrites(t *testing.T, dir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: directory permissions do not deny writes")
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 }

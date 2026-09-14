@@ -183,3 +183,95 @@ func writeFile(t *testing.T, path, body string) {
 		t.Fatal(fmt.Errorf("write %s: %w", path, err))
 	}
 }
+
+// Kimi names a scoped slot after the hash of the environment it belongs to;
+// reproducing that name is what lets a fallback slot keep its endpoints. The
+// expected value is the slot a real global login writes.
+func TestScopedSlotFile(t *testing.T) {
+	if got := scopedSlotFile(GlobalOAuthHost, GlobalCodingBaseURL); got != "kimi-code-env-0e4f99c69cc27850.json" {
+		t.Fatalf("global slot = %q", got)
+	}
+	if got := scopedSlotFile(MainlandOAuthHost, MainlandCodingBaseURL); got != legacyCredentialsFile {
+		t.Fatalf("mainland slot = %q, want %q", got, legacyCredentialsFile)
+	}
+	if got := scopedSlotFile(GlobalOAuthHost+"/", GlobalCodingBaseURL+"/"); got != "kimi-code-env-0e4f99c69cc27850.json" {
+		t.Fatalf("trailing slashes changed the slot: %q", got)
+	}
+}
+
+// With no config to read, a scoped slot still identifies its own deployment —
+// resolving it against the mainland default would spend a global token on the
+// wrong endpoint.
+func TestResolveEnvironment_FallbackSlotKeepsItsEndpoints(t *testing.T) {
+	root := kimiHome(t)
+	slot := filepath.Join(root, "credentials", "kimi-code-env-0e4f99c69cc27850.json")
+	writeFile(t, slot, `{"access_token":"global","expires_at":5}`)
+
+	got := ResolveEnvironment()
+	want := Environment{CredentialsPath: slot, BaseURL: GlobalCodingBaseURL, OAuthHost: GlobalOAuthHost}
+	if got != want {
+		t.Fatalf("ResolveEnvironment() = %+v, want %+v", got, want)
+	}
+}
+
+// The legacy slot exists only for a mainland login, so it pins the mainland
+// endpoints even when config.toml describes a global environment whose own slot
+// is gone.
+func TestResolveEnvironment_LegacySlotPinsMainland(t *testing.T) {
+	root := kimiHome(t)
+	writeFile(t, filepath.Join(root, "config.toml"), globalConfig)
+	legacy := filepath.Join(root, "credentials", "kimi-code.json")
+	writeFile(t, legacy, `{"access_token":"mainland"}`)
+
+	got := ResolveEnvironment()
+	want := Environment{CredentialsPath: legacy, BaseURL: MainlandCodingBaseURL, OAuthHost: MainlandOAuthHost}
+	if got != want {
+		t.Fatalf("ResolveEnvironment() = %+v, want %+v", got, want)
+	}
+}
+
+// An unrecognized slot (a private deployment) falls back to the configured
+// endpoints rather than guessing a region.
+func TestResolveEnvironment_UnknownSlotUsesConfiguredEndpoints(t *testing.T) {
+	root := kimiHome(t)
+	writeFile(t, filepath.Join(root, "config.toml"), globalConfig)
+	slot := filepath.Join(root, "credentials", "kimi-code-env-deadbeefdeadbeef.json")
+	writeFile(t, slot, `{"access_token":"private","expires_at":5}`)
+
+	got := ResolveEnvironment()
+	want := Environment{CredentialsPath: slot, BaseURL: GlobalCodingBaseURL, OAuthHost: GlobalOAuthHost}
+	if got != want {
+		t.Fatalf("ResolveEnvironment() = %+v, want %+v", got, want)
+	}
+}
+
+// The configured slot and the configured endpoints are resolved as a pair.
+func TestResolveEnvironment_ConfiguredSlot(t *testing.T) {
+	root := kimiHome(t)
+	writeFile(t, filepath.Join(root, "config.toml"), globalConfig)
+	scoped := filepath.Join(root, "credentials", "kimi-code-env-0e4f99c69cc27850.json")
+	writeFile(t, scoped, `{"access_token":"scoped"}`)
+	writeFile(t, filepath.Join(root, "credentials", "kimi-code.json"), `{"access_token":"legacy"}`)
+
+	got := ResolveEnvironment()
+	want := Environment{CredentialsPath: scoped, BaseURL: GlobalCodingBaseURL, OAuthHost: GlobalOAuthHost}
+	if got != want {
+		t.Fatalf("ResolveEnvironment() = %+v, want %+v", got, want)
+	}
+}
+
+// Env overrides are applied after the slot is resolved, so a test or a private
+// gateway can redirect the endpoints without changing which credentials are read.
+func TestResolveEnvironment_EnvOverridesEndpointsOnly(t *testing.T) {
+	root := kimiHome(t)
+	slot := filepath.Join(root, "credentials", "kimi-code.json")
+	writeFile(t, slot, `{"access_token":"mainland"}`)
+	t.Setenv("KIMI_CODE_BASE_URL", "http://127.0.0.1:1234/coding/v1/")
+	t.Setenv("KIMI_CODE_OAUTH_HOST", "http://127.0.0.1:4321/")
+
+	got := ResolveEnvironment()
+	want := Environment{CredentialsPath: slot, BaseURL: "http://127.0.0.1:1234/coding/v1", OAuthHost: "http://127.0.0.1:4321"}
+	if got != want {
+		t.Fatalf("ResolveEnvironment() = %+v, want %+v", got, want)
+	}
+}

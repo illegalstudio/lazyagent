@@ -17,7 +17,10 @@ package kimi
 // falls back to the legacy slot, then to the freshest slot on disk.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,33 +185,127 @@ func splitOutsideQuotes(s string, sep byte) []string {
 	return append(parts, s[start:])
 }
 
-// CredentialsPath returns the Kimi Code OAuth credential file lazyagent should
-// read, resolved in order:
+// Environment is a credential slot together with the endpoints that slot was
+// issued for. Kimi scopes credentials per (oauth host, base URL), so the two
+// must be resolved as a pair: refreshing a global token against the mainland
+// OAuth host, or spending it on the mainland usage endpoint, fails.
+type Environment struct {
+	CredentialsPath string
+	BaseURL         string
+	OAuthHost       string
+}
+
+// ResolveEnvironment picks the credential slot lazyagent should read and the
+// endpoints that go with it:
 //
-//  1. the slot named by config.toml's oauth key, when that file exists
-//  2. the legacy `kimi-code.json` slot, when it exists
-//  3. the freshest `kimi-code*.json` slot on disk
+//  1. the slot named by config.toml's oauth key, with config.toml's endpoints
+//  2. the legacy `kimi-code.json` slot, which by Kimi's own rule exists only
+//     for a mainland-CN login on the default endpoints
+//  3. the freshest `kimi-code-env-*.json` slot, with the endpoints whose hash
+//     reproduces that slot's name
 //
-// When nothing is found it returns the legacy path, so callers reporting "not
-// logged in" still name a concrete file.
-func CredentialsPath() string {
+// When no slot is found it names the legacy path, so callers reporting "not
+// logged in" still name a concrete file. KIMI_CODE_BASE_URL and
+// KIMI_CODE_OAUTH_HOST / KIMI_OAUTH_HOST override the resolved endpoints last,
+// the way Kimi Code CLI honours them.
+func ResolveEnvironment() Environment {
+	env := resolveSlot(ReadManagedProvider())
+	if v := envEndpoint("KIMI_CODE_BASE_URL"); v != "" {
+		env.BaseURL = v
+	}
+	if v := envEndpoint("KIMI_CODE_OAUTH_HOST", "KIMI_OAUTH_HOST"); v != "" {
+		env.OAuthHost = v
+	}
+	return env
+}
+
+func resolveSlot(provider ManagedProvider) Environment {
 	dir := CredentialsDir()
 	if dir == "" {
-		return ""
+		return Environment{BaseURL: regionBaseURL(provider), OAuthHost: regionOAuthHost(provider)}
 	}
-	legacy := filepath.Join(dir, legacyCredentialsFile)
-	if name := credentialSlotFile(ReadManagedProvider().OAuthKey); name != "" {
+	configured := Environment{
+		BaseURL:   regionBaseURL(provider),
+		OAuthHost: regionOAuthHost(provider),
+	}
+
+	// The configured slot and the configured endpoints belong together.
+	if name := credentialSlotFile(provider.OAuthKey); name != "" {
 		if path := filepath.Join(dir, name); fileExists(path) {
-			return path
+			configured.CredentialsPath = path
+			return configured
 		}
 	}
+
+	// Kimi writes the legacy slot only for a mainland-CN login on the default
+	// endpoints, so that file identifies its own environment.
+	legacy := filepath.Join(dir, legacyCredentialsFile)
 	if fileExists(legacy) {
-		return legacy
+		return Environment{
+			CredentialsPath: legacy,
+			BaseURL:         MainlandCodingBaseURL,
+			OAuthHost:       MainlandOAuthHost,
+		}
 	}
+
+	// A scoped slot is named after the hash of the endpoints it was issued for,
+	// so the endpoints can be recovered by recomputing the hash of each
+	// environment this install could plausibly be logged in to.
 	if path := freshestCredentialSlot(dir); path != "" {
-		return path
+		env := Environment{CredentialsPath: path}
+		if base, host, ok := endpointsForSlot(filepath.Base(path), provider); ok {
+			env.BaseURL, env.OAuthHost = base, host
+			return env
+		}
+		// An unrecognized environment (a private deployment, say): the
+		// configured endpoints are the only information left.
+		env.BaseURL, env.OAuthHost = configured.BaseURL, configured.OAuthHost
+		return env
 	}
-	return legacy
+
+	configured.CredentialsPath = legacy
+	return configured
+}
+
+// endpointsForSlot identifies which (base URL, OAuth host) pair a scoped slot
+// belongs to by reproducing the name Kimi derives from that pair.
+func endpointsForSlot(name string, provider ManagedProvider) (baseURL, oauthHost string, ok bool) {
+	candidates := [][2]string{
+		{MainlandCodingBaseURL, MainlandOAuthHost},
+		{GlobalCodingBaseURL, GlobalOAuthHost},
+		{GlobalCodingBaseURL, MainlandOAuthHost},
+		{MainlandCodingBaseURL, GlobalOAuthHost},
+	}
+	if base, host := trimEndpoint(provider.BaseURL), trimEndpoint(provider.OAuthHost); base != "" && host != "" {
+		candidates = append([][2]string{{base, host}}, candidates...)
+	}
+	for _, candidate := range candidates {
+		if scopedSlotFile(candidate[1], candidate[0]) == name {
+			return candidate[0], candidate[1], true
+		}
+	}
+	return "", "", false
+}
+
+// scopedSlotFile reproduces Kimi's credential slot name for an environment:
+// the first 16 hex digits of sha256 over `{"oauthHost":…,"baseUrl":…}`, exactly
+// as resolveKimiCodeOAuthKey builds it in Kimi Code CLI.
+func scopedSlotFile(oauthHost, baseURL string) string {
+	oauthHost, baseURL = trimEndpoint(oauthHost), trimEndpoint(baseURL)
+	if oauthHost == MainlandOAuthHost && baseURL == MainlandCodingBaseURL {
+		return legacyCredentialsFile
+	}
+	payload := fmt.Sprintf(`{"oauthHost":%s,"baseUrl":%s}`, jsonString(oauthHost), jsonString(baseURL))
+	sum := sha256.Sum256([]byte(payload))
+	return fmt.Sprintf("kimi-code-env-%s.json", hex.EncodeToString(sum[:])[:16])
+}
+
+func jsonString(s string) string {
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(encoded)
 }
 
 // credentialSlotFile maps a config.toml oauth key ("oauth/kimi-code-env-…") to
@@ -229,10 +326,10 @@ func credentialSlotFile(key string) string {
 	return base + ".json"
 }
 
-// freshestCredentialSlot returns the kimi-code*.json slot with the latest
-// expiry — the one the CLI most recently refreshed — or "" when there is none.
+// freshestCredentialSlot returns the scoped slot with the latest expiry — the
+// one the CLI most recently refreshed — or "" when there is none.
 func freshestCredentialSlot(dir string) string {
-	matches, err := filepath.Glob(filepath.Join(dir, "kimi-code*.json"))
+	matches, err := filepath.Glob(filepath.Join(dir, "kimi-code-env-*.json"))
 	if err != nil {
 		return ""
 	}
@@ -261,38 +358,57 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// OAuthHost returns the Kimi OAuth host for this install, resolved in Kimi's
-// own order: env override, persisted login, region marker, mainland default.
+// CredentialsPath returns the credential slot lazyagent should read.
+func CredentialsPath() string {
+	return ResolveEnvironment().CredentialsPath
+}
+
+// OAuthHost returns the Kimi OAuth host the resolved credentials belong to.
 func OAuthHost() string {
-	for _, key := range []string{"KIMI_CODE_OAUTH_HOST", "KIMI_OAUTH_HOST"} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-			return strings.TrimRight(v, "/")
-		}
+	return ResolveEnvironment().OAuthHost
+}
+
+// CodingBaseURL returns the managed Kimi Code API base URL the resolved
+// credentials belong to.
+func CodingBaseURL() string {
+	return ResolveEnvironment().BaseURL
+}
+
+// regionBaseURL derives a base URL from config.toml, then from the region
+// implied by the persisted OAuth host or the install marker.
+func regionBaseURL(provider ManagedProvider) string {
+	if base := trimEndpoint(provider.BaseURL); base != "" {
+		return base
 	}
-	if host := strings.TrimSpace(ReadManagedProvider().OAuthHost); host != "" {
-		return strings.TrimRight(host, "/")
+	if trimEndpoint(provider.OAuthHost) == GlobalOAuthHost || isGlobalRegion() {
+		return GlobalCodingBaseURL
 	}
-	if isGlobalRegion() {
+	return MainlandCodingBaseURL
+}
+
+// regionOAuthHost derives an OAuth host from config.toml, then from the region
+// implied by the configured base URL or the install marker.
+func regionOAuthHost(provider ManagedProvider) string {
+	if host := trimEndpoint(provider.OAuthHost); host != "" {
+		return host
+	}
+	if trimEndpoint(provider.BaseURL) == GlobalCodingBaseURL || isGlobalRegion() {
 		return GlobalOAuthHost
 	}
 	return MainlandOAuthHost
 }
 
-// CodingBaseURL returns the managed Kimi Code API base URL for this install:
-// the KIMI_CODE_BASE_URL override, then config.toml, then the region implied by
-// the persisted OAuth host or the install marker, then the mainland default.
-func CodingBaseURL() string {
-	if v := strings.TrimSpace(os.Getenv("KIMI_CODE_BASE_URL")); v != "" {
-		return strings.TrimRight(v, "/")
+func envEndpoint(keys ...string) string {
+	for _, key := range keys {
+		if v := trimEndpoint(os.Getenv(key)); v != "" {
+			return v
+		}
 	}
-	provider := ReadManagedProvider()
-	if base := strings.TrimSpace(provider.BaseURL); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	if strings.TrimRight(strings.TrimSpace(provider.OAuthHost), "/") == GlobalOAuthHost || isGlobalRegion() {
-		return GlobalCodingBaseURL
-	}
-	return MainlandCodingBaseURL
+	return ""
+}
+
+func trimEndpoint(value string) string {
+	return strings.TrimRight(strings.TrimSpace(value), "/")
 }
 
 // isGlobalRegion reports whether the install-channel marker says this machine
