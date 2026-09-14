@@ -31,7 +31,7 @@ brew install illegalstudio/tap/lazyagent-cli
 
 ## Linux desktop app
 
-Linux desktop packages are attached to each [GitHub release](https://github.com/illegalstudio/lazyagent/releases). The package includes the graphical tray app, TUI, and HTTP API in the same `lazyagent` executable.
+Linux desktop packages are attached to each [GitHub release](https://github.com/illegalstudio/lazyagent/releases), for `amd64` and `arm64`. The package includes the graphical tray app, TUI, and HTTP API in the same `lazyagent` executable. The commands below name the `amd64` files; on arm64 substitute `arm64` (`aarch64` for the Arch package).
 
 **Debian / Ubuntu:**
 
@@ -45,10 +45,22 @@ sudo apt install ./Lazyagent_VERSION_linux_amd64.deb
 sudo dnf install ./Lazyagent_VERSION_linux_amd64.rpm
 ```
 
-**Arch Linux:**
+**Arch Linux:** install from the Illegal Studio pacman repository instead, which serves `x86_64` and `aarch64`, so upgrades arrive with `pacman -Syu`. Add this at the bottom of `/etc/pacman.conf`:
+
+```ini
+[illegalstudio]
+SigLevel = Optional TrustAll
+Server = https://illegalstudio.github.io/pacman/$arch
+```
 
 ```bash
-sudo pacman -U ./Lazyagent_VERSION_linux_amd64.pkg.tar.zst
+sudo pacman -Sy lazyagent
+```
+
+The repository is unsigned, hence `SigLevel = Optional TrustAll`, and it keeps only the latest version — older ones stay on the [releases page](https://github.com/illegalstudio/lazyagent/releases), installable by hand:
+
+```bash
+sudo pacman -U ./lazyagent-VERSION-1-x86_64.pkg.tar.zst
 ```
 
 The native packages install the application-menu launcher, icon, AppStream metadata, and `lazyagent` on `PATH`. For other distributions, download the AppImage:

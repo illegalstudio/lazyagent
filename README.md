@@ -99,9 +99,23 @@ Installs `Lazyagent.app` and links the `lazyagent` command into Homebrew's bin â
 brew install illegalstudio/tap/lazyagent-cli
 ```
 
+### Arch Linux
+
+lazyagent is published to the Illegal Studio pacman repository for `x86_64` and `aarch64`, so upgrades arrive with `pacman -Syu`. Add this at the bottom of `/etc/pacman.conf`:
+
+```ini
+[illegalstudio]
+SigLevel = Optional TrustAll
+Server = https://illegalstudio.github.io/pacman/$arch
+```
+
+```bash
+sudo pacman -Sy lazyagent
+```
+
 ### Linux desktop
 
-Download the desktop package for your distribution from [GitHub Releases](https://github.com/illegalstudio/lazyagent/releases):
+Download the desktop package for your distribution and architecture from [GitHub Releases](https://github.com/illegalstudio/lazyagent/releases) â€” `amd64` and `arm64` are both published:
 
 ```bash
 # Debian / Ubuntu
@@ -110,13 +124,15 @@ sudo apt install ./Lazyagent_VERSION_linux_amd64.deb
 # Fedora
 sudo dnf install ./Lazyagent_VERSION_linux_amd64.rpm
 
-# Arch Linux
-sudo pacman -U ./Lazyagent_VERSION_linux_amd64.pkg.tar.zst
+# Arch Linux, without the repository above
+sudo pacman -U ./lazyagent-VERSION-1-x86_64.pkg.tar.zst
 
 # Portable fallback
 chmod +x Lazyagent_VERSION_linux_amd64.AppImage
 ./Lazyagent_VERSION_linux_amd64.AppImage
 ```
+
+On arm64 the same files are named `arm64` (`aarch64` for the Arch package).
 
 The native packages install the desktop launcher and the `lazyagent` command. See the [Linux GUI guide](docs/interfaces/linux-gui.md) for dependencies and tray compatibility.
 
