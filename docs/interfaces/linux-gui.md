@@ -13,11 +13,11 @@ The Linux desktop build runs Lazyagent in the system tray. Click its icon to tog
 
 ## Install
 
-Every GitHub release provides four `amd64` desktop artifacts:
+Every GitHub release provides four desktop artifacts per architecture, for `amd64` and `arm64`:
 
 - `.deb` for Debian, Ubuntu, and derivatives
 - `.rpm` for Fedora and derivatives with WebKitGTK 4.1
-- `.pkg.tar.zst` for Arch Linux and derivatives
+- `.pkg.tar.zst` for Arch Linux and derivatives, also served from the [Illegal Studio pacman repository](https://illegalstudio.github.io/pacman/)
 - `.AppImage` as a portable fallback
 
 Native packages are preferred because they install the launcher, icon, AppStream metadata, CLI command, and correct GTK/WebKit runtime dependencies. See [Installation](../getting-started/installation.md#linux-desktop-app) for commands.

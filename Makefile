@@ -8,7 +8,9 @@ LINUX_BINARY := dist/linux-desktop/lazyagent
 LINUX_LDFLAGS := -s -w \
 	-X github.com/illegalstudio/lazyagent/internal/version.Version=$(VERSION) \
 	-X github.com/illegalstudio/lazyagent/internal/version.Commit=$(COMMIT)
-APPIMAGE_ARCH := $(if $(filter amd64,$(GOARCH)),x86_64,aarch64)
+# GOARCH under its kernel name. AppImage and pacman both label artifacts
+# this way, and the pacman repository routes a package by that label.
+LINUX_ARCH := $(if $(filter amd64,$(GOARCH)),x86_64,aarch64)
 
 all: build
 
@@ -69,9 +71,13 @@ linux-rpm: linux-desktop
 		-name "Lazyagent_$(VERSION)_linux_$(GOARCH)" -format rpm \
 		-config build/linux/nfpm.yaml -out dist
 
+# Arch's canonical file name (pkgname-pkgver-pkgrel-arch), unlike the deb and
+# rpm above: illegalstudio/pacman picks the architecture directory from the
+# last dash-separated field of the asset name, so a Lazyagent_..._amd64 name
+# would make the repository skip the package.
 linux-arch: linux-desktop
 	VERSION=$(VERSION) GOARCH=$(GOARCH) wails3 tool package \
-		-name "Lazyagent_$(VERSION)_linux_$(GOARCH)" -format archlinux \
+		-name "lazyagent-$(VERSION)-1-$(LINUX_ARCH)" -format archlinux \
 		-config build/linux/nfpm.yaml -out dist
 
 linux-appimage: linux-desktop
@@ -79,14 +85,14 @@ linux-appimage: linux-desktop
 	cp assets/appicon.png dist/linux-desktop/lazyagent.png
 	# Keep linuxdeploy's output name aligned with the filename Wails expects
 	# to move out of the build directory after packaging.
-	cd dist/linux-desktop && LDAI_OUTPUT="lazyagent-$(APPIMAGE_ARCH).AppImage" \
+	cd dist/linux-desktop && LDAI_OUTPUT="lazyagent-$(LINUX_ARCH).AppImage" \
 		wails3 generate appimage \
 		-binary lazyagent \
 		-icon "$(abspath dist/linux-desktop/lazyagent.png)" \
 		-desktopfile "$(abspath build/linux/lazyagent.desktop)" \
 		-outputdir "$(abspath dist)" \
 		-builddir "$(abspath dist/appimage-build)"
-	mv "dist/lazyagent-$(APPIMAGE_ARCH).AppImage" \
+	mv "dist/lazyagent-$(LINUX_ARCH).AppImage" \
 		"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"
 
 linux-packages: linux-deb linux-rpm linux-arch linux-appimage

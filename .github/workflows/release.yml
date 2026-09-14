@@ -172,9 +172,26 @@ jobs:
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
   linux-desktop:
-    name: Linux desktop packages
+    name: Linux desktop packages (${{ matrix.arch }})
     needs: goreleaser
-    runs-on: ubuntu-22.04
+    # Both arches build natively: the desktop build is CGo against GTK3 and
+    # WebKitGTK, so there is no usable cross toolchain. Keep both on 22.04 —
+    # it holds the glibc floor of the release assets down, and wails3's
+    # AppImage step only looks for libgtk-3 under the amd64 multiarch path
+    # when deciding whether to disable stripping, so on a 24.04 arm runner it
+    # would strip libraries with .relr.dyn sections and produce a broken
+    # AppImage.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: amd64
+            pkg_arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+            pkg_arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -200,7 +217,8 @@ jobs:
             file \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
-            pkg-config
+            pkg-config \
+            zstd
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
 
       - name: Test
@@ -213,9 +231,12 @@ jobs:
           make linux-packages \
             VERSION="$VERSION" \
             COMMIT="$(git rev-parse --short HEAD)" \
-            GOARCH=amd64
+            GOARCH="${{ matrix.arch }}"
 
       - name: Validate desktop artifacts
+        env:
+          ARCH: ${{ matrix.arch }}
+          PKG_ARCH: ${{ matrix.pkg_arch }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           desktop-file-validate build/linux/lazyagent.desktop
@@ -225,24 +246,69 @@ jobs:
             exit 1
           fi
           dist/linux-desktop/lazyagent --version
-          chmod +x "dist/Lazyagent_${VERSION}_linux_amd64.AppImage"
-          "dist/Lazyagent_${VERSION}_linux_amd64.AppImage" \
+          chmod +x "dist/Lazyagent_${VERSION}_linux_${ARCH}.AppImage"
+          "dist/Lazyagent_${VERSION}_linux_${ARCH}.AppImage" \
             --appimage-extract-and-run --version
+
+          # illegalstudio/pacman picks the architecture directory from the last
+          # dash-separated field of the asset name and then checks it against
+          # the .PKGINFO: if the two disagree the package is silently skipped.
+          ARCH_PKG="dist/lazyagent-${VERSION}-1-${PKG_ARCH}.pkg.tar.zst"
+          PKGINFO="$(tar --zstd -xOf "$ARCH_PKG" .PKGINFO)"
+          echo "$PKGINFO" | grep -Fxq "pkgname = lazyagent"
+          echo "$PKGINFO" | grep -Fxq "pkgver = ${VERSION}-1"
+          echo "$PKGINFO" | grep -Fxq "arch = ${PKG_ARCH}"
 
       - name: Upload Linux packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCH: ${{ matrix.arch }}
+          PKG_ARCH: ${{ matrix.pkg_arch }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cd dist
           ASSETS=(
-            "Lazyagent_${VERSION}_linux_amd64.AppImage"
-            "Lazyagent_${VERSION}_linux_amd64.deb"
-            "Lazyagent_${VERSION}_linux_amd64.rpm"
-            "Lazyagent_${VERSION}_linux_amd64.pkg.tar.zst"
+            "Lazyagent_${VERSION}_linux_${ARCH}.AppImage"
+            "Lazyagent_${VERSION}_linux_${ARCH}.deb"
+            "Lazyagent_${VERSION}_linux_${ARCH}.rpm"
+            "lazyagent-${VERSION}-1-${PKG_ARCH}.pkg.tar.zst"
           )
-          sha256sum "${ASSETS[@]}" > "lazyagent_${VERSION}_linux_checksums.txt"
+          # One checksum file per architecture: the two matrix jobs upload to
+          # the same release and a shared name would race.
+          sha256sum "${ASSETS[@]}" > "lazyagent_${VERSION}_linux_${ARCH}_checksums.txt"
           gh release upload "$GITHUB_REF_NAME" \
             "${ASSETS[@]}" \
-            "lazyagent_${VERSION}_linux_checksums.txt" \
+            "lazyagent_${VERSION}_linux_${ARCH}_checksums.txt" \
             --repo "$GITHUB_REPOSITORY" --clobber
+
+  notify-pacman:
+    name: Publish to Illegal Studio pacman
+    needs: linux-desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # Short-lived installation token scoped to the pacman repository, minted
+      # from the Illegal Bot GitHub App. Pinned to a full commit SHA because
+      # this step receives the App private key.
+      - name: Mint Illegal Bot token for pacman
+        id: pacman-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ secrets.ILLEGAL_BOT_APP_ID }}
+          private-key: ${{ secrets.ILLEGAL_BOT_PRIVATE_KEY }}
+          owner: illegalstudio
+          repositories: pacman
+
+      # The repository downloads the .pkg.tar.zst from this release, rebuilds
+      # its pacman database and republishes Pages. It registers lazyagent as a
+      # source on the first dispatch, and a nightly cron there catches up if
+      # this call is ever lost.
+      - name: Notify pacman repository
+        env:
+          GH_TOKEN: ${{ steps.pacman-token.outputs.token }}
+        run: |
+          gh api repos/illegalstudio/pacman/dispatches \
+            -f event_type=publish \
+            -f "client_payload[repo]=$GITHUB_REPOSITORY"
