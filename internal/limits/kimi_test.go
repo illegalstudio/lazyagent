@@ -2,8 +2,11 @@ package limits
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +33,7 @@ func TestReadKimiTokenFromBytes_Empty(t *testing.T) {
 
 func TestReadKimiToken_EnvOverride(t *testing.T) {
 	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "env-token")
-	got, err := readKimiToken()
+	got, err := readKimiToken(context.Background())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
@@ -42,19 +45,165 @@ func TestReadKimiToken_EnvOverride(t *testing.T) {
 func TestReadKimiToken_File(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("KIMI_SHARE_DIR", root)
-	credPath := filepath.Join(root, "credentials", "kimi-code.json")
-	if err := os.MkdirAll(filepath.Dir(credPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(credPath, []byte(`{"access_token":"file-token"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := readKimiToken()
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+	writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"file-token"}`)
+
+	got, err := readKimiToken(context.Background())
 	if err != nil {
 		t.Fatalf("readKimiToken() error = %v", err)
 	}
 	if got != "file-token" {
 		t.Fatalf("got %q, want file-token", got)
+	}
+}
+
+// A global (.ai) login stores its token in a scoped slot named by config.toml,
+// not in the legacy kimi-code.json — the case that left Linux installs without
+// a Kimi row.
+func TestReadKimiToken_ScopedSlot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+	writeKimiConfig(t, root, `https://api.kimi.ai/coding/v1`, "oauth/kimi-code-env-0e4f99c69cc27850", "https://auth.kimi.ai")
+	writeKimiSlot(t, root, "kimi-code-env-0e4f99c69cc27850.json", `{"access_token":"scoped-token"}`)
+
+	got, err := readKimiToken(context.Background())
+	if err != nil {
+		t.Fatalf("readKimiToken() error = %v", err)
+	}
+	if got != "scoped-token" {
+		t.Fatalf("got %q, want scoped-token", got)
+	}
+}
+
+func TestKimiTokenExpired(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	cases := []struct {
+		name  string
+		creds kimiCredentials
+		want  bool
+	}{
+		{"no expiry", kimiCredentials{}, false},
+		{"fresh", kimiCredentials{ExpiresAt: now.Add(10 * time.Minute).Unix()}, false},
+		{"within skew", kimiCredentials{ExpiresAt: now.Add(30 * time.Second).Unix()}, true},
+		{"expired", kimiCredentials{ExpiresAt: now.Add(-time.Minute).Unix()}, true},
+	}
+	for _, tc := range cases {
+		if got := kimiTokenExpired(tc.creds, now); got != tc.want {
+			t.Errorf("%s: kimiTokenExpired() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// An expired slot is refreshed through Kimi's own grant, and the rotated
+// tokens are written back so the CLI does not keep an invalidated refresh token.
+func TestReadKimiToken_RefreshesExpiredSlot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+
+	var gotForm url.Values
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/oauth/token" {
+			t.Errorf("path = %q, want /api/oauth/token", r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm() error = %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in":900,"scope":"kimi-code","token_type":"Bearer"}`))
+	}))
+	defer auth.Close()
+	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
+
+	slot := writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old-refresh","expires_at":1,"device_id":"keep-me"}`)
+
+	got, err := readKimiToken(context.Background())
+	if err != nil {
+		t.Fatalf("readKimiToken() error = %v", err)
+	}
+	if got != "new-access" {
+		t.Fatalf("got %q, want new-access", got)
+	}
+	if gotForm.Get("grant_type") != "refresh_token" || gotForm.Get("refresh_token") != "old-refresh" {
+		t.Fatalf("refresh form = %v", gotForm)
+	}
+	if gotForm.Get("client_id") != kimiOAuthClientID {
+		t.Fatalf("client_id = %q, want %q", gotForm.Get("client_id"), kimiOAuthClientID)
+	}
+
+	data, err := os.ReadFile(slot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored map[string]any
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatalf("stored credentials are not JSON: %v", err)
+	}
+	if stored["access_token"] != "new-access" || stored["refresh_token"] != "new-refresh" {
+		t.Fatalf("stored = %v, want rotated tokens", stored)
+	}
+	if stored["device_id"] != "keep-me" {
+		t.Fatalf("stored dropped unknown fields: %v", stored)
+	}
+	if expiresAt, _ := stored["expires_at"].(float64); int64(expiresAt) <= time.Now().Unix() {
+		t.Fatalf("expires_at = %v, want a future timestamp", stored["expires_at"])
+	}
+	if info, err := os.Stat(slot); err != nil {
+		t.Fatal(err)
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("slot mode = %v, want 0600", perm)
+	}
+}
+
+// A refresh that fails must not hide the usage call's own 401 guidance.
+func TestReadKimiToken_RefreshFailureKeepsStaleToken(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", root)
+	t.Setenv("KIMI_CODE_OAUTH_TOKEN", "")
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer auth.Close()
+	t.Setenv("KIMI_CODE_OAUTH_HOST", auth.URL)
+	writeKimiSlot(t, root, "kimi-code.json", `{"access_token":"stale","refresh_token":"old","expires_at":1}`)
+
+	got, err := readKimiToken(context.Background())
+	if err != nil {
+		t.Fatalf("readKimiToken() error = %v", err)
+	}
+	if got != "stale" {
+		t.Fatalf("got %q, want the stale token", got)
+	}
+}
+
+func writeKimiSlot(t *testing.T, root, name, body string) string {
+	t.Helper()
+	dir := filepath.Join(root, "credentials")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writeKimiConfig(t *testing.T, root, baseURL, oauthKey, oauthHost string) {
+	t.Helper()
+	config := fmt.Sprintf(`[providers."managed:kimi-code"]
+type = "kimi"
+base_url = %q
+
+[providers."managed:kimi-code".oauth]
+storage = "file"
+key = %q
+oauth_host = %q
+`, baseURL, oauthKey, oauthHost)
+	if err := os.WriteFile(filepath.Join(root, "config.toml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

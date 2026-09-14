@@ -164,7 +164,7 @@ lazyagent limits --json | jq '.reports[] | {agent, used: .summary.week_global.us
     {
       "agent": "kimi",
       "kind": "not_installed",
-      "message": "Kimi Code CLI is not installed or not logged in (no ~/.kimi-code/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
+      "message": "Kimi Code CLI is not installed or not logged in (no OAuth credentials in ~/.kimi-code/credentials). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
     }
   ]
 }
@@ -268,14 +268,14 @@ In either shape, when the response advertises an `onDemandCap` greater than zero
 
 ### Kimi Code
 
-A single HTTPS GET to `https://api.kimi.com/coding/v1/usages` with the user's OAuth bearer token. This is the same endpoint Kimi Code CLI's interactive `/status` slash command queries. If `KIMI_CODE_BASE_URL` is set, lazyagent appends `/usages` to that base URL instead.
+A single HTTPS GET to `/coding/v1/usages` with the user's OAuth bearer token. This is the same endpoint Kimi Code CLI's interactive `/status` slash command queries. Kimi runs two regional deployments and lazyagent targets the one this machine is logged in to: `https://api.kimi.ai` for a global login, `https://api.kimi.com` for mainland China. The base URL is resolved from `KIMI_CODE_BASE_URL`, then from `base_url` in `~/.kimi-code/config.toml`, then from the region implied by the persisted OAuth host or the `~/.kimi-code/region` install marker, defaulting to `api.kimi.com`.
 
 The OAuth token is read in this priority order:
 
 1. **`KIMI_CODE_OAUTH_TOKEN`** environment variable — useful for CI or for overriding the on-disk credential file
-2. **`~/.kimi-code/credentials/kimi-code.json`** — the file Kimi Code CLI writes after login
+2. **the credential slot under `~/.kimi-code/credentials/`** — Kimi Code CLI scopes credentials per `(oauth host, base URL)` environment, so only a mainland-CN login on the default endpoints lands in `kimi-code.json`; every other login, the global region included, lands in `kimi-code-env-<hash>.json`. lazyagent reads the slot named by the `oauth.key` entry in `~/.kimi-code/config.toml`, falling back to `kimi-code.json` and then to the freshest `kimi-code*.json` on disk
 
-lazyagent does **not** refresh Kimi OAuth tokens. If the access token has expired or been rejected, the command surfaces the server's `401` and tells you to run `kimi login` or open Kimi Code CLI again.
+Kimi access tokens expire after 15 minutes, so the stored credentials are usually stale unless the CLI has just run. When they are, lazyagent performs the same `refresh_token` grant Kimi Code CLI performs, against `<oauth host>/api/oauth/token`, and writes the rotated tokens back into the same slot (temp file, `rename`, mode `0600`) — Kimi rotates the refresh token on every grant, so not writing it back would invalidate the CLI's copy. If the refresh fails, the stale token is used anyway and the command surfaces the server's `401`, telling you to run `kimi login` or open Kimi Code CLI again.
 
 The response carries a top-level `usage` quota plus zero or more rolling `limits[]` windows. lazyagent maps `usage` to a weekly window and maps each `limits[]` entry by its advertised duration, for example `300` minutes becomes the `5-hour` window. Absolute quota counts and the parallelism cap, when present, appear in the `Source:` line.
 
@@ -297,7 +297,7 @@ With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summar
 
 ## When an agent isn't installed
 
-All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's a ChatGPT OAuth token in `~/.codex/auth.json` (or `CODEX_OAUTH_TOKEN`), for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), for Kimi it's an OAuth token in `~/.kimi-code/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`), and for Cursor it's a session token in its local `state.vscdb` (present once you've signed in to Cursor).
+All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's a ChatGPT OAuth token in `~/.codex/auth.json` (or `CODEX_OAUTH_TOKEN`), for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), for Kimi it's an OAuth token in a `~/.kimi-code/credentials/` slot (or `KIMI_CODE_OAUTH_TOKEN`), and for Cursor it's a session token in its local `state.vscdb` (present once you've signed in to Cursor).
 
 | State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` | `--agent kimi` | `--agent cursor` |
 |-------|-------------------------|------------------|-----------------|----------------|----------------|------------------|
@@ -355,8 +355,9 @@ Even on partial failure (`1`), the successful agents' output is printed to stdou
 |----------|--------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token for the Claude call. Used in priority before the macOS keychain or the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token for the Grok call. Used in priority before `~/.grok/auth.json` |
-| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before `~/.kimi-code/credentials/kimi-code.json` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before the `~/.kimi-code/credentials/` slot |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL. lazyagent appends `/usages` |
+| `KIMI_CODE_OAUTH_HOST` / `KIMI_OAUTH_HOST` | Override the Kimi OAuth host used to refresh an expired token. Used in priority before `~/.kimi-code/config.toml` |
 
 ## See also
 

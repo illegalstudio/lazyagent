@@ -55,15 +55,6 @@ func SessionIndexPath() string {
 	return filepath.Join(root, "session_index.jsonl")
 }
 
-// CredentialsPath returns the Kimi Code OAuth credential file path.
-func CredentialsPath() string {
-	root := ShareDir()
-	if root == "" {
-		return ""
-	}
-	return filepath.Join(root, "credentials", "kimi-code.json")
-}
-
 // WireFile returns the main agent's event stream path for a session directory.
 func WireFile(sessionDir string) string {
 	return filepath.Join(sessionDir, "agents", "main", "wire.jsonl")
