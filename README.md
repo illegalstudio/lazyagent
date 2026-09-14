@@ -110,8 +110,10 @@ Server = https://illegalstudio.github.io/pacman/$arch
 ```
 
 ```bash
-sudo pacman -Sy lazyagent
+sudo pacman -Syu lazyagent
 ```
+
+The packages are unsigned, hence `SigLevel = Optional TrustAll`: pacman checks the HTTPS transport but not the publisher, so this trusts the GitHub account that hosts the repository. Prefer the release assets below, verified against their checksums, if that is not a trade-off you want.
 
 ### Linux desktop
 

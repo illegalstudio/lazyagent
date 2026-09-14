@@ -54,7 +54,7 @@ Server = https://illegalstudio.github.io/pacman/$arch
 ```
 
 ```bash
-sudo pacman -Sy lazyagent
+sudo pacman -Syu lazyagent
 ```
 
 The repository is unsigned, hence `SigLevel = Optional TrustAll`, and it keeps only the latest version — older ones stay on the [releases page](https://github.com/illegalstudio/lazyagent/releases), installable by hand:
