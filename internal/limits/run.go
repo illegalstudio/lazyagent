@@ -21,9 +21,13 @@
 // slash command calls. As of this writing xAI does not document it publicly.
 // Same caveats as Claude: on-demand only, fail gracefully.
 //
-// IMPORTANT (Kimi): the source for Kimi is /coding/v1/usages on api.kimi.com —
-// the same endpoint Kimi Code CLI's `/status` slash command calls. lazyagent
-// uses the current access token as-is and does not refresh OAuth credentials.
+// IMPORTANT (Kimi): the source for Kimi is /coding/v1/usages on the deployment
+// this machine is logged in to (api.kimi.com for mainland China, api.kimi.ai for
+// the global region) — the same endpoint Kimi Code CLI's `/status` slash command
+// calls. Credentials live in a per-environment slot under
+// ~/.kimi-code/credentials, named by config.toml's oauth key; the access token
+// lasts 15 minutes, so lazyagent runs Kimi's own refresh grant when the stored
+// one has lapsed and writes the rotated tokens back.
 //
 // IMPORTANT (Cursor): the source for Cursor is /api/usage-summary on cursor.com —
 // the same endpoint the Cursor dashboard uses to render its usage headline. It is
@@ -155,7 +159,10 @@ Authentication:
           If none is found, run `+"`grok login`"+`.
   Kimi    reads its OAuth token from, in order:
             1. KIMI_CODE_OAUTH_TOKEN env var
-            2. ~/.kimi-code/credentials/kimi-code.json
+            2. the ~/.kimi-code/credentials slot named by config.toml
+               (kimi-code.json for a mainland-CN login, kimi-code-env-*.json
+               for any other, the global region included)
+          Expired tokens are refreshed the way the CLI refreshes them.
           If none is found, run `+"`kimi login`"+`.
   Cursor  reads its session token from Cursor's local state.vscdb.
           If none is found, open Cursor and sign in. Cursor reports its
@@ -310,7 +317,7 @@ func notInstalledMessage(agent string) string {
 	case "grok":
 		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
 	case "kimi":
-		return "Kimi Code CLI is not installed or not logged in (no ~/.kimi-code/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
+		return "Kimi Code CLI is not installed or not logged in (no OAuth credentials in ~/.kimi-code/credentials). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
 	case "cursor":
 		return "Cursor is not installed or not logged in (no token in state.vscdb). Open Cursor and sign in."
 	default:

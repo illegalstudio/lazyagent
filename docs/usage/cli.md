@@ -193,7 +193,7 @@ lazyagent limits --agent cursor  # only Cursor (Models + API pools)
 lazyagent limits --json          # machine-readable report for scripts and widgets
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls. Cursor data comes from `/api/usage-summary` on `cursor.com` — the same endpoint the Cursor dashboard uses for its usage headline — read with the session token from Cursor's local `state.vscdb`; it reports the Auto/Composer and usage-based API pools as separate percentages, shown as two rows.
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on the deployment this machine is logged in to (`api.kimi.ai` globally, `api.kimi.com` for mainland China), the endpoint Kimi Code CLI's `/status` slash command calls; the token is read from the per-environment credential slot under `~/.kimi-code/credentials/` and refreshed when expired. Cursor data comes from `/api/usage-summary` on `cursor.com` — the same endpoint the Cursor dashboard uses for its usage headline — read with the session token from Cursor's local `state.vscdb`; it reports the Auto/Composer and usage-based API pools as separate percentages, shown as two rows.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
@@ -266,8 +266,9 @@ Subcommands define their own exit codes; see their respective reference pages.
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
 | `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi-code` |
-| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses the `~/.kimi-code/credentials/` slot |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
+| `KIMI_CODE_OAUTH_HOST` / `KIMI_OAUTH_HOST` | Override the Kimi OAuth host `lazyagent limits` uses to refresh an expired Kimi token |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |

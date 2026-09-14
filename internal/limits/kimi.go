@@ -7,47 +7,243 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/kimi"
 )
 
-const defaultKimiCodeBaseURL = "https://api.kimi.com/coding/v1"
+// kimiOAuthClientID is the public client id Kimi Code CLI uses for its device
+// OAuth flow; the refresh grant below is the same one the CLI performs.
+const kimiOAuthClientID = "17e5f671-d194-4dfb-9706-5516cb48c098"
+
+// kimiRefreshSkew refreshes slightly before expiry so a token cannot lapse
+// between the check and the usage call.
+const kimiRefreshSkew = 60 * time.Second
 
 type kimiCredentials struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresAt    int64  `json:"expires_at"`
 }
 
-func readKimiToken() (string, error) {
+// kimiToken is a bearer token for the usage call plus anything the user should
+// know about how it was obtained. Warn is empty on the ordinary paths.
+type kimiToken struct {
+	Value string
+	Warn  string
+}
+
+// kimiRefreshLocks serializes the read-refresh-write sequence per credential
+// slot. Kimi rotates the refresh token on every grant, so two concurrent
+// refreshes of one slot would race, and the loser would persist credentials the
+// server has already superseded. This covers refreshes inside this process; it
+// cannot coordinate with Kimi Code CLI itself, which takes no lock either — a
+// refresh that loses that cross-process race fails, and the stale token falls
+// through to the usage call's own 401.
+var kimiRefreshLocks sync.Map // credential slot path -> *sync.Mutex
+
+func kimiRefreshLock(path string) *sync.Mutex {
+	lock, _ := kimiRefreshLocks.LoadOrStore(path, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+// readKimiToken resolves a bearer token for the usage call. Kimi's access
+// tokens live 15 minutes, so a credentials file the CLI has not touched
+// recently is usually stale: when it is, lazyagent runs the same refresh grant
+// the CLI does and writes the rotated tokens back to the slot it read.
+func readKimiToken(ctx context.Context, env kimi.Environment) (kimiToken, error) {
 	if v := os.Getenv("KIMI_CODE_OAUTH_TOKEN"); v != "" {
-		return v, nil
+		return kimiToken{Value: v}, nil
 	}
-	path := kimi.CredentialsPath()
+	path := env.CredentialsPath
 	if path == "" {
-		return "", errAgentNotInstalled
+		return kimiToken{}, errAgentNotInstalled
 	}
+	creds, _, err := readKimiCredentialsFile(path)
+	if err != nil {
+		return kimiToken{}, err
+	}
+	if !kimiTokenExpired(creds, time.Now()) {
+		return kimiToken{Value: creds.AccessToken}, nil
+	}
+
+	lock := kimiRefreshLock(path)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Re-read under the lock: another caller — or Kimi Code CLI — may have
+	// refreshed this slot while we waited.
+	creds, data, err := readKimiCredentialsFile(path)
+	if err != nil {
+		return kimiToken{}, err
+	}
+	if !kimiTokenExpired(creds, time.Now()) {
+		return kimiToken{Value: creds.AccessToken}, nil
+	}
+
+	refreshed, warn, err := refreshKimiToken(ctx, env, creds, path, data)
+	if err != nil {
+		// Fall back to the stale token: the usage call's 401 message is more
+		// actionable than a refresh-transport error.
+		return kimiToken{Value: creds.AccessToken}, nil
+	}
+	return kimiToken{Value: refreshed, Warn: warn}, nil
+}
+
+func readKimiCredentialsFile(path string) (kimiCredentials, []byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", errAgentNotInstalled
+			return kimiCredentials{}, nil, errAgentNotInstalled
 		}
-		return "", err
+		return kimiCredentials{}, nil, err
 	}
-	return readKimiTokenFromBytes(data)
+	creds, err := parseKimiCredentials(data)
+	if err != nil {
+		return kimiCredentials{}, nil, err
+	}
+	return creds, data, nil
+}
+
+func parseKimiCredentials(data []byte) (kimiCredentials, error) {
+	var creds kimiCredentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return kimiCredentials{}, fmt.Errorf("parse Kimi credentials: %w", err)
+	}
+	if creds.AccessToken == "" {
+		return kimiCredentials{}, errAgentNotInstalled
+	}
+	return creds, nil
 }
 
 func readKimiTokenFromBytes(data []byte) (string, error) {
-	var creds kimiCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("parse Kimi credentials: %w", err)
-	}
-	if creds.AccessToken == "" {
-		return "", errAgentNotInstalled
+	creds, err := parseKimiCredentials(data)
+	if err != nil {
+		return "", err
 	}
 	return creds.AccessToken, nil
+}
+
+// kimiTokenExpired reports whether the stored access token is past (or within
+// kimiRefreshSkew of) its expiry. Credentials with no expiry are taken as live.
+func kimiTokenExpired(creds kimiCredentials, now time.Time) bool {
+	if creds.ExpiresAt <= 0 {
+		return false
+	}
+	return !now.Add(kimiRefreshSkew).Before(time.Unix(creds.ExpiresAt, 0))
+}
+
+// refreshKimiToken runs Kimi's refresh_token grant and persists the rotated
+// credentials back into path, preserving every field already in the file. The
+// refresh token rotates on every grant, so not writing it back would leave the
+// CLI holding an invalidated one.
+// It returns the new access token and, when the rotated credentials could not
+// be persisted, a warning for the report: the usage call still succeeds, but the
+// slot now holds a refresh token the server has superseded, so the next refresh
+// — lazyagent's or the CLI's — may force a fresh `kimi login`.
+func refreshKimiToken(ctx context.Context, env kimi.Environment, creds kimiCredentials, path string, original []byte) (token, warn string, err error) {
+	if creds.RefreshToken == "" {
+		return "", "", errors.New("no refresh token in Kimi credentials")
+	}
+	form := url.Values{
+		"client_id":     {kimiOAuthClientID},
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {creds.RefreshToken},
+	}
+	endpoint := env.OAuthHost + "/api/oauth/token"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent())
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("refresh Kimi OAuth token: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("refresh Kimi OAuth token: %s — %s", resp.Status, snippet(body, 200))
+	}
+
+	var grant struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Scope        string `json:"scope"`
+		TokenType    string `json:"token_type"`
+	}
+	if err := json.Unmarshal(body, &grant); err != nil {
+		return "", "", fmt.Errorf("parse Kimi refresh response: %w", err)
+	}
+	if grant.AccessToken == "" {
+		return "", "", errors.New("Kimi refresh response carried no access token")
+	}
+	if err := writeKimiCredentials(path, original, grant.AccessToken, grant.RefreshToken, grant.ExpiresIn, grant.Scope, grant.TokenType); err != nil {
+		return grant.AccessToken, fmt.Sprintf("Warning: refreshed Kimi credentials could not be written to %s (%v). %s now holds a superseded refresh token; run `kimi login` if Kimi Code stops working.", path, err, filepath.Base(path)), nil
+	}
+	return grant.AccessToken, "", nil
+}
+
+// writeKimiCredentials rewrites the credential slot the way Kimi's own file
+// storage does: merge into the existing document, temp file, rename, mode 0600.
+func writeKimiCredentials(path string, original []byte, accessToken, refreshToken string, expiresIn int64, scope, tokenType string) error {
+	doc := map[string]any{}
+	if err := json.Unmarshal(original, &doc); err != nil {
+		doc = map[string]any{}
+	}
+	doc["access_token"] = accessToken
+	if refreshToken != "" {
+		doc["refresh_token"] = refreshToken
+	}
+	if expiresIn > 0 {
+		doc["expires_in"] = expiresIn
+		doc["expires_at"] = time.Now().Add(time.Duration(expiresIn) * time.Second).Unix()
+	}
+	if scope != "" {
+		doc["scope"] = scope
+	}
+	if tokenType != "" {
+		doc["token_type"] = tokenType
+	}
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp.*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 type kimiUsageResponse struct {
@@ -91,7 +287,8 @@ type kimiUsageDetail struct {
 }
 
 func fetchKimiReport(ctx context.Context) (Report, error) {
-	token, err := readKimiToken()
+	env := kimi.ResolveEnvironment()
+	token, err := readKimiToken(ctx, env)
 	if err != nil {
 		if errors.Is(err, errAgentNotInstalled) {
 			return Report{}, err
@@ -99,11 +296,11 @@ func fetchKimiReport(ctx context.Context) (Report, error) {
 		return Report{}, fmt.Errorf("read Kimi OAuth token: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kimiUsageURL(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kimiUsageURL(env), nil)
 	if err != nil {
 		return Report{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+token.Value)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent())
 
@@ -133,18 +330,19 @@ func fetchKimiReport(ctx context.Context) (Report, error) {
 		return Report{}, err
 	}
 	report := kimiUsageToReport(usage)
+	if token.Warn != "" {
+		report.Note = token.Warn + "\n" + report.Note
+	}
 	if len(report.Windows) == 0 {
 		return Report{}, fmt.Errorf("Kimi usage endpoint returned no usable windows (response: %s)", snippet(body, 200))
 	}
 	return report, nil
 }
 
-func kimiUsageURL() string {
-	base := os.Getenv("KIMI_CODE_BASE_URL")
-	if base == "" {
-		base = defaultKimiCodeBaseURL
-	}
-	return strings.TrimRight(base, "/") + "/usages"
+// kimiUsageURL targets the deployment the resolved credentials belong to:
+// api.kimi.ai for a global login, api.kimi.com for mainland China.
+func kimiUsageURL(env kimi.Environment) string {
+	return strings.TrimRight(env.BaseURL, "/") + "/usages"
 }
 
 func parseKimiUsage(data []byte) (*kimiUsageResponse, error) {
