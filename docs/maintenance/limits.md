@@ -5,9 +5,9 @@ sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent — two for Cursor, whose Auto/Composer and API pools are metered independently — with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
+`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per provider, with two rows for standalone Cursor because its Auto/Composer and API pools are metered independently. The table has a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
 
-Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single credit window — **weekly** on xAI's unified billing, **monthly** on legacy plans; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two **monthly** rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
+Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single credit window: **weekly** on xAI's unified billing (displayed as `xAI`), **monthly** on legacy plans; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; standalone Cursor exposes two **monthly** rows sharing one billing-cycle window, its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok credit period have I burned?"* before kicking off a long Grok run.
 
@@ -37,9 +37,9 @@ lazyagent limits                   # summary table for all supported limits prov
 lazyagent limits --detailed        # detailed report with bars, reset times, and pace
 lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
-lazyagent limits --agent grok      # only Grok
+lazyagent limits --agent grok      # Grok or shared xAI usage
 lazyagent limits --agent kimi      # only Kimi Code
-lazyagent limits --agent cursor    # only Cursor (Models + API pools)
+lazyagent limits --agent cursor    # standalone Cursor (Models + API pools)
 lazyagent limits --json            # machine-readable report for scripts and widgets
 lazyagent limits --help            # full usage + disclaimers
 ```
@@ -175,7 +175,7 @@ Top level:
 | Field | Meaning |
 |-------|---------|
 | `generated_at` | When the reports were fetched, RFC 3339 in the local zone |
-| `reports` | One entry per metered pool, in the canonical order `claude`, `codex`, `grok`, `kimi`, `cursor`. Cursor contributes two entries (`Cursor Models`, `Cursor API`) that share `"agent": "cursor"` |
+| `reports` | One entry per metered pool, in the canonical order `claude`, `codex`, `grok`, `kimi`, `cursor`. Standalone Cursor contributes two entries (`Cursor Models`, `Cursor API`) that share `"agent": "cursor"` |
 | `errors` | Agents that produced no report, in the same order |
 
 Each report:
@@ -249,7 +249,7 @@ If neither is present, the command tells you to run `codex` to log in. If the to
 
 > Earlier versions read the limits locally from the latest session rollout under `~/.codex/sessions/`. That never made a network call, but it only reflected the server's response as of your last completed turn, so it could lag noticeably behind the live CLI figures. The live endpoint replaces it.
 
-### Grok
+### Grok and xAI
 
 A single HTTPS GET to `https://cli-chat-proxy.grok.com/v1/billing?format=credits` with the user's OAuth bearer token. This is the **same** endpoint (and the same `format=credits` parameter) Grok CLI ≥ 1.0.5's interactive `/usage show` slash command queries.
 
@@ -261,6 +261,8 @@ The OAuth token is read in this priority order:
 If neither is present, the command tells you to run `grok login`.
 
 Accounts on xAI's **unified billing** (`isUnifiedBillingUser: true`) report usage as a percentage of the current credit period — typically **weekly** — via `creditUsagePercent` and a `currentPeriod` with start / end timestamps. lazyagent maps this onto a single `Window` labeled after the period type (`weekly`, `monthly`, or `daily`), uses `creditUsagePercent` directly as `Used %`, and uses the period end as the reset time (e.g. `Source: 8.0% of weekly credits used`).
+
+When `config.isUnifiedBillingUser` is `true`, the provider name is **xAI** in the CLI, TUI, GUI, and JSON, reflecting the shared subscription. The JSON `agent` remains `grok`, and `--agent grok` continues to select it. A credit period alone does not trigger the rename: accounts without the unified flag keep the **Grok** label. The shared report uses the total `creditUsagePercent`, without adding product breakdowns together.
 
 **Legacy** accounts instead carry one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
 
@@ -288,6 +290,8 @@ Cursor is the odd one out: it's an IDE, not a CLI, so its usage lives in the web
 Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring, under `~/Library/Application Support/Cursor` on macOS, `~/.config/Cursor` on Linux, or `%APPDATA%\Cursor` on Windows): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
 
 With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
+
+**Unified subscriptions.** A `membershipType` beginning with `unified_` (for example `unified_ultra`) identifies a Cursor account on the shared xAI subscription. lazyagent skips both Cursor rows, even if the response still contains an enabled legacy plan with zero percentages. Shared usage comes from the Grok endpoint above, so sign in with `grok login` if its credentials are missing. With an explicit `--agent cursor`, the command explains that usage is shared and points to `--agent grok`; JSON records this skip as `unavailable`. Standalone memberships such as `pro`, `pro_plus`, and `ultra` keep their two rows. Cursor membership is checked independently of the Grok login, so a separate standalone Cursor account remains visible alongside xAI usage.
 
 **Two pools, two rows.** Cursor meters spend into an **Auto / Composer** pool and a **usage-based API** pool, each against its own allowance, and reports each as its own percentage. lazyagent shows both: `Cursor Models` uses `autoPercentUsed`, `Cursor API` uses `apiPercentUsed`. They share one monthly window bounded by `billingCycleStart` and `billingCycleEnd`, and both appear or disappear together since one call produces both.
 

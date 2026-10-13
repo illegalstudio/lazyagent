@@ -138,6 +138,33 @@ func TestCursorSummaryToReports_Unlimited(t *testing.T) {
 	}
 }
 
+func TestCursorSummaryToReports_UnifiedSubscription(t *testing.T) {
+	s := loadCursorSummary(t, "cursor_usage_summary_unified.json")
+	if s.MembershipType != "unified_ultra" {
+		t.Fatalf("membership = %q, want unified_ultra", s.MembershipType)
+	}
+	reports, err := cursorSummaryToReports(s)
+	if len(reports) != 0 || !errors.Is(err, errAgentUnavailable) {
+		t.Fatalf("reports = %+v, err = %v, want no reports and errAgentUnavailable", reports, err)
+	}
+	if !strings.Contains(err.Error(), "xAI") || !strings.Contains(err.Error(), "--agent grok") {
+		t.Fatalf("err = %v, want guidance to the shared xAI limits", err)
+	}
+}
+
+func TestCursorSummaryToReports_UnifiedWithoutLegacyUsage(t *testing.T) {
+	for _, membership := range []string{"unified_free", "unified_plus", "unified_premium", "unified_super", "unified_ultra"} {
+		t.Run(membership, func(t *testing.T) {
+			// Unified responses do not need the old billing dates or percent fields.
+			s := &cursorUsageSummary{MembershipType: membership}
+			reports, err := cursorSummaryToReports(s)
+			if len(reports) != 0 || !errors.Is(err, errAgentUnavailable) || !strings.Contains(err.Error(), "xAI") {
+				t.Fatalf("reports = %+v, err = %v, want unified subscription guidance", reports, err)
+			}
+		})
+	}
+}
+
 func TestCursorSummaryToReports_PlanDisabled(t *testing.T) {
 	s := loadCursorSummary(t, "cursor_usage_summary.json")
 	s.IndividualUsage.Plan.Enabled = false

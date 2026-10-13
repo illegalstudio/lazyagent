@@ -158,6 +158,50 @@ func TestGrokCreditsToWindow(t *testing.T) {
 	}
 }
 
+func TestGrokBillingToReport(t *testing.T) {
+	standalone := false
+	cases := []struct {
+		name     string
+		fixture  string
+		flag     *bool
+		provider string
+		label    string
+		used     float64
+	}{
+		{"legacy monthly", "grok_billing.json", nil, "Grok", "monthly", 13.875},
+		{"unified credits", "grok_billing_credits.json", nil, "xAI", "weekly", 5},
+		{"standalone credits", "grok_billing_credits.json", &standalone, "Grok", "weekly", 5},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", c.fixture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			billing, err := parseGrokBilling(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.flag != nil {
+				billing.Config.IsUnifiedBillingUser = *c.flag
+			}
+			report, err := grokBillingToReport(billing.Config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.Provider != c.provider {
+				t.Errorf("provider = %q, want %q", report.Provider, c.provider)
+			}
+			if len(report.Windows) != 1 || report.Windows[0].Label != c.label || report.Windows[0].UsedPercent != c.used {
+				t.Errorf("windows = %+v, want one %s window at %v%%", report.Windows, c.label, c.used)
+			}
+			if report.Source == "" || report.Note == "" {
+				t.Error("missing report provenance")
+			}
+		})
+	}
+}
+
 func TestGrokPeriodLabel(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"USAGE_PERIOD_TYPE_WEEKLY", "weekly"},

@@ -120,9 +120,9 @@ Usage:
   lazyagent limits --json           Print the full report as JSON (windows, pace, reset times, errors)
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
-  lazyagent limits --agent grok     Show only Grok limits
+  lazyagent limits --agent grok     Show Grok or shared xAI limits
   lazyagent limits --agent kimi     Show only Kimi Code limits
-  lazyagent limits --agent cursor   Show only Cursor limits (Models + API pools)
+  lazyagent limits --agent cursor   Show standalone Cursor limits (Models + API pools)
 
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
@@ -167,7 +167,8 @@ Authentication:
   Cursor  reads its session token from Cursor's local state.vscdb.
           If none is found, open Cursor and sign in. Cursor reports its
           Auto/Composer and usage-based API pools as separate percentages,
-          shown as two rows.
+          shown as two rows on standalone plans. Unified subscriptions use
+          shared xAI credits, available through --agent grok.
 
 Disclaimer (Claude, Codex, Grok, Kimi, Cursor):
   These providers expose their usage through undocumented endpoints used by

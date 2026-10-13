@@ -18,9 +18,8 @@ import (
 // stability caveat.
 const cursorUsageSummaryURL = "https://cursor.com/api/usage-summary"
 
-// fetchCursorReports returns Cursor's two metered pools as separate reports:
-// the Auto/Composer allowance and the usage-based API allowance. Both come from
-// one call, so they always appear or disappear together.
+// fetchCursorReports returns standalone Cursor's two metered pools as separate
+// reports. Unified subscriptions use the shared xAI credits reported by Grok.
 func fetchCursorReports(ctx context.Context) ([]Report, error) {
 	token, ok, err := cursor.ReadAuth()
 	if err != nil {
@@ -169,6 +168,11 @@ func cursorPlanBlock(s *cursorUsageSummary) *cursorPlanUsage {
 // lazyagent shows for Cursor. Kept pure so the mapping is unit-testable without
 // a server; all network work lives in fetchCursorReports.
 func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
+	// Check this account's membership independently of the Grok login. The
+	// user may have a standalone Cursor plan on a different account or team.
+	if strings.HasPrefix(s.MembershipType, "unified_") {
+		return nil, fmt.Errorf("%w: Cursor usage is included in the unified xAI subscription. Run `lazyagent limits --agent grok` to view shared limits", errAgentUnavailable)
+	}
 	if s.IsUnlimited {
 		return nil, fmt.Errorf("%w: Cursor reports this account as unlimited, so there is no budget to pace against", errAgentUnavailable)
 	}
