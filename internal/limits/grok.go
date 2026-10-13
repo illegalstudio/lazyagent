@@ -200,35 +200,50 @@ func fetchGrokReport(ctx context.Context) (Report, error) {
 	if billing.Config == nil {
 		return Report{}, fmt.Errorf("Grok billing response missing config block (response: %s)", snippet(body, 200))
 	}
+	return grokBillingToReport(billing.Config)
+}
 
+// grokBillingToReport keeps subscription detection independent of the usage
+// window: a credit period alone does not identify a unified subscription.
+func grokBillingToReport(cfg *grokBillingConfig) (Report, error) {
 	var w Window
 	var source string
 	switch {
-	case billing.Config.CurrentPeriod != nil:
-		// Unified billing: usage is a percentage of the current credit period.
-		w = grokCreditsToWindow(billing.Config)
-		source = fmt.Sprintf("Source: %.1f%% of %s credits used", billing.Config.CreditUsagePercent, w.Label)
-		if billing.Config.OnDemandCap.Val > 0 {
-			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+	case cfg.CurrentPeriod != nil:
+		// Credits: usage is a percentage of the current credit period.
+		w = grokCreditsToWindow(cfg)
+		source = fmt.Sprintf("Source: %.1f%% of %s credits used", cfg.CreditUsagePercent, w.Label)
+		if cfg.OnDemandCap.Val > 0 {
+			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(cfg.OnDemandCap.Val))
 		}
-	case billing.Config.MonthlyLimit.Val > 0:
+	case cfg.MonthlyLimit.Val > 0:
 		// Legacy billing: a dollar-denominated monthly limit.
-		w = grokConfigToWindow(billing.Config)
+		w = grokConfigToWindow(cfg)
 		source = fmt.Sprintf("Source: %s of %s used",
-			formatCentsUSD(billing.Config.Used.Val),
-			formatCentsUSD(billing.Config.MonthlyLimit.Val),
+			formatCentsUSD(cfg.Used.Val),
+			formatCentsUSD(cfg.MonthlyLimit.Val),
 		)
-		if billing.Config.OnDemandCap.Val > 0 {
-			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+		if cfg.OnDemandCap.Val > 0 {
+			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(cfg.OnDemandCap.Val))
 		}
 	default:
 		return Report{}, fmt.Errorf("Grok billing response has no usage period or monthly limit (no active subscription?)")
 	}
 
+	provider := "Grok"
+	if cfg.IsUnifiedBillingUser {
+		provider = "xAI"
+	}
+	var sharedPeriod *sharedCreditPeriod
+	if cfg.IsUnifiedBillingUser && cfg.CurrentPeriod != nil {
+		sharedPeriod = &sharedCreditPeriod{start: cfg.CurrentPeriod.Start.UnixMilli(), end: cfg.CurrentPeriod.End.UnixMilli()}
+	}
+
 	return Report{
-		Provider: "Grok",
-		Source:   source,
-		Windows:  []Window{w},
-		Note:     "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
+		Provider:     provider,
+		Source:       source,
+		Windows:      []Window{w},
+		Note:         "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
+		sharedPeriod: sharedPeriod,
 	}, nil
 }

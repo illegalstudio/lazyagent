@@ -18,9 +18,12 @@ import (
 // stability caveat.
 const cursorUsageSummaryURL = "https://cursor.com/api/usage-summary"
 
-// fetchCursorReports returns Cursor's two metered pools as separate reports:
-// the Auto/Composer allowance and the usage-based API allowance. Both come from
-// one call, so they always appear or disappear together.
+// cursorCurrentPeriodUsageURL is the read-only Connect RPC used by Cursor's
+// desktop client. Unlike usage-summary, it exposes the live unified credit pool.
+const cursorCurrentPeriodUsageURL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
+
+// fetchCursorReports returns standalone Cursor's two pools or the shared xAI
+// pool using Cursor credentials alone. It never requires a Grok installation.
 func fetchCursorReports(ctx context.Context) ([]Report, error) {
 	token, ok, err := cursor.ReadAuth()
 	if err != nil {
@@ -29,7 +32,10 @@ func fetchCursorReports(ctx context.Context) ([]Report, error) {
 	if !ok {
 		return nil, errAgentNotInstalled
 	}
+	return fetchCursorReportsWithToken(ctx, token)
+}
 
+func fetchCursorReportsWithToken(ctx context.Context, token string) ([]Report, error) {
 	userID, err := cursorUserIDFromToken(token)
 	if err != nil {
 		return nil, fmt.Errorf("decode Cursor access token: %w", err)
@@ -40,7 +46,68 @@ func fetchCursorReports(ctx context.Context) ([]Report, error) {
 	if err := cursorGET(ctx, cursorUsageSummaryURL, cookie, &summary); err != nil {
 		return nil, err
 	}
+	if cursorUnifiedMembership(summary.MembershipType) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, cursorCurrentPeriodUsageURL, strings.NewReader("{}"))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Connect-Protocol-Version", "1")
+		var usage cursorCurrentPeriodUsage
+		if err := cursorDo(req, "", &usage); err != nil {
+			return nil, err
+		}
+		return single(cursorCurrentPeriodToReport(&usage))
+	}
 	return cursorSummaryToReports(&summary)
+}
+
+// These are the unified membership values in Cursor's shipped client. In
+// particular, legacy "ultra" and unified "unified_ultra" are distinct plans.
+func cursorUnifiedMembership(membership string) bool {
+	switch membership {
+	case "plus", "premium", "super":
+		return true
+	default:
+		return strings.HasPrefix(membership, "unified_")
+	}
+}
+
+// Connect's protobuf JSON encodes int64 timestamps as quoted milliseconds.
+type cursorCurrentPeriodUsage struct {
+	BillingCycleStart int64                   `json:"billingCycleStart,string"`
+	BillingCycleEnd   int64                   `json:"billingCycleEnd,string"`
+	Enabled           bool                    `json:"enabled"`
+	PlanUsage         *cursorCurrentPlanUsage `json:"planUsage"`
+}
+
+type cursorCurrentPlanUsage struct {
+	TotalPercentUsed *float64 `json:"totalPercentUsed"`
+}
+
+func cursorCurrentPeriodToReport(usage *cursorCurrentPeriodUsage) (Report, error) {
+	if !usage.Enabled || usage.PlanUsage == nil || usage.PlanUsage.TotalPercentUsed == nil {
+		return Report{}, fmt.Errorf("%w: Cursor's current-period response has no enabled shared usage percentage", errAgentUnavailable)
+	}
+	if usage.BillingCycleStart <= 0 || usage.BillingCycleEnd <= usage.BillingCycleStart {
+		return Report{}, fmt.Errorf("%w: Cursor's current-period response has no valid shared usage interval", errAgentUnavailable)
+	}
+	start := time.UnixMilli(usage.BillingCycleStart)
+	end := time.UnixMilli(usage.BillingCycleEnd)
+	pct := *usage.PlanUsage.TotalPercentUsed
+	return Report{
+		Provider: "xAI",
+		Source:   fmt.Sprintf("Source: %.1f%% of shared xAI credits used (Cursor)", pct),
+		Windows: []Window{{
+			Label:         "weekly",
+			WindowMinutes: int(end.Sub(start).Minutes()),
+			UsedPercent:   pct,
+			ResetsAt:      end,
+		}},
+		Note:         "Note: reads GetCurrentPeriodUsage on api2.cursor.sh with Cursor's access token. Undocumented endpoint used by the Cursor client; may change without notice.",
+		sharedPeriod: &sharedCreditPeriod{start: usage.BillingCycleStart, end: usage.BillingCycleEnd},
+	}, nil
 }
 
 // cursorUserIDFromToken extracts the user id from the JWT access token. Cursor
@@ -92,7 +159,9 @@ func cursorGET(ctx context.Context, url, cookie string, out any) error {
 }
 
 func cursorDo(req *http.Request, cookie string, out any) error {
-	req.Header.Set("Cookie", "WorkosCursorSessionToken="+cookie)
+	if cookie != "" {
+		req.Header.Set("Cookie", "WorkosCursorSessionToken="+cookie)
+	}
 	req.Header.Set("Origin", "https://cursor.com")
 	req.Header.Set("Referer", "https://cursor.com/dashboard")
 	req.Header.Set("Accept", "application/json")
@@ -169,6 +238,11 @@ func cursorPlanBlock(s *cursorUsageSummary) *cursorPlanUsage {
 // lazyagent shows for Cursor. Kept pure so the mapping is unit-testable without
 // a server; all network work lives in fetchCursorReports.
 func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
+	// Check this account's membership independently of the Grok login. The
+	// user may have a standalone Cursor plan on a different account or team.
+	if cursorUnifiedMembership(s.MembershipType) {
+		return nil, fmt.Errorf("%w: unified xAI usage requires Cursor's current-period response", errAgentUnavailable)
+	}
 	if s.IsUnlimited {
 		return nil, fmt.Errorf("%w: Cursor reports this account as unlimited, so there is no budget to pace against", errAgentUnavailable)
 	}

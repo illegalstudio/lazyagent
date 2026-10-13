@@ -120,9 +120,9 @@ Usage:
   lazyagent limits --json           Print the full report as JSON (windows, pace, reset times, errors)
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
-  lazyagent limits --agent grok     Show only Grok limits
+  lazyagent limits --agent grok     Show Grok or shared xAI limits
   lazyagent limits --agent kimi     Show only Kimi Code limits
-  lazyagent limits --agent cursor   Show only Cursor limits (Models + API pools)
+  lazyagent limits --agent cursor   Show Cursor pools or shared xAI limits
 
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
@@ -167,7 +167,8 @@ Authentication:
   Cursor  reads its session token from Cursor's local state.vscdb.
           If none is found, open Cursor and sign in. Cursor reports its
           Auto/Composer and usage-based API pools as separate percentages,
-          shown as two rows.
+          shown as two rows on standalone plans. Unified subscriptions use
+          shared xAI credits, read with Cursor's own token.
 
 Disclaimer (Claude, Codex, Grok, Kimi, Cursor):
   These providers expose their usage through undocumented endpoints used by
@@ -269,11 +270,29 @@ func collect(ctx context.Context, agents []string) ([]agentReport, []agentError)
 			errs = append(errs, agentError{agent: a, kind: kind, err: err})
 			continue
 		}
-		for _, r := range rs {
-			results = append(results, agentReport{agent: a, report: r})
-		}
+		results = appendAgentReports(results, a, rs)
 	}
 	return results, errs
+}
+
+// appendAgentReports retains the first source for a matching xAI credit period.
+// Canonical ordering prefers Grok; Cursor still works alone or for another period.
+func appendAgentReports(results []agentReport, agent string, reports []Report) []agentReport {
+	for _, report := range reports {
+		duplicate := false
+		if report.sharedPeriod != nil {
+			for _, previous := range results {
+				if previous.report.sharedPeriod != nil && *previous.report.sharedPeriod == *report.sharedPeriod {
+					duplicate = true
+					break
+				}
+			}
+		}
+		if !duplicate {
+			results = append(results, agentReport{agent: agent, report: report})
+		}
+	}
+	return results
 }
 
 // allMissing reports the `--agent all` case where every agent was skipped as

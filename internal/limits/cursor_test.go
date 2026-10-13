@@ -1,10 +1,13 @@
 package limits
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,6 +138,165 @@ func TestCursorSummaryToReports_Unlimited(t *testing.T) {
 	s.IsUnlimited = true
 	if _, err := cursorSummaryToReports(s); !errors.Is(err, errAgentUnavailable) {
 		t.Fatalf("err = %v, want errAgentUnavailable", err)
+	}
+}
+
+func TestCursorSummaryToReports_UnifiedSubscription(t *testing.T) {
+	s := loadCursorSummary(t, "cursor_usage_summary_unified.json")
+	if s.MembershipType != "unified_ultra" {
+		t.Fatalf("membership = %q, want unified_ultra", s.MembershipType)
+	}
+	reports, err := cursorSummaryToReports(s)
+	if len(reports) != 0 || !errors.Is(err, errAgentUnavailable) {
+		t.Fatalf("reports = %+v, err = %v, want no reports and errAgentUnavailable", reports, err)
+	}
+	if !strings.Contains(err.Error(), "current-period") {
+		t.Fatalf("err = %v, want a request for the shared current-period data", err)
+	}
+}
+
+func TestCursorSummaryToReports_UnifiedWithoutLegacyUsage(t *testing.T) {
+	for _, membership := range []string{"plus", "premium", "super", "unified_ultra", "unified_plus"} {
+		t.Run(membership, func(t *testing.T) {
+			// Unified responses do not need the old billing dates or percent fields.
+			s := &cursorUsageSummary{MembershipType: membership}
+			reports, err := cursorSummaryToReports(s)
+			if len(reports) != 0 || !errors.Is(err, errAgentUnavailable) || !strings.Contains(err.Error(), "xAI") {
+				t.Fatalf("reports = %+v, err = %v, want unified subscription guidance", reports, err)
+			}
+		})
+	}
+}
+
+func loadCursorCurrentPeriod(t *testing.T) *cursorCurrentPeriodUsage {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "cursor_current_period_usage_unified.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var usage cursorCurrentPeriodUsage
+	if err := json.Unmarshal(data, &usage); err != nil {
+		t.Fatal(err)
+	}
+	return &usage
+}
+
+func TestCursorCurrentPeriodToReport(t *testing.T) {
+	usage := loadCursorCurrentPeriod(t)
+	report, err := cursorCurrentPeriodToReport(usage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Provider != "xAI" || len(report.Windows) != 1 {
+		t.Fatalf("report = %+v, want one xAI window", report)
+	}
+	w := report.Windows[0]
+	if w.Label != "weekly" || w.WindowMinutes != 7*24*60 || w.UsedPercent != 5.861539850166983 || w.ResetsAt.UnixMilli() != usage.BillingCycleEnd {
+		t.Fatalf("window = %+v, want live shared usage and the weekly reset", w)
+	}
+	if report.sharedPeriod == nil || report.sharedPeriod.start != usage.BillingCycleStart || report.sharedPeriod.end != usage.BillingCycleEnd {
+		t.Fatal("missing shared credit period for duplicate detection")
+	}
+	zero := 0.0
+	usage.PlanUsage.TotalPercentUsed = &zero
+	if report, err := cursorCurrentPeriodToReport(usage); err != nil || report.Windows[0].UsedPercent != 0 {
+		t.Fatalf("report = %+v, err = %v, want genuine zero usage", report, err)
+	}
+}
+
+func TestCursorCurrentPeriodToReport_Unavailable(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		change func(*cursorCurrentPeriodUsage)
+	}{
+		{"disabled", func(u *cursorCurrentPeriodUsage) { u.Enabled = false }},
+		{"missing plan", func(u *cursorCurrentPeriodUsage) { u.PlanUsage = nil }},
+		{"missing percentage", func(u *cursorCurrentPeriodUsage) { u.PlanUsage.TotalPercentUsed = nil }},
+		{"missing start", func(u *cursorCurrentPeriodUsage) { u.BillingCycleStart = 0 }},
+		{"invalid end", func(u *cursorCurrentPeriodUsage) { u.BillingCycleEnd = u.BillingCycleStart }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			usage := loadCursorCurrentPeriod(t)
+			c.change(usage)
+			if _, err := cursorCurrentPeriodToReport(usage); !errors.Is(err, errAgentUnavailable) {
+				t.Fatalf("err = %v, want errAgentUnavailable", err)
+			}
+		})
+	}
+}
+
+type cursorTestTransport func(*http.Request) (*http.Response, error)
+
+func (f cursorTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestFetchCursorReports_WithoutGrok(t *testing.T) {
+	token := makeJWT("auth0|cursor-only")
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	for _, membership := range []string{"plus", "premium", "super", "unified_ultra", "ultra"} {
+		t.Run(membership, func(t *testing.T) {
+			calls := 0
+			http.DefaultTransport = cursorTestTransport(func(req *http.Request) (*http.Response, error) {
+				calls++
+				var data []byte
+				switch req.URL.String() {
+				case cursorUsageSummaryURL:
+					if req.Method != http.MethodGet || req.Header.Get("Cookie") != "WorkosCursorSessionToken=cursor-only%3A%3A"+token {
+						t.Fatalf("unexpected summary authentication or method")
+					}
+					summary := loadCursorSummary(t, "cursor_usage_summary.json")
+					summary.MembershipType = membership
+					data, _ = json.Marshal(summary)
+				case cursorCurrentPeriodUsageURL:
+					body, _ := io.ReadAll(req.Body)
+					if req.Method != http.MethodPost || string(body) != "{}" || req.Header.Get("Authorization") != "Bearer "+token || req.Header.Get("Connect-Protocol-Version") != "1" {
+						t.Fatalf("unexpected current-period authentication, method or body")
+					}
+					if req.Header.Get("Cookie") != "" {
+						t.Fatal("dashboard cookie sent to the RPC host")
+					}
+					data, _ = json.Marshal(loadCursorCurrentPeriod(t))
+				default:
+					return nil, fmt.Errorf("unexpected network call: %s", req.URL)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(data))), Header: make(http.Header)}, nil
+			})
+			reports, err := fetchCursorReportsWithToken(context.Background(), token)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if membership == "ultra" {
+				if calls != 1 || len(reports) != 2 || reports[0].Provider != "Cursor Models" {
+					t.Fatalf("reports = %+v, calls = %d, want unchanged standalone pools", reports, calls)
+				}
+			} else if calls != 2 || len(reports) != 1 || reports[0].Provider != "xAI" {
+				t.Fatalf("reports = %+v, calls = %d, want xAI from Cursor credentials alone", reports, calls)
+			}
+		})
+	}
+}
+
+func TestFetchCursorReports_SharedRPCFailure(t *testing.T) {
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	http.DefaultTransport = cursorTestTransport(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() == cursorUsageSummaryURL {
+			data, err := os.ReadFile(filepath.Join("testdata", "cursor_usage_summary_unified.json"))
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(data)))}, nil
+		}
+		if req.URL.String() != cursorCurrentPeriodUsageURL {
+			return nil, fmt.Errorf("unexpected network call: %s", req.URL)
+		}
+		return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"code":"unauthenticated"}`))}, nil
+	})
+	reports, err := fetchCursorReportsWithToken(context.Background(), makeJWT("cursor-only"))
+	if len(reports) != 0 || err == nil || !strings.Contains(err.Error(), "rejected (401)") {
+		t.Fatalf("reports = %+v, err = %v, want the RPC failure without stale zero-usage pools", reports, err)
 	}
 }
 
