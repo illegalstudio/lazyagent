@@ -23,6 +23,14 @@ type Report struct {
 	Source   string   // short note shown before the disclaimer (provenance)
 	Windows  []Window // 5h, 7d, ...
 	Note     string   // disclaimer (may be empty)
+	// Grok and Cursor can expose the same xAI credit period. Millisecond
+	// boundaries identify matching periods without comparing rounded usage.
+	sharedPeriod *sharedCreditPeriod
+}
+
+type sharedCreditPeriod struct {
+	start int64
+	end   int64
 }
 
 // pace classifies how the current consumption compares to a perfectly linear pace.

@@ -39,7 +39,7 @@ lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
 lazyagent limits --agent grok      # Grok or shared xAI usage
 lazyagent limits --agent kimi      # only Kimi Code
-lazyagent limits --agent cursor    # standalone Cursor (Models + API pools)
+lazyagent limits --agent cursor    # standalone Cursor pools or shared xAI usage
 lazyagent limits --json            # machine-readable report for scripts and widgets
 lazyagent limits --help            # full usage + disclaimers
 ```
@@ -182,7 +182,7 @@ Each report:
 
 | Field | Meaning |
 |-------|---------|
-| `agent` | Stable id to key on: `claude`, `codex`, `grok`, `kimi`, `cursor` |
+| `agent` | Stable source id: `claude`, `codex`, `grok`, `kimi`, `cursor`. Shared xAI usage uses `grok` when read from Grok and `cursor` when read from Cursor alone |
 | `provider` | Display name used by the detailed view (`Claude Code`, `Cursor Models`, …) |
 | `short_name` | Label used by the summary table (`Claude`, `Kimi`, …) |
 | `source`, `note` | The provenance line and the disclaimer from the detailed view, or `""` |
@@ -291,7 +291,9 @@ Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads
 
 With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
 
-**Unified subscriptions.** A `membershipType` beginning with `unified_` (for example `unified_ultra`) identifies a Cursor account on the shared xAI subscription. lazyagent skips both Cursor rows, even if the response still contains an enabled legacy plan with zero percentages. Shared usage comes from the Grok endpoint above, so sign in with `grok login` if its credentials are missing. With an explicit `--agent cursor`, the command explains that usage is shared and points to `--agent grok`; JSON records this skip as `unavailable`. Standalone memberships such as `pro`, `pro_plus`, and `ultra` keep their two rows. Cursor membership is checked independently of the Grok login, so a separate standalone Cursor account remains visible alongside xAI usage.
+**Unified subscriptions.** Cursor uses `plus`, `premium`, `super`, and `unified_ultra` for the new paid plans. Memberships beginning with `unified_` are also treated as shared plans. Legacy `ultra`, `pro`, and `pro_plus` retain their separate Cursor pools. For a unified membership, lazyagent reads `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`, the read-only Connect RPC used by the Cursor client, with the same Cursor access token as a bearer, JSON body `{}`, and `Connect-Protocol-Version: 1`. The live `planUsage.totalPercentUsed` and quoted millisecond `billingCycleStart` / `billingCycleEnd` become one weekly **xAI** report. The stale zero percentages from `/api/usage-summary` are ignored.
+
+Grok does not need to be installed or logged in for this path: `--agent cursor` also shows the shared xAI report. When both clients report matching shared credit-period boundaries, the aggregate CLI, TUI, and GUI retain the Grok report once. Distinct credit periods and separate standalone Cursor plans remain visible. In JSON, the retained report keeps the source agent ID (`grok` or `cursor`); skipping a duplicate does not add an `unavailable` error.
 
 **Two pools, two rows.** Cursor meters spend into an **Auto / Composer** pool and a **usage-based API** pool, each against its own allowance, and reports each as its own percentage. lazyagent shows both: `Cursor Models` uses `autoPercentUsed`, `Cursor API` uses `apiPercentUsed`. They share one monthly window bounded by `billingCycleStart` and `billingCycleEnd`, and both appear or disappear together since one call produces both.
 

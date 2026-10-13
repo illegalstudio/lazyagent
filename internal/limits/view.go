@@ -83,9 +83,13 @@ func FetchAll(ctx context.Context) []Report {
 	}
 	wg.Wait()
 
-	var out []Report
+	var merged []agentReport
 	for i := range agents {
-		out = append(out, results[i]...)
+		merged = appendAgentReports(merged, agents[i], results[i])
+	}
+	var out []Report
+	for _, result := range merged {
+		out = append(out, result.report)
 	}
 	return out
 }

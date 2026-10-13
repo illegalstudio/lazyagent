@@ -234,11 +234,16 @@ func grokBillingToReport(cfg *grokBillingConfig) (Report, error) {
 	if cfg.IsUnifiedBillingUser {
 		provider = "xAI"
 	}
+	var sharedPeriod *sharedCreditPeriod
+	if cfg.IsUnifiedBillingUser && cfg.CurrentPeriod != nil {
+		sharedPeriod = &sharedCreditPeriod{start: cfg.CurrentPeriod.Start.UnixMilli(), end: cfg.CurrentPeriod.End.UnixMilli()}
+	}
 
 	return Report{
-		Provider: provider,
-		Source:   source,
-		Windows:  []Window{w},
-		Note:     "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
+		Provider:     provider,
+		Source:       source,
+		Windows:      []Window{w},
+		Note:         "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
+		sharedPeriod: sharedPeriod,
 	}, nil
 }
