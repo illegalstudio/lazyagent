@@ -182,7 +182,7 @@ Each report:
 
 | Field | Meaning |
 |-------|---------|
-| `agent` | Stable source id: `claude`, `codex`, `grok`, `kimi`, `cursor`. Shared xAI usage uses `grok` when read from Grok and `cursor` when read from Cursor alone |
+| `agent` | Stable source id: `claude`, `codex`, `grok`, `kimi`, `cursor`. Shared xAI usage uses `grok` when read from Grok and `cursor` when read from Cursor, including the Grok fallback |
 | `provider` | Display name used by the detailed view (`Claude Code`, `Cursor Models`, …) |
 | `short_name` | Label used by the summary table (`Claude`, `Kimi`, …) |
 | `source`, `note` | The provenance line and the disclaimer from the detailed view, or `""` |
@@ -263,6 +263,10 @@ If neither is present, the command tells you to run `grok login`.
 Accounts on xAI's **unified billing** (`isUnifiedBillingUser: true`) report usage as a percentage of the current credit period — typically **weekly** — via `creditUsagePercent` and a `currentPeriod` with start / end timestamps. lazyagent maps this onto a single `Window` labeled after the period type (`weekly`, `monthly`, or `daily`), uses `creditUsagePercent` directly as `Used %`, and uses the period end as the reset time (e.g. `Source: 8.0% of weekly credits used`).
 
 When `config.isUnifiedBillingUser` is `true`, the provider name is **xAI** in the CLI, TUI, GUI, and JSON, reflecting the shared subscription. The JSON `agent` remains `grok`, and `--agent grok` continues to select it. A credit period alone does not trigger the rename: accounts without the unified flag keep the **Grok** label. The shared report uses the total `creditUsagePercent`, without adding product breakdowns together.
+
+**Automatic fallback.** If Grok has local credentials but its usage request fails, lazyagent uses Cursor's shared xAI credits when Cursor is also signed in with a unified subscription. This works with both `lazyagent limits` and `lazyagent limits --agent grok`. In aggregate mode, the existing Cursor result is reused without another request or a duplicate row. The report stays labeled **xAI**, its `Source:` line identifies Cursor, and its JSON `agent` is `cursor`. A successful fallback removes the Grok error and does not fail the command. The TUI and GUI also display the available Cursor report when Grok fails.
+
+The fallback reports the subscription of the account signed in to Cursor. Standalone Cursor pools cannot replace Grok usage. If Cursor is missing, signed out, unavailable, or fails too, the original Grok error remains. A missing Grok login does not trigger the fallback; Cursor can still be queried independently.
 
 **Legacy** accounts instead carry one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
 

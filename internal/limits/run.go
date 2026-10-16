@@ -44,6 +44,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -157,6 +158,8 @@ Authentication:
             1. GROK_OAUTH_TOKEN env var
             2. ~/.grok/auth.json
           If none is found, run `+"`grok login`"+`.
+          If usage fails, falls back to Cursor's shared xAI credits when
+          Cursor is signed in with a unified subscription.
   Kimi    reads its OAuth token from, in order:
             1. KIMI_CODE_OAUTH_TOKEN env var
             2. the ~/.kimi-code/credentials slot named by config.toml
@@ -271,6 +274,30 @@ func collect(ctx context.Context, agents []string) ([]agentReport, []agentError)
 			continue
 		}
 		results = appendAgentReports(results, a, rs)
+	}
+
+	for i, ae := range errs {
+		if ae.agent != "grok" || ae.kind == errKindNotInstalled {
+			continue
+		}
+		// Reuse Cursor's result in all-agent mode. Explicit Grok selection
+		// can also recover, but only from Cursor's shared xAI credit pool.
+		if !slices.Contains(agents, "cursor") && ctx.Err() == nil {
+			if reports, err := fetchCursorReports(ctx); err == nil {
+				for _, report := range reports {
+					if report.sharedPeriod != nil {
+						results = appendAgentReports(results, "cursor", []Report{report})
+					}
+				}
+			}
+		}
+		for _, result := range results {
+			if result.agent == "cursor" && result.report.sharedPeriod != nil {
+				return results, append(errs[:i], errs[i+1:]...)
+			}
+		}
+		// Preserve the original Grok error when Cursor cannot replace it.
+		break
 	}
 	return results, errs
 }
