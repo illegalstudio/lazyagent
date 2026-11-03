@@ -3,6 +3,7 @@ package cursor
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -208,13 +209,32 @@ func walStats(dbPath string) (time.Time, int64) {
 	return info.ModTime(), info.Size()
 }
 
+// convHeader is one entry of a composer's ordered bubble list.
+type convHeader struct {
+	BubbleID string `json:"bubbleId"`
+	Type     int    `json:"type"`
+}
+
+// chunkedHeaderKey returns the key of a composer's header chunk. Newer Cursor
+// builds no longer inline fullConversationHeadersOnly in composerData; the
+// headers live in composerConvHeaders:<sid>:<6-digit chunk> keys, each a JSON
+// array, described by composerData.headerLog.
+func chunkedHeaderKey(sid string, chunk int) string {
+	return fmt.Sprintf("composerConvHeaders:%s:%06d", sid, chunk)
+}
+
 // queryComposers reads composerData entries to get session summaries.
-// Uses json_extract on the last element of fullConversationHeadersOnly.
+// Uses json_extract on the last element of fullConversationHeadersOnly and
+// falls back to the chunked composerConvHeaders keys for recently updated
+// composers whose inline list is empty.
 func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	rows, err := db.Query(`
 		SELECT json_extract(value, '$.composerId'),
 		       json_array_length(json_extract(value, '$.fullConversationHeadersOnly')),
-		       json_extract(value, '$.fullConversationHeadersOnly[#-1].bubbleId')
+		       json_extract(value, '$.fullConversationHeadersOnly[#-1].bubbleId'),
+		       json_extract(value, '$.headerLog.count'),
+		       json_extract(value, '$.headerLog.chunkCount'),
+		       json_extract(value, '$.lastUpdatedAt')
 		FROM cursorDiskKV
 		WHERE key LIKE 'composerData:%'
 	`)
@@ -223,19 +243,78 @@ func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	}
 	defer rows.Close()
 
+	type chunkedComposer struct {
+		sid        string
+		count      int
+		chunkCount int
+	}
 	var result []composerSummary
+	var chunked []chunkedComposer
+	cutoffMs := time.Now().Add(-recentWindow).UnixMilli()
 	for rows.Next() {
 		var c composerSummary
 		var lastBubble *string
-		if err := rows.Scan(&c.sid, &c.count, &lastBubble); err != nil {
+		var logCount, chunkCount, updatedMs *int64
+		if err := rows.Scan(&c.sid, &c.count, &lastBubble, &logCount, &chunkCount, &updatedMs); err != nil {
 			continue
 		}
 		if lastBubble != nil {
 			c.lastBubble = *lastBubble
 		}
+		isRecentChunked := c.count == 0 && logCount != nil && chunkCount != nil && *chunkCount > 0 &&
+			updatedMs != nil && *updatedMs >= cutoffMs
+		if isRecentChunked {
+			chunked = append(chunked, chunkedComposer{c.sid, int(*logCount), int(*chunkCount)})
+			continue
+		}
 		result = append(result, c)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Resolved after the main cursor is drained so we never run nested queries on it.
+	for _, cc := range chunked {
+		var lastBubble *string
+		err := db.QueryRow("SELECT json_extract(value, '$[#-1].bubbleId') FROM cursorDiskKV WHERE key = ?",
+			chunkedHeaderKey(cc.sid, cc.chunkCount-1)).Scan(&lastBubble)
+		if err != nil || lastBubble == nil {
+			continue
+		}
+		result = append(result, composerSummary{sid: cc.sid, count: cc.count, lastBubble: *lastBubble})
+	}
+	return result, nil
+}
+
+// loadHeaders returns a composer's ordered bubble headers, from the inline
+// fullConversationHeadersOnly list or the chunked keys when it is empty.
+func loadHeaders(db *sql.DB, sid, composerJSON string) []convHeader {
+	var composer struct {
+		Headers   []convHeader `json:"fullConversationHeadersOnly"`
+		HeaderLog struct {
+			ChunkCount int `json:"chunkCount"`
+		} `json:"headerLog"`
+	}
+	if err := json.Unmarshal([]byte(composerJSON), &composer); err != nil {
+		return nil
+	}
+	if len(composer.Headers) > 0 {
+		return composer.Headers
+	}
+
+	var headers []convHeader
+	for i := 0; i < composer.HeaderLog.ChunkCount; i++ {
+		var raw string
+		if err := db.QueryRow("SELECT value FROM cursorDiskKV WHERE key = ?", chunkedHeaderKey(sid, i)).Scan(&raw); err != nil {
+			break
+		}
+		var chunk []convHeader
+		if err := json.Unmarshal([]byte(raw), &chunk); err != nil {
+			break
+		}
+		headers = append(headers, chunk...)
+	}
+	return headers
 }
 
 // getExactBubbleTimestamp looks up a specific bubble's createdAt by exact key.
@@ -269,18 +348,21 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 		return
 	}
 
-	var composer struct {
-		Headers []struct {
-			BubbleID string `json:"bubbleId"`
-			Type     int    `json:"type"`
-		} `json:"fullConversationHeadersOnly"`
-	}
-	if err := json.Unmarshal([]byte(composerJSON), &composer); err != nil {
+	headers := loadHeaders(db, sid, composerJSON)
+	if len(headers) == 0 {
 		return
 	}
 
-	if len(composer.Headers) == 0 {
-		return
+	// Newer Cursor builds drop workspaceUris from bubbles; the composer carries the workspace instead.
+	var workspace struct {
+		Identifier struct {
+			URI struct {
+				FSPath string `json:"fsPath"`
+			} `json:"uri"`
+		} `json:"workspaceIdentifier"`
+	}
+	if err := json.Unmarshal([]byte(composerJSON), &workspace); err == nil {
+		session.CWD = workspace.Identifier.URI.FSPath
 	}
 
 	// Batch-fetch all bubbles for this session in one query.
@@ -295,7 +377,7 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 	var lastHadTool bool
 	var fileURIs []string
 
-	for _, header := range composer.Headers {
+	for _, header := range headers {
 		raw, ok := bubbleMap[header.BubbleID]
 		if !ok {
 			continue
