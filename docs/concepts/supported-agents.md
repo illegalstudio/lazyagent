@@ -53,7 +53,9 @@ Extra Claude base directories (e.g. when `CLAUDE_CONFIG_DIR` points elsewhere) c
 
 Cursor stores everything in a single SQLite database (`state.vscdb`) as key-value entries. The database lives where VS Code keeps user data on each platform: `~/Library/Application Support/Cursor` on macOS, `$XDG_CONFIG_HOME/Cursor` (default `~/.config/Cursor`) on Linux, and `%APPDATA%\Cursor` on Windows, always under `User/globalStorage/`. The entries are `composerData:<id>` for session metadata and `bubbleId:<id>:<bubble>` for message blocks. lazyagent polls this file every 3 seconds (no file watcher — WAL-mode writes don't trigger fsevents cleanly) and invalidates its cache based on journal position.
 
-CWD is inferred from the Cursor workspace URI if available, otherwise from the first file path mentioned in the session.
+Older Cursor builds keep each session's ordered bubble list inline in `composerData` (`fullConversationHeadersOnly`). Newer builds leave that list empty and store it in `composerConvHeaders:<id>:<chunk>` keys instead, sized by `composerData.headerLog`; lazyagent reads both layouts.
+
+CWD is inferred from the Cursor workspace URI if available, then from the composer's `workspaceIdentifier` (newer builds), otherwise from the first file path mentioned in the session.
 
 **Usage limits.** The separate `lazyagent limits` command also reports Cursor's monthly usage, as two rows: `Cursor Models` (the Auto/Composer pool) and `Cursor API` (the usage-based pool). It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token — and queries the Cursor dashboard's usage-summary endpoint. See [Show rate-limit usage](../maintenance/limits.md#cursor).
 
