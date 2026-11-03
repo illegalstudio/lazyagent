@@ -589,22 +589,26 @@ func determineBubbleStatus(lastType int, lastHadTool bool) model.SessionStatus {
 
 func normalizeToolName(name string) string {
 	switch name {
-	case "Shell":
+	case "Shell", "run_terminal_command_v2":
 		return "Bash"
-	case "read_file", "Read_file_v2":
+	case "read_file", "Read_file_v2", "read_file_v2":
 		return "Read"
-	case "edit_file", "Edit_file_v2":
+	case "edit_file", "Edit_file_v2", "edit_file_v2":
 		return "Edit"
 	case "write_to_file", "Write_to_file_v2":
 		return "Write"
-	case "Glob", "glob", "Glob_file_search":
+	case "Glob", "glob", "Glob_file_search", "glob_file_search":
 		return "Glob"
-	case "Grep", "grep", "Grep_search":
+	case "Grep", "grep", "Grep_search", "ripgrep_raw_search":
 		return "Grep"
 	case "codebase_search", "Codebase_search":
 		return "Grep"
 	case "web_search":
 		return "WebSearch"
+	case "web_fetch":
+		return "WebFetch"
+	case "task_v2":
+		return "Agent"
 	default:
 		if len(name) > 0 {
 			return strings.ToUpper(name[:1]) + name[1:]
