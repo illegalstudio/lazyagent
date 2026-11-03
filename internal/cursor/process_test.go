@@ -110,7 +110,9 @@ func TestBuildStateSessionChunked(t *testing.T) {
 	seedChunked(t, db, "new", nowMs())
 
 	session := &model.Session{SessionID: "new"}
-	buildStateSession(db, "new", session)
+	if err := buildStateSession(db, "new", session); err != nil {
+		t.Fatal(err)
+	}
 
 	if session.CWD != "/Users/me/proj" {
 		t.Errorf("CWD = %q, want /Users/me/proj", session.CWD)
@@ -131,9 +133,42 @@ func TestBuildStateSessionFallsBackToBubbleWorkspace(t *testing.T) {
 		`{"type":1,"text":"hi","workspaceUris":["file:///Users/me/legacy-proj"],"createdAt":"2026-11-03T10:00:00.000Z"}`)
 
 	session := &model.Session{SessionID: "legacy"}
-	buildStateSession(db, "legacy", session)
+	if err := buildStateSession(db, "legacy", session); err != nil {
+		t.Fatal(err)
+	}
 
 	if session.CWD != "/Users/me/legacy-proj" {
 		t.Errorf("CWD = %q, want bubble workspace /Users/me/legacy-proj", session.CWD)
+	}
+}
+
+func TestBuildStateSessionBubbleWorkspaceBeatsComposer(t *testing.T) {
+	db := newTestDB(t)
+	put(t, db, "composerData:both",
+		`{"composerId":"both","fullConversationHeadersOnly":[{"bubbleId":"a","type":1}],`+
+			`"workspaceIdentifier":{"uri":{"fsPath":"/Users/me/composer-proj"}}}`)
+	put(t, db, "bubbleId:both:a",
+		`{"type":1,"text":"hi","workspaceUris":["file:///Users/me/bubble-proj"],"createdAt":"2026-11-03T10:00:00.000Z"}`)
+
+	session := &model.Session{SessionID: "both"}
+	if err := buildStateSession(db, "both", session); err != nil {
+		t.Fatal(err)
+	}
+
+	if session.CWD != "/Users/me/bubble-proj" {
+		t.Errorf("CWD = %q, want bubble workspace /Users/me/bubble-proj", session.CWD)
+	}
+}
+
+func TestBuildStateSessionErrorsOnMissingChunk(t *testing.T) {
+	db := newTestDB(t)
+	seedChunked(t, db, "partial", nowMs())
+	if _, err := db.Exec("DELETE FROM cursorDiskKV WHERE key = ?", chunkedHeaderKey("partial", 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	session := &model.Session{SessionID: "partial"}
+	if err := buildStateSession(db, "partial", session); err == nil {
+		t.Error("want error for unreadable header chunk so the partial session is not cached")
 	}
 }
