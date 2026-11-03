@@ -236,7 +236,7 @@ func queryComposers(db *sql.DB) ([]composerSummary, error) {
 		       json_extract(value, '$.headerLog.chunkCount'),
 		       json_extract(value, '$.lastUpdatedAt')
 		FROM cursorDiskKV
-		WHERE key LIKE 'composerData:%'
+		WHERE key >= 'composerData:' AND key < 'composerData;'
 	`)
 	if err != nil {
 		return nil, err
@@ -471,17 +471,20 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) {
 
 // fetchBubbles fetches all bubble values for a session in a single query.
 // Returns a map of bubbleID → raw JSON value.
+// Uses a key range instead of LIKE: LIKE is case-insensitive in SQLite, so it
+// cannot use the key index and scans the whole table (minutes on a multi-GB
+// state.vscdb). ';' is the character after ':'.
 func fetchBubbles(db *sql.DB, sid string) map[string]string {
+	prefix := "bubbleId:" + sid + ":"
 	rows, err := db.Query(
-		"SELECT key, value FROM cursorDiskKV WHERE key LIKE ?",
-		"bubbleId:"+sid+":%",
+		"SELECT key, value FROM cursorDiskKV WHERE key >= ? AND key < ?",
+		prefix, "bubbleId:"+sid+";",
 	)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
-	prefix := "bubbleId:" + sid + ":"
 	result := make(map[string]string)
 	for rows.Next() {
 		var key, value string
