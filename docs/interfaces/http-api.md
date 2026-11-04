@@ -329,6 +329,34 @@ Remove the custom name (reset to default).
 
 Also triggers an SSE `update`.
 
+### `GET /api/agents`
+
+IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents are omitted unless `?all=true`.
+
+Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. Cloud results are cached for 30 seconds.
+
+**Response: `200 OK`**
+
+```json
+{
+  "agents": [
+    {
+      "id": "bc-1",
+      "source": "cloud",
+      "agent": "cursor",
+      "name": "cloud run",
+      "status": "working",
+      "repo": "https://github.com/o/r",
+      "url": "https://cursor.com/agents/bc-1",
+      "updated_at": "2026-11-03T20:00:00Z"
+    }
+  ],
+  "errors": []
+}
+```
+
+`source` is `ide` or `cloud`. `status` is `working`, `needs_you` or `idle` (IDE `waiting` maps to `needs_you`). `errors` lists sources that failed, such as `cloud: cursor api returned 401`, so an empty `agents` list can be told apart from a broken lookup.
+
 ### `GET /api/stats`
 
 Summary statistics.

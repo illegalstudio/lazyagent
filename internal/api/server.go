@@ -31,6 +31,7 @@ type Server struct {
 	srv      *http.Server
 	ln       net.Listener
 	authSalt string
+	cloud    *cloudAgents
 
 	// SSE subscribers.
 	ssemu   sync.Mutex
@@ -67,6 +68,7 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 	s := &Server{
 		manager:  manager,
 		authSalt: authSalt,
+		cloud:    newCloudAgents(cursorAPIBase, cursorKeyFromEnv()),
 		sseSubs:  make(map[chan struct{}]struct{}),
 	}
 	s.mux = http.NewServeMux()
@@ -248,6 +250,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
 	s.mux.HandleFunc("PUT /api/sessions/{id}/name", s.handleSetSessionName)
 	s.mux.HandleFunc("DELETE /api/sessions/{id}/name", s.handleDeleteSessionName)
+	s.mux.HandleFunc("GET /api/agents", s.handleGetAgents)
 	s.mux.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("GET /api/events", s.handleSSE)
