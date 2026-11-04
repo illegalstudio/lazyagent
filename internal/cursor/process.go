@@ -237,7 +237,7 @@ func chunkedHeaderKey(sid string, chunk int) string {
 // queryComposers reads composerData entries to get session summaries.
 // Uses json_extract on the last element of fullConversationHeadersOnly and
 // falls back to the chunked composerConvHeaders keys for recently updated
-// composers whose inline list is empty.
+// composers whose inline list is empty or absent.
 func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	rows, err := db.Query(`
 		SELECT json_extract(value, '$.composerId'),
@@ -265,9 +265,12 @@ func queryComposers(db *sql.DB) ([]composerSummary, error) {
 	for rows.Next() {
 		var c composerSummary
 		var lastBubble *string
-		var logCount, chunkCount, updatedMs *int64
-		if err := rows.Scan(&c.sid, &c.count, &lastBubble, &logCount, &chunkCount, &updatedMs); err != nil {
+		var inlineCount, logCount, chunkCount, updatedMs *int64
+		if err := rows.Scan(&c.sid, &inlineCount, &lastBubble, &logCount, &chunkCount, &updatedMs); err != nil {
 			continue
+		}
+		if inlineCount != nil {
+			c.count = int(*inlineCount)
 		}
 		if lastBubble != nil {
 			c.lastBubble = *lastBubble
@@ -315,17 +318,42 @@ func loadHeaders(db *sql.DB, sid, composerJSON string) ([]convHeader, error) {
 		return composer.Headers, nil
 	}
 
+	if composer.HeaderLog.ChunkCount <= 0 {
+		return nil, nil
+	}
+	// One indexed range scan bounds the work by stored chunks, even if the
+	// declared count is corrupt. Key order preserves the readable prefix.
+	rows, err := db.Query(
+		"SELECT key, value FROM cursorDiskKV WHERE key >= ? AND key < ? ORDER BY key",
+		chunkedHeaderKey(sid, 0), "composerConvHeaders:"+sid+";",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	var headers []convHeader
-	for i := 0; i < composer.HeaderLog.ChunkCount; i++ {
-		var raw string
-		if err := db.QueryRow("SELECT value FROM cursorDiskKV WHERE key = ?", chunkedHeaderKey(sid, i)).Scan(&raw); err != nil {
+	i := 0
+	for i < composer.HeaderLog.ChunkCount && rows.Next() {
+		var key, raw string
+		if err := rows.Scan(&key, &raw); err != nil {
 			return headers, fmt.Errorf("read header chunk %d: %w", i, err)
+		}
+		if key != chunkedHeaderKey(sid, i) {
+			return headers, fmt.Errorf("read header chunk %d: %w", i, sql.ErrNoRows)
 		}
 		var chunk []convHeader
 		if err := json.Unmarshal([]byte(raw), &chunk); err != nil {
 			return headers, fmt.Errorf("parse header chunk %d: %w", i, err)
 		}
 		headers = append(headers, chunk...)
+		i++
+	}
+	if err := rows.Err(); err != nil {
+		return headers, err
+	}
+	if i < composer.HeaderLog.ChunkCount {
+		return headers, fmt.Errorf("read header chunk %d: %w", i, sql.ErrNoRows)
 	}
 	return headers, nil
 }
@@ -363,12 +391,9 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) error {
 		return nil
 	}
 
-	headers, err := loadHeaders(db, sid, composerJSON)
-	if err != nil {
-		return err
-	}
+	headers, headerErr := loadHeaders(db, sid, composerJSON)
 	if len(headers) == 0 {
-		return nil
+		return headerErr
 	}
 
 	// Newer Cursor builds drop workspaceUris from bubbles; the composer carries the workspace instead.
@@ -386,7 +411,7 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) error {
 	// Batch-fetch all bubbles for this session in one query.
 	bubbleMap := fetchBubbles(db, sid)
 	if len(bubbleMap) == 0 {
-		return nil
+		return headerErr
 	}
 
 	var recentTools []model.ToolCall
@@ -489,7 +514,7 @@ func buildStateSession(db *sql.DB, sid string, session *model.Session) error {
 	if session.Status == model.StatusExecutingTool && len(recentTools) > 0 {
 		session.CurrentTool = recentTools[len(recentTools)-1].Name
 	}
-	return nil
+	return headerErr
 }
 
 // fetchBubbles fetches all bubble values for a session in a single query.

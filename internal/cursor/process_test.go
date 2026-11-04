@@ -172,3 +172,64 @@ func TestBuildStateSessionErrorsOnMissingChunk(t *testing.T) {
 		t.Error("want error for unreadable header chunk so the partial session is not cached")
 	}
 }
+
+func TestQueryComposersNullableInlineHeaders(t *testing.T) {
+	for _, field := range []string{"", `"fullConversationHeadersOnly":null,`} {
+		t.Run(field, func(t *testing.T) {
+			db := newTestDB(t)
+			seedChunked(t, db, "nullable", nowMs())
+			put(t, db, "composerData:nullable", fmt.Sprintf(
+				`{"composerId":"nullable",%s"lastUpdatedAt":%d,"headerLog":{"chunkCount":2,"count":3}}`, field, nowMs()))
+			got, err := queryComposers(db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0].sid != "nullable" || got[0].count != 3 || got[0].lastBubble != "b3" {
+				t.Fatalf("got %+v, want one composer {nullable 3 b3}", got)
+			}
+		})
+	}
+}
+
+func TestBuildStateSessionPreservesPartialChunks(t *testing.T) {
+	for _, failure := range []string{"missing", "malformed", "null", "huge count"} {
+		t.Run(failure, func(t *testing.T) {
+			db := newTestDB(t)
+			seedChunked(t, db, "partial", nowMs())
+			switch failure {
+			case "missing":
+				if _, err := db.Exec("DELETE FROM cursorDiskKV WHERE key = ?", chunkedHeaderKey("partial", 1)); err != nil {
+					t.Fatal(err)
+				}
+			case "malformed":
+				put(t, db, chunkedHeaderKey("partial", 1), `{`)
+			case "null":
+				if _, err := db.Exec("UPDATE cursorDiskKV SET value = NULL WHERE key = ?", chunkedHeaderKey("partial", 1)); err != nil {
+					t.Fatal(err)
+				}
+			case "huge count":
+				put(t, db, "composerData:partial", `{"headerLog":{"chunkCount":2147483647},"workspaceIdentifier":{"uri":{"fsPath":"/Users/me/proj"}}}`)
+			}
+			session := &model.Session{SessionID: "partial"}
+			if err := buildStateSession(db, "partial", session); err == nil {
+				t.Fatal("want error so partial data is retried")
+			}
+			if session.UserMessages != 1 || len(session.RecentMessages) == 0 || session.RecentMessages[0].Text != "hi" {
+				t.Fatalf("lost readable messages: %+v", session)
+			}
+			if len(session.RecentTools) != 1 || session.RecentTools[0].Name != "Read" || session.CWD != "/Users/me/proj" {
+				t.Fatalf("lost readable tool or workspace: %+v", session)
+			}
+			wantStatus := model.StatusExecutingTool
+			if failure == "huge count" {
+				wantStatus = determineBubbleStatus(2, false)
+				if session.AssistantMessages != 1 {
+					t.Fatal("lost second readable chunk")
+				}
+			}
+			if session.Status != wantStatus {
+				t.Errorf("status = %v, want %v", session.Status, wantStatus)
+			}
+		})
+	}
+}
