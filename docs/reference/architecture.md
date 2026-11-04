@@ -70,6 +70,8 @@ Each owns the on-disk layout and parsing for its agent. They expose discovery fu
 
 OpenCode and Kilo share the `internal/opencodefamily` parser because their local SQLite schemas are compatible; their provider packages only declare data directories, database names, and agent keys.
 
+Cursor reads conversation headers from the inline composer list or, when it is empty, absent, or null, from `composerConvHeaders` chunks. Chunks are fetched with one indexed key-range query. If a chunk is missing or unreadable, the readable prefix still supplies messages and activity state; the partial session is not cached and is retried on the next poll.
+
 ### `internal/ui`, `internal/tray`, `internal/api`
 
 The three interfaces consume a `SessionManager`, which coordinates discovery,
