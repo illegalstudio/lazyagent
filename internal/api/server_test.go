@@ -456,3 +456,97 @@ func TestSSE(t *testing.T) {
 		t.Fatal("never received second SSE update event after notifySSE")
 	}
 }
+
+// fakeLimitsSnapshot renders a fixed document naming the selector, so limits
+// tests never reach the providers.
+type fakeLimitsSnapshot struct{ round int }
+
+func (f fakeLimitsSnapshot) JSONFor(agent string, now time.Time) any {
+	return map[string]any{"agent": agent, "round": f.round, "generated_at": now}
+}
+
+func TestGetLimitsSharesOneProviderRound(t *testing.T) {
+	srv, ts := newTestServer(t)
+	defer ts.Close()
+
+	rounds := 0
+	srv.limitsFetch = func(context.Context) (limitsSnapshot, error) {
+		rounds++
+		return fakeLimitsSnapshot{round: rounds}, nil
+	}
+
+	get := func(query string) map[string]any {
+		t.Helper()
+		resp := authedGet(t, ts.URL+"/api/limits"+query)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%q: status %d", query, resp.StatusCode)
+		}
+		if resp.Header.Get("Age") == "" {
+			t.Errorf("%q: missing Age header", query)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("%q: decode: %v", query, err)
+		}
+		return body
+	}
+
+	// Every selector is cut from the same round.
+	for _, tc := range []struct{ query, agent string }{
+		{"", "all"},
+		{"?agent=claude", "claude"},
+		{"?agent=Codex", "codex"}, // selectors are case-insensitive
+		{"?agent=all", "all"},
+	} {
+		body := get(tc.query)
+		if body["agent"] != tc.agent || body["round"] != float64(1) {
+			t.Errorf("%q: body = %v, want agent %s from round 1", tc.query, body, tc.agent)
+		}
+	}
+	if rounds != 1 {
+		t.Fatalf("provider rounds = %d, want 1 within the interval", rounds)
+	}
+
+	// Once the interval has passed, the next request runs a new round.
+	srv.limitsMu.Lock()
+	srv.limitsLast.fetchedAt = srv.limitsLast.fetchedAt.Add(-limitsMinInterval)
+	srv.limitsMu.Unlock()
+	if body := get("?agent=claude"); body["round"] != float64(2) {
+		t.Errorf("after the interval: body = %v, want round 2", body)
+	}
+}
+
+func TestGetLimitsRejectsUnknownAgent(t *testing.T) {
+	srv, ts := newTestServer(t)
+	defer ts.Close()
+	srv.limitsFetch = func(context.Context) (limitsSnapshot, error) {
+		t.Error("an unknown selector reached the providers")
+		return fakeLimitsSnapshot{}, nil
+	}
+
+	resp := authedGet(t, ts.URL+"/api/limits?agent=nope")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var body map[string]string
+	json.NewDecoder(resp.Body).Decode(&body)
+	if !strings.Contains(body["error"], "unsupported agent") {
+		t.Errorf("error = %q", body["error"])
+	}
+}
+
+func TestGetLimitsRequiresAuth(t *testing.T) {
+	_, ts := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/limits")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}

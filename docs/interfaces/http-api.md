@@ -452,6 +452,45 @@ Current lazyagent configuration. The `api_passphrase` and `api_salt` fields are 
 }
 ```
 
+### `GET /api/limits`
+
+Rate-limit usage, banked limit resets, and extra credits for Claude Code, Codex, Grok, Kimi, and Cursor. The body is the same document `lazyagent limits --json` prints, field for field; see [JSON output](../maintenance/limits.md#json-output) for every key.
+
+| Query | Description |
+|-------|-------------|
+| `agent` | `claude`, `codex`, `grok`, `kimi`, `cursor`, or `all` (default). Case-insensitive. |
+
+**Response: `200 OK`** (abridged)
+
+```json
+{
+  "generated_at": "2026-11-11T10:30:00Z",
+  "reports": [
+    {
+      "agent": "claude",
+      "provider": "Claude Code",
+      "windows": [
+        { "label": "7-day", "scope": "", "used_percent": 14, "resets_at": "2026-11-15T09:00:00Z", "reset_in_seconds": 340200 },
+        { "label": "7-day", "scope": "Fable", "used_percent": 18, "detail": "9% of the weekly limit used, capped at 50%" }
+      ],
+      "resets": [
+        { "label": "One full limit reset (November 2026)", "left": 1, "total": 1, "usable": true, "expires_at": "2026-12-10T22:00:00Z" }
+      ],
+      "credits": [
+        { "label": "Extra usage", "unit": "EUR", "enabled": false, "status": "set by your organization" }
+      ]
+    }
+  ],
+  "errors": [
+    { "agent": "cursor", "kind": "not_installed", "message": "..." }
+  ]
+}
+```
+
+A failing provider never fails the request: it appears in `errors` with `kind` set to `not_installed`, `unavailable`, or `error`, and the other providers are still reported. An unknown `agent` returns `400` with `{"error": "..."}`.
+
+**Rate limit toward the providers.** The providers' usage endpoints are undocumented and answer sustained polling with `429`, so the API never queries them more than once every **120 seconds**, however often clients call it and whichever `agent` they pass. One provider round answers every selector until it is 120 seconds old; the next request after that runs a new round, and requests that arrive while it runs wait for it (up to 30 seconds). The `Age` header gives the age of that round in seconds. `generated_at` and the countdown fields (`reset_in_seconds`, `expires_in_seconds`, `next_available_in_seconds`) are computed on every request, so they stay accurate between rounds. Polling more often than every two minutes returns the same provider data. lazyagent only reads these endpoints and never redeems a reset.
+
 ### `GET /api/events`
 
 **Server-Sent Events** stream for real-time updates. The server pushes an `update` event whenever session data changes (file-watcher trigger, activity-state transition, periodic reload). An initial snapshot is sent immediately on connection.

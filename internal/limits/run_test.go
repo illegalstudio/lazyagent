@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -162,6 +163,17 @@ func TestCollectGrokCursorFallback(t *testing.T) {
 			if code := exitCodeFor(results, errs, len(c.agents), len(c.agents) == 1); code != c.wantExit {
 				t.Fatalf("exit code = %d, want %d", code, c.wantExit)
 			}
+			// A single aggregate round must still answer each xAI selector
+			// that did not fail, including from the pool the other agent read.
+			if len(c.agents) > 1 {
+				snap := Snapshot{results: results, errs: errs}
+				for _, a := range []string{"grok", "cursor"} {
+					failed := slices.Contains(strings.Split(c.wantErrAgents, ","), a)
+					if got := len(snap.Only(a).results); !failed && got == 0 {
+						t.Errorf("Only(%s) has no report although %s did not fail", a, a)
+					}
+				}
+			}
 			if len(results) == 1 {
 				wire := buildJSON(results, errs, time.Now())
 				report := wire.Reports[0]
@@ -177,6 +189,44 @@ func TestCollectGrokCursorFallback(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A slow provider must not use up the others' share of the deadline: Codex
+// hangs until the context expires, and Grok, fetched in the same round, still
+// succeeds.
+func TestCollectFetchesAgentsConcurrently(t *testing.T) {
+	grokData, err := os.ReadFile(filepath.Join("testdata", "grok_billing_credits.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupLimitsAuth(t, true, false)
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	http.DefaultTransport = cursorTestTransport(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.String() {
+		case "https://chatgpt.com/backend-api/wham/usage":
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		case grokBillingURL:
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(string(grokData))),
+				Header:     make(http.Header),
+			}, nil
+		}
+		return nil, fmt.Errorf("unexpected network call: %s", req.URL)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	results, errs := collect(ctx, []string{"codex", "grok"})
+	if len(results) != 1 || results[0].agent != "grok" {
+		t.Fatalf("results = %+v, want Grok's report despite the hung Codex", results)
+	}
+	if len(errs) != 1 || errs[0].agent != "codex" {
+		t.Fatalf("errors = %+v, want only the Codex timeout", errs)
 	}
 }
 

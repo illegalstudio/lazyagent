@@ -1,0 +1,11 @@
+{
+  "credits": [
+    {"id": "RateLimitResetCredit_b", "reset_type": "codex_rate_limits", "is_supported_by_plan": true, "status": "available", "granted_at": "2026-11-01T22:37:43.860709Z", "expires_at": "2026-12-01T22:37:43.860709Z", "redeemed_at": null, "title": "Full reset", "description": "Granted one free rate limit reset."},
+    {"id": "RateLimitResetCredit_a", "reset_type": "codex_rate_limits", "is_supported_by_plan": true, "status": "available", "granted_at": "2026-10-31T20:05:55.685909Z", "expires_at": "2026-11-30T20:05:55.685909Z", "redeemed_at": null, "title": "Full reset", "description": "Granted one free rate limit reset."},
+    {"id": "RateLimitResetCredit_c", "reset_type": "codex_rate_limits", "is_supported_by_plan": true, "status": "redeemed", "granted_at": "2026-09-01T00:00:00Z", "expires_at": "2026-10-01T00:00:00Z", "redeemed_at": "2026-09-10T00:00:00Z", "title": "Full reset", "description": "Used."}
+  ],
+  "available_count": 2,
+  "total_earned_count": 0,
+  "immediate_reset_purchase_eligible": false,
+  "history_enabled": true
+}

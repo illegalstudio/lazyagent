@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -78,6 +79,7 @@ type grokBillingConfig struct {
 	CreditUsagePercent   float64            `json:"creditUsagePercent"`
 	ProductUsage         []grokProductUsage `json:"productUsage"`
 	IsUnifiedBillingUser bool               `json:"isUnifiedBillingUser"`
+	PrepaidBalance       *grokCents         `json:"prepaidBalance"`
 }
 
 type grokUsagePeriod struct {
@@ -213,6 +215,9 @@ func grokBillingToReport(cfg *grokBillingConfig) (Report, error) {
 		// Credits: usage is a percentage of the current credit period.
 		w = grokCreditsToWindow(cfg)
 		source = fmt.Sprintf("Source: %.1f%% of %s credits used", cfg.CreditUsagePercent, w.Label)
+		if breakdown := grokProductBreakdown(cfg.ProductUsage); breakdown != "" {
+			source += " (" + breakdown + ")"
+		}
 		if cfg.OnDemandCap.Val > 0 {
 			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(cfg.OnDemandCap.Val))
 		}
@@ -239,11 +244,35 @@ func grokBillingToReport(cfg *grokBillingConfig) (Report, error) {
 		sharedPeriod = &sharedCreditPeriod{start: cfg.CurrentPeriod.Start.UnixMilli(), end: cfg.CurrentPeriod.End.UnixMilli()}
 	}
 
+	var credits []Credit
+	if cfg.PrepaidBalance != nil && cfg.PrepaidBalance.Val > 0 {
+		credits = append(credits, Credit{
+			Label:   "Prepaid balance",
+			Unit:    "USD",
+			Enabled: true,
+			Balance: floatPtr(float64(cfg.PrepaidBalance.Val) / 100),
+		})
+	}
+
 	return Report{
 		Provider:     provider,
 		Source:       source,
+		Credits:      credits,
 		Windows:      []Window{w},
 		Note:         "Note: reads /v1/billing on cli-chat-proxy.grok.com, an undocumented xAI endpoint used by the Grok CLI's /usage command. May break or be revoked by xAI without notice.",
 		sharedPeriod: sharedPeriod,
 	}, nil
+}
+
+// grokProductBreakdown renders the per-product share of the credit period,
+// "GrokBuild 3.0%, GrokBot 2.0%", skipping products with no usage.
+func grokProductBreakdown(products []grokProductUsage) string {
+	var parts []string
+	for _, p := range products {
+		if p.Product == "" || p.UsagePercent <= 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %.1f%%", p.Product, p.UsagePercent))
+	}
+	return strings.Join(parts, ", ")
 }
