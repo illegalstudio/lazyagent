@@ -335,9 +335,11 @@ IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents
 
 Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
 
-Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
+Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is taken from list items when available, otherwise loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
 
-A cloud refresh has a 10-second deadline covering all list pages and detail requests. If a page or repository lookup fails, available IDE and cloud agents are still returned alongside an entry in `errors`. A failed repository lookup leaves `repo` absent, or keeps its last cached value if available. Check `errors` before treating the result as complete.
+A request waits at most 10 seconds for cloud data. A slower refresh continues in the background, shared by all callers, with a 2-minute deadline and a 30-second timeout per upstream request. Until it finishes, the API returns available IDE agents and the last cloud snapshot, with `refresh in progress; cloud results may be incomplete` in `errors`. When the refresh finishes, later polls receive the result.
+
+If a page or repository lookup fails, available IDE and cloud agents are still returned alongside an entry in `errors`. A failed repository lookup leaves `repo` absent, or keeps its last cached value if available. Check `errors` before treating the result as complete.
 
 **Response: `200 OK`**
 

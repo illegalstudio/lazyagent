@@ -132,6 +132,7 @@ func (s *Server) Addr() net.Addr {
 
 // Run starts the watcher, background loops, and serves HTTP. Blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context) error {
+	defer s.cloud.cancel()
 	if err := s.manager.StartWatcher(); err != nil {
 		log.Printf("Warning: file watcher unavailable: %v", err)
 	}
@@ -158,6 +159,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		s.cloud.cancel()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		s.srv.Shutdown(shutCtx)

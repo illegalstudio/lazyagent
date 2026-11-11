@@ -23,7 +23,9 @@ const (
 	cursorAPIBase     = "https://api.cursor.com"
 	cloudCacheTTL     = 30 * time.Second
 	cloudErrorTTL     = 5 * time.Second
-	cloudFetchTimeout = 10 * time.Second
+	cloudFetchTimeout = 2 * time.Minute
+	cloudWaitTimeout  = 10 * time.Second
+	cloudHTTPTimeout  = 30 * time.Second
 	cloudRepoTTL      = 5 * time.Minute
 	cloudRepoWorkers  = 4
 )
@@ -57,18 +59,22 @@ type AgentsResponse struct {
 
 // cloudAgents lists Cursor cloud agents and caches the result briefly, so
 // several consumers polling /api/agents share one upstream refresh per TTL.
-// Failures are cached too (for a shorter TTL) so requests queued on mu during
-// a Cursor outage share one failed lookup instead of each waiting out a timeout.
+// Failures are cached too (for a shorter TTL) so consumers polling during a
+// Cursor outage share one failed lookup instead of each starting a new request.
 type cloudAgents struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wait    time.Duration
 
 	mu        sync.Mutex
 	cached    []AgentItem
 	cachedErr error
 	fetched   time.Time
 	repos     map[string]cloudRepo
+	refresh   chan struct{}
 }
 
 type cloudRepo struct {
@@ -77,10 +83,14 @@ type cloudRepo struct {
 }
 
 func newCloudAgents(baseURL, apiKey string) *cloudAgents {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &cloudAgents{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		client:  &http.Client{Timeout: cloudFetchTimeout},
+		client:  &http.Client{Timeout: cloudHTTPTimeout},
+		ctx:     ctx,
+		cancel:  cancel,
+		wait:    cloudWaitTimeout,
 		repos:   make(map[string]cloudRepo),
 	}
 }
@@ -88,24 +98,50 @@ func newCloudAgents(baseURL, apiKey string) *cloudAgents {
 // enabled reports whether a Cursor API key is configured.
 func (c *cloudAgents) enabled() bool { return c.apiKey != "" }
 
-// list returns all cloud agents, or the last error, from cache when fresh.
-// Successes live for cloudCacheTTL, failures for cloudErrorTTL.
+// list shares one refresh across callers. A slow refresh continues after the
+// bounded request wait, returning the last snapshot with an explicit error.
 func (c *cloudAgents) list() ([]AgentItem, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	ttl := cloudCacheTTL
 	if c.cachedErr != nil {
 		ttl = cloudErrorTTL
 	}
 	if !c.fetched.IsZero() && time.Since(c.fetched) < ttl {
+		defer c.mu.Unlock()
 		return c.cached, c.cachedErr
 	}
+	done := c.refresh
+	if done == nil {
+		done = make(chan struct{})
+		c.refresh = done
+		go c.fetchAndCache(done)
+	}
+	c.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cloudFetchTimeout)
-	defer cancel()
-	c.cached, c.cachedErr = c.fetch(ctx)
-	c.fetched = time.Now()
+	timer := time.NewTimer(c.wait)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refresh == done {
+		return c.cached, errors.Join(c.cachedErr, errors.New("refresh in progress; cloud results may be incomplete"))
+	}
 	return c.cached, c.cachedErr
+}
+
+func (c *cloudAgents) fetchAndCache(done chan struct{}) {
+	ctx, cancel := context.WithTimeout(c.ctx, cloudFetchTimeout)
+	defer cancel()
+	items, err := c.fetch(ctx)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cached, c.cachedErr = items, err
+	c.fetched = time.Now()
+	c.refresh = nil
+	close(done)
 }
 
 // get decodes one authenticated Cursor response within the refresh deadline.
@@ -146,6 +182,9 @@ func (c *cloudAgents) fetchPages(ctx context.Context) ([]AgentItem, error) {
 				Status    string    `json:"status"`
 				URL       string    `json:"url"`
 				UpdatedAt time.Time `json:"updatedAt"`
+				Repos     *[]struct {
+					URL string `json:"url"`
+				} `json:"repos"`
 			} `json:"items"`
 			NextCursor string `json:"nextCursor"`
 		}
@@ -158,6 +197,15 @@ func (c *cloudAgents) fetchPages(ctx context.Context) ([]AgentItem, error) {
 				continue
 			}
 			seenIDs[a.ID] = true
+			// Some Cursor deployments include repos on list items. Preserve
+			// even an empty list; only an absent value needs a detail lookup.
+			if a.Repos != nil {
+				repo := ""
+				if len(*a.Repos) > 0 {
+					repo = (*a.Repos)[0].URL
+				}
+				c.repos[a.ID] = cloudRepo{url: repo, fetched: time.Now()}
+			}
 			items = append(items, AgentItem{
 				ID:        a.ID,
 				Source:    "cloud",
@@ -178,9 +226,8 @@ func (c *cloudAgents) fetchPages(ctx context.Context) ([]AgentItem, error) {
 	}
 }
 
-// fetch enriches the list with repository metadata, which Cursor exposes only
-// on agent details. The caller holds mu throughout the refresh, including the
-// worker lifetime; workers write distinct item/error slots, never the repo map.
+// fetch fills repository metadata missing from list items. Only one refresh
+// runs at a time; workers write distinct item/error slots, never the repo map.
 func (c *cloudAgents) fetch(ctx context.Context) ([]AgentItem, error) {
 	items, listErr := c.fetchPages(ctx)
 	if listErr == nil {

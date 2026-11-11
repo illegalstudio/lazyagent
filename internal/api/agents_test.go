@@ -276,6 +276,105 @@ func TestCloudAgentsCachesRepositoryMetadata(t *testing.T) {
 	}
 }
 
+func TestCloudAgentsUsesInlineRepositories(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/v1/agents" {
+			t.Error("inline repositories must not trigger a detail lookup")
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(`{"items":[
+			{"id":"bc-1","status":"ACTIVE","repos":[{"url":"https://github.com/o/r"},{"url":"https://github.com/o/other"}]},
+			{"id":"bc-2","status":"IDLE","repos":[]}
+		]}`))
+	}))
+	defer upstream.Close()
+	cloud := newCloudAgents(upstream.URL, "key")
+	defer cloud.cancel()
+	items, err := cloud.list()
+	if err != nil || len(items) != 2 || items[0].Repo != "https://github.com/o/r" || items[1].Repo != "" {
+		t.Fatalf("items = %+v, error = %v", items, err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("calls = %d, want only the list request", got)
+	}
+}
+
+func TestGetAgentsSlowCloudRefreshContinues(t *testing.T) {
+	srv, ts := newTestServerWithSessions(t, []*model.Session{
+		{SessionID: "ide-1", Agent: "cursor", CWD: t.TempDir(), LastActivity: time.Now(), Status: model.StatusThinking},
+	})
+	defer ts.Close()
+	release := make(chan struct{})
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		select {
+		case <-release:
+			w.Write([]byte(`{"items":[{"id":"bc-1","status":"ACTIVE","repos":[]}]}`))
+		case <-r.Context().Done():
+		}
+	}))
+	defer upstream.Close()
+	srv.cloud = newCloudAgents(upstream.URL, "key")
+	defer srv.cloud.cancel()
+	srv.cloud.wait = 10 * time.Millisecond
+	for range 2 {
+		out := getAgents(t, ts.URL)
+		if len(out.Errors) != 1 || !strings.Contains(out.Errors[0], "refresh in progress") {
+			t.Fatalf("errors = %v, want an explicit pending refresh", out.Errors)
+		}
+		if len(out.Agents) != 1 || out.Agents[0].ID != "ide-1" {
+			t.Fatalf("agents = %+v, want live IDE results while cloud refresh continues", out.Agents)
+		}
+	}
+	srv.cloud.mu.Lock()
+	done := srv.cloud.refresh
+	srv.cloud.mu.Unlock()
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background refresh did not complete")
+	}
+	out := getAgents(t, ts.URL)
+	if len(out.Errors) != 0 || len(out.Agents) != 2 {
+		t.Fatalf("completed response = %+v, want IDE and cloud agents without errors", out)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("calls = %d, want one refresh shared across all polls", got)
+	}
+}
+
+func TestCloudAgentsCancelBackgroundRefresh(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+	cloud := newCloudAgents(upstream.URL, "key")
+	defer cloud.cancel()
+	cloud.wait = 10 * time.Millisecond
+	if _, err := cloud.list(); err == nil {
+		t.Fatal("expected pending refresh")
+	}
+	cloud.mu.Lock()
+	done := cloud.refresh
+	cloud.mu.Unlock()
+	cloud.cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background refresh ignored shutdown cancellation")
+	}
+	cloud.mu.Lock()
+	defer cloud.mu.Unlock()
+	if !errors.Is(cloud.cachedErr, context.Canceled) {
+		t.Errorf("refresh error = %v, want cancellation", cloud.cachedErr)
+	}
+}
+
 func TestCloudAgentsSharesConcurrentRefresh(t *testing.T) {
 	var calls atomic.Int32
 	upstream := fakeCursorAPI(t, &calls)
