@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/illegalstudio/lazyagent/internal/cloud"
+
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
@@ -45,12 +47,18 @@ type SessionDetailView struct {
 
 // SessionManager manages session discovery, file watching, and activity tracking.
 type SessionManager struct {
-	mu       sync.RWMutex
-	sessions []*model.Session
-	tracker  *ActivityTracker
-	watcher  *ProjectWatcher
-	provider SessionProvider
-	names    *SessionNames
+	mu              sync.RWMutex
+	sessions        []*model.Session
+	tracker         *ActivityTracker
+	watcher         *ProjectWatcher
+	provider        SessionProvider
+	names           *SessionNames
+	cloud           *cloud.Cursor
+	cloudConfigErr  error
+	cloudGeneration uint64
+	cloudSessions   map[string]*model.Session
+	cloudShowIdle   bool
+	cloudState      CloudStatus
 
 	windowMinutes        int
 	activityFilter       ActivityKind
@@ -236,10 +244,17 @@ func (m *SessionManager) Close() {
 	m.StopWatcher()
 
 	m.mu.Lock()
+	cloudClient := m.cloud
+	m.cloud = nil
+	m.cloudGeneration++
+	m.cloudSessions = nil
 	due := m.persistEnabled && m.persistDirty
 	dir := m.persistDir
 	m.persistDirty = false
 	m.mu.Unlock()
+	if cloudClient != nil {
+		cloudClient.Close()
+	}
 
 	if due {
 		SaveProviderCaches(m.provider, dir)
@@ -596,6 +611,9 @@ func (m *SessionManager) SetSearchQuery(query string) {
 func (m *SessionManager) ActivityFor(sessionID string) ActivityKind {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if session := m.cloudSessions[sessionID]; session != nil {
+		return cloudActivity(session)
+	}
 	return m.tracker.Get(sessionID)
 }
 
@@ -609,9 +627,26 @@ func (m *SessionManager) Sessions() []*model.Session {
 // VisibleSessions returns sessions filtered by the manager's internal state
 // (time window, activity filter, search query). Used by TUI and tray.
 func (m *SessionManager) VisibleSessions() []*model.Session {
+	m.UpdateCloud()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.filterSessionsLocked(m.searchQuery, m.activityFilter)
+	visible := m.filterSessionsLocked(m.searchQuery, m.activityFilter)
+	query := strings.ToLower(m.searchQuery)
+	for _, session := range m.cloudSessions {
+		activity := cloudActivity(session)
+		if activity == ActivityIdle && !m.cloudShowIdle {
+			continue
+		}
+		if m.activityFilter != "" && activity != m.activityFilter {
+			continue
+		}
+		if query != "" && !strings.Contains(strings.ToLower(session.Name+" "+session.Cloud.Repo+" cloud cursor "+m.names.Get(session.SessionID)), query) {
+			continue
+		}
+		visible = append(visible, session)
+	}
+	SortSessions(visible)
+	return visible
 }
 
 // QuerySessions returns sessions filtered by explicit parameters without using
@@ -696,8 +731,12 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 
 // SessionDetail returns the full detail view for a session.
 func (m *SessionManager) SessionDetail(id string) *SessionDetailView {
+	m.UpdateCloud()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if session := m.cloudSessions[id]; session != nil {
+		return &SessionDetailView{Session: *session.Clone(), Activity: cloudActivity(session)}
+	}
 	for _, s := range m.sessions {
 		if s.SessionID == id {
 			return &SessionDetailView{

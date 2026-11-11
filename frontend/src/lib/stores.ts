@@ -16,6 +16,8 @@ export interface SessionItem {
   sparklineData: number[];
   agent: string;
   source: string;
+  cloudUrl?: string;
+  repoUrl?: string;
   currentTool: string;
   lastMessage: string;
   resumeAvailable: boolean;
@@ -41,6 +43,14 @@ export interface SessionFull extends SessionItem {
 }
 
 export const sessions = writable<SessionItem[]>([]);
+export interface CloudStatus {
+  configured: boolean;
+  loading: boolean;
+  count: number;
+  error: string;
+  showIdle: boolean;
+}
+export const cloudStatus = writable<CloudStatus>({ configured: false, loading: false, count: 0, error: "", showIdle: false });
 export const selectedId = writable<string | null>(null);
 export const selectedDetail = writable<SessionFull | null>(null);
 export const windowMinutes = writable(30);

@@ -12,6 +12,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
 - [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace, resets, and credits or `--json` for scripts
 - [`lazyagent sessions`](sessions.md) — list sessions for the current directory and reopen one
+- [`lazyagent credentials`](#credentials) - manage provider API keys shared across interfaces
 
 ## Synopsis
 
@@ -73,6 +74,15 @@ lazyagent --api --host 0.0.0.0:7421   # expose on the network
 ```
 
 On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
+
+To include Cursor cloud agents in TUI, GUI, and `GET /api/agents`, save a Cursor user API key once, then start the desired interface:
+
+```bash
+lazyagent credentials set cursor
+lazyagent --api
+```
+
+The optional key is read at startup from the shared `credentials.json` file. `LAZYAGENT_CURSOR_API_KEY` overrides the saved value. GUI Settings can also save or remove it, updating that GUI immediately. Without either source, lists remain local. TUI and GUI only fetch cloud runs when Cursor is among the selected agents; demo mode stays local. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation and automatic startup.
 
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 
@@ -145,7 +155,7 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune`, `compact`, `search`, `sessions`, `latest`, `limits`, or `passphrase`, lazyagent switches into subcommand mode. Root-level flags are ignored and the subcommand parses its own set. `history` is retained as a legacy alias for `sessions`; it does not preserve the removed history-specific flags or output format.
+When the first positional argument is `prune`, `compact`, `search`, `sessions`, `latest`, `limits`, `passphrase`, or `credentials`, lazyagent switches into subcommand mode. Root-level flags are ignored and the subcommand parses its own set. `history` is retained as a legacy alias for `sessions`; it does not preserve the removed history-specific flags or output format.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
@@ -158,6 +168,7 @@ lazyagent latest                   # resume the newest session here
 lazyagent latest --yolo            # resume the newest session in YOLO mode
 lazyagent limits --agent claude    # limits subcommand
 lazyagent passphrase               # rotate the API passphrase
+lazyagent credentials set cursor   # save the shared Cursor cloud key
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
@@ -196,6 +207,20 @@ lazyagent limits --json          # machine-readable report for scripts and widge
 Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on the deployment this machine is logged in to (`api.kimi.ai` globally, `api.kimi.com` for mainland China), the endpoint Kimi Code CLI's `/status` slash command calls; the token is read from the per-environment credential slot under `~/.kimi-code/credentials/` and refreshed when expired. Cursor data comes from `/api/usage-summary` on `cursor.com` — the same endpoint the Cursor dashboard uses for its usage headline — read with the session token from Cursor's local `state.vscdb`; it reports the Auto/Composer and usage-based API pools as separate percentages, shown as two rows.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
+
+### `credentials`
+
+Manage provider API keys without starting any interface:
+
+```bash
+lazyagent credentials set cursor
+lazyagent credentials status cursor
+lazyagent credentials remove cursor
+```
+
+`set` uses a hidden terminal prompt or reads a single key from standard input, so a secret manager can pipe directly into it. It accepts no key argument. `status` prints only whether a key is configured and its source. `remove` deletes the saved value but leaves any environment override active.
+
+Keys are saved in `credentials.json` next to `config.json`, with owner-only permissions. A nonempty `LAZYAGENT_<PROVIDER>_API_KEY` overrides the saved value. Restart running interfaces after changing credentials. See [Provider API credentials](../reference/configuration.md#provider-api-credentials) for the format and precedence.
 
 ### `passphrase`
 

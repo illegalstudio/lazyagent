@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
+	"github.com/illegalstudio/lazyagent/internal/cloud"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
@@ -33,6 +34,9 @@ type Server struct {
 	srv      *http.Server
 	ln       net.Listener
 	authSalt string
+	cloud    *cloud.Cursor
+
+	cloudConfigErr error
 
 	// SSE subscribers.
 	ssemu   sync.Mutex
@@ -79,6 +83,10 @@ type limitsCacheEntry struct {
 // token disables auth entirely (used only by tests and by callers that
 // explicitly opt out).
 func New(host string, provider core.SessionProvider, bearerToken, authSalt string, bus *core.EventBus) (*Server, error) {
+	return newServer(host, provider, bearerToken, authSalt, bus, cursorAPIBase)
+}
+
+func newServer(host string, provider core.SessionProvider, bearerToken, authSalt string, bus *core.EventBus, cloudBaseURL string) (*Server, error) {
 	authSalt = strings.TrimSpace(authSalt)
 	if authSalt == "" {
 		authSalt = apiauth.SaltPrefix
@@ -94,15 +102,18 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 		manager.SetEventBus(bus)
 	}
 
+	cloudKey, _, cloudConfigErr := core.ResolveProviderAPIKey("cursor")
 	s := &Server{
 		manager:  manager,
 		authSalt: authSalt,
+		cloud:    newCloudAgents(cloudBaseURL, cloudKey),
 		sseSubs:  make(map[chan struct{}]struct{}),
 
 		limitsFetch: func(ctx context.Context) (limitsSnapshot, error) {
 			return limits.Collect(ctx, "all")
 		},
 	}
+	s.cloudConfigErr = cloudConfigErr
 	s.mux = http.NewServeMux()
 	s.routes()
 
@@ -164,6 +175,7 @@ func (s *Server) Addr() net.Addr {
 
 // Run starts the watcher, background loops, and serves HTTP. Blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context) error {
+	defer s.cloud.Close()
 	if err := s.manager.StartWatcher(); err != nil {
 		log.Printf("Warning: file watcher unavailable: %v", err)
 	}
@@ -190,6 +202,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		s.cloud.Close()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		s.srv.Shutdown(shutCtx)
@@ -282,6 +295,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
 	s.mux.HandleFunc("PUT /api/sessions/{id}/name", s.handleSetSessionName)
 	s.mux.HandleFunc("DELETE /api/sessions/{id}/name", s.handleDeleteSessionName)
+	s.mux.HandleFunc("GET /api/agents", s.handleGetAgents)
 	s.mux.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("GET /api/limits", s.handleGetLimits)

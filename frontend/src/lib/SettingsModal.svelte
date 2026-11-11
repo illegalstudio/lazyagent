@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { Clipboard } from "@wailsio/runtime";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
+  import { loadSessions } from "./actions";
 
   interface Props {
     onclose: () => void;
@@ -29,6 +30,44 @@
   let apiConfigured = $state(false);
   let newPassphrase = $state("");
   let apiFeedback = $state("");
+	let cursorConfigured = $state(false);
+	let cursorSource = $state("");
+	let cursorKey = $state("");
+	let cursorFeedback = $state("");
+	let cursorSaving = $state(false);
+
+	async function refreshCursorStatus() {
+		const status = await SessionService.GetCursorCredentialStatus();
+		cursorConfigured = status.configured;
+		cursorSource = status.source;
+		if (status.error) cursorFeedback = status.error;
+	}
+
+	async function saveCursorKey() {
+		if (!cursorKey.trim() || cursorSaving) return;
+		cursorSaving = true;
+		try {
+			await SessionService.SetCursorAPIKey(cursorKey.trim());
+			cursorKey = "";
+			await refreshCursorStatus();
+			cursorFeedback = cursorSource === "LAZYAGENT_CURSOR_API_KEY" ? "Saved; the environment override is still active." : "Key saved.";
+			await loadSessions();
+		} catch (error) { cursorFeedback = String(error); }
+		finally { cursorSaving = false; }
+	}
+
+	async function removeCursorKey() {
+		if (cursorSaving) return;
+		cursorSaving = true;
+		try {
+			await SessionService.RemoveCursorAPIKey();
+			cursorKey = "";
+			await refreshCursorStatus();
+			cursorFeedback = cursorConfigured ? "Saved key removed; the environment override is still active." : "Saved key removed.";
+			await loadSessions();
+		} catch (error) { cursorFeedback = String(error); }
+		finally { cursorSaving = false; }
+	}
 
   onMount(() => {
     SessionService.GetSettings().then((s: any) => {
@@ -39,6 +78,7 @@
       loaded = true;
     }).catch(() => { loaded = true; });
     SessionService.IsAPIConfigured().then((v) => (apiConfigured = v)).catch(() => {});
+    refreshCursorStatus().catch(() => cursorFeedback = "Could not read Cursor credential status.");
   });
 
   let agentNames = $derived(Object.keys(agents).sort());
@@ -62,7 +102,7 @@
     SessionService.SetAPIPassphrase(p).then(() => {
       apiConfigured = true;
       newPassphrase = "";
-      apiFeedback = "Passphrase saved — restart --api to apply";
+      apiFeedback = "Passphrase saved; restart --api to apply";
     }).catch(() => (apiFeedback = "Could not save the passphrase"));
   }
 
@@ -101,7 +141,7 @@
     onclick={onclose}
   ></button>
   <div
-    class="relative w-[480px] max-h-[85vh] overflow-y-auto rounded-xl border border-surface-active bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.7)] p-5"
+    class="relative w-[480px] max-w-[calc(100vw-24px)] max-h-[85vh] overflow-y-auto rounded-xl border border-surface-active bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.7)] p-5"
     role="dialog"
     aria-label="Settings"
     tabindex="-1"
@@ -166,6 +206,24 @@
 
         <section>
           <div class="flex items-center gap-2 mb-1.5">
+            <span class="text-[10px] uppercase tracking-wider text-subtext">Cursor cloud agents</span>
+            <span class="text-[10px] text-accent">{cursorConfigured ? "configured" : "not configured"}</span>
+          </div>
+          {#if cursorSource}<p class="text-[10.5px] text-subtext mb-1.5">{cursorSource === "LAZYAGENT_CURSOR_API_KEY" ? "Environment override active" : "Saved on this device"}</p>{/if}
+          <div class="flex flex-wrap gap-1.5">
+            <input id="set-cursor-key" aria-label="Cursor API key" type="password" autocomplete="new-password" bind:value={cursorKey} placeholder={cursorConfigured ? "New Cursor API key" : "Cursor API key"} class="flex-1 min-w-0 bg-[#11111b] border border-border rounded-lg px-2.5 py-1.5 text-text outline-none focus:border-accent placeholder-subtext" onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCursorKey(); } e.stopPropagation(); }} />
+            <button class="rounded-lg bg-surface-hover hover:bg-surface-active text-text px-2.5 py-1.5 disabled:opacity-40" onclick={saveCursorKey} disabled={cursorSaving || !cursorKey.trim()}>Save key</button>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-1.5">
+            <button class="text-[11px] text-accent hover:underline" onclick={() => SessionService.OpenCursorAPIKeys().catch(() => {})}>Get a Cursor API key</button>
+            <button class="text-[11px] text-subtext hover:text-text disabled:opacity-40" onclick={removeCursorKey} disabled={cursorSaving}>Remove saved key</button>
+          </div>
+          {#if cursorFeedback}<p class="text-[10.5px] text-accent mt-1.5" role="status">{cursorFeedback}</p>{/if}
+          <p class="text-[10.5px] text-subtext mt-1.5">Saved beside the lazyagent configuration and shared with TUI and API. Changes apply to this window immediately; restart other running instances.</p>
+        </section>
+
+        <section>
+          <div class="flex items-center gap-2 mb-1.5">
             <span class="text-[10px] uppercase tracking-wider text-subtext">API authentication</span>
             {#if apiConfigured}
               <span class="rounded-full bg-activity-waiting/15 text-activity-waiting text-[9.5px] font-semibold px-1.5 py-px">configured</span>
@@ -178,7 +236,7 @@
               type="password"
               bind:value={newPassphrase}
               placeholder={apiConfigured ? "New passphrase (rotate)" : "Set a passphrase"}
-              class="flex-1 bg-[#11111b] border border-border rounded-lg px-2.5 py-1.5 text-text outline-none focus:border-accent placeholder-subtext"
+              class="flex-1 min-w-0 bg-[#11111b] border border-border rounded-lg px-2.5 py-1.5 text-text outline-none focus:border-accent placeholder-subtext"
               onkeydown={(e) => { if (e.key === "Enter") updatePassphrase(); e.stopPropagation(); }}
             />
             <button
@@ -187,7 +245,7 @@
               disabled={!newPassphrase.trim()}
             >Save passphrase</button>
           </div>
-          <div class="flex items-center gap-1.5 mt-1.5">
+          <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
             <button class="rounded-lg bg-surface-hover hover:bg-surface-active text-text px-2.5 py-1 text-[11px]" onclick={copyToken} disabled={!apiConfigured}>Copy bearer token</button>
             <button class="rounded-lg bg-surface-hover hover:bg-activity-spawning/20 hover:text-activity-spawning text-subtext px-2.5 py-1 text-[11px] disabled:opacity-40" onclick={clearPassphrase} disabled={!apiConfigured}>Clear</button>
             {#if apiFeedback}<span class="text-[10.5px] text-accent">{apiFeedback}</span>{/if}

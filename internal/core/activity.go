@@ -76,6 +76,9 @@ type ActivityEntry struct {
 //  4. LastActivity older than ActivityTimeout → idle.
 //  5. Current JSONL status → thinking if Claude is processing, idle otherwise.
 func ResolveActivity(s *model.Session, now time.Time) ActivityKind {
+	if s.Cloud != nil {
+		return cloudActivity(s)
+	}
 	sinceActivity := now.Sub(s.LastActivity)
 
 	if !s.LastSummaryAt.IsZero() && now.Sub(s.LastSummaryAt) < ActivityTimeout {

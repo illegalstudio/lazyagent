@@ -1,25 +1,39 @@
 import { get } from "svelte/store";
 import {
-  sessions, selectedDetail, windowMinutes, activityFilter, searchQuery,
+  sessions, selectedId, selectedDetail, cloudStatus, windowMinutes, activityFilter, searchQuery,
   isDetached, isPinned,
 } from "./stores";
 import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
+let sessionRequest = 0;
+let detailRequest = 0;
+
 export async function loadSessions(): Promise<void> {
+  const request = ++sessionRequest;
   try {
     const items = await SessionService.GetSessions();
+    const status = await SessionService.GetCloudStatus();
+    if (request !== sessionRequest) return;
     sessions.set(items || []);
+    cloudStatus.set(status);
   } catch {
     // Dev mode without Go backend
   }
 }
 
 export async function loadDetail(id: string): Promise<void> {
+  const request = ++detailRequest;
   try {
-    selectedDetail.set((await SessionService.GetSessionDetail(id)) as any);
+    const detail = await SessionService.GetSessionDetail(id);
+    if (request === detailRequest && get(selectedId) === id) selectedDetail.set(detail as any);
   } catch {
-    selectedDetail.set(null);
+    if (request === detailRequest && get(selectedId) === id) selectedDetail.set(null);
   }
+}
+
+export async function toggleIdleCloud(): Promise<void> {
+  await SessionService.SetCloudShowIdle(!get(cloudStatus).showIdle);
+  await loadSessions();
 }
 
 const allFilters = ["", "idle", "waiting", "thinking", "compacting", "reading", "writing", "running", "searching", "browsing", "spawning"];

@@ -10,6 +10,7 @@
     cycleFilter, adjustWindow, toggleDetach, togglePin, setSearch,
   } from "./actions";
   import SessionCard from "./SessionCard.svelte";
+  import CloudStatus from "./CloudStatus.svelte";
   import DetailPanel from "./DetailPanel.svelte";
   import LimitsModal from "./LimitsModal.svelte";
   import ContextMenu from "./ContextMenu.svelte";
@@ -194,6 +195,8 @@
       title="Attach to system tray (d)"
     >⤡</button>
   </header>
+
+  <CloudStatus />
 
   <!-- Content -->
   <div class="flex-1 flex min-h-0">

@@ -25,11 +25,13 @@ It's the default because it's the most information-dense interface. The layout i
 | <kbd>+</kbd> / <kbd>-</kbd> | Adjust time window (±10 minutes) |
 | <kbd>f</kbd> | Cycle activity filter (`all` → `active` → `waiting` → …) |
 | <kbd>/</kbd> | Search sessions by project path |
-| <kbd>o</kbd> | Open the selected session's CWD in your editor |
-| <kbd>c</kbd> | Copy the resume command to the clipboard, when available |
+| <kbd>o</kbd> | Open the project in your editor, or the cloud run in Cursor |
+| <kbd>c</kbd> | Copy the resume command, or the cloud run URL |
 | <kbd>C</kbd> | Copy the YOLO resume command, when the agent exposes one |
 | <kbd>l</kbd> | Open or close the limits view |
 | <kbd>r</kbd> | Rename the session; refresh while the limits view is open |
+| <kbd>a</kbd> | Show or hide idle Cursor cloud agents |
+| <kbd>g</kbd> | Refresh local sessions and Cursor cloud agents |
 | <kbd>esc</kbd> | Close detail overlay / dismiss search |
 | <kbd>q</kbd> / <kbd>ctrl+c</kbd> | Quit |
 
@@ -39,6 +41,16 @@ It's the default because it's the most information-dense interface. The layout i
 - **Activity badge** — a colored state label (`idle`, `thinking`, `writing`, …). See [Activity states](../concepts/activity-states.md).
 - **Braille spinner** — animates while the session is actively executing.
 - **Sparkline** — a Unicode braille mini-chart of the last N minutes of activity.
+
+## Cursor cloud agents
+
+Save a Cursor user API key with `lazyagent credentials set cursor`, or in GUI Settings, then restart the TUI. See [key creation and shared storage](http-api.md#cursor-cloud-agent-setup). Cloud discovery is enabled when Cursor is included in your agent selection; demo mode and monitors restricted to other agents do not contact Cursor.
+
+Cloud rows have a **C cloud** prefix and share the activity and search controls. Active runs remain visible regardless of their last update time. Idle runs are hidden initially; press **a** to include all cloud history, including runs older than the local time window. Search matches the run name, repository, and local alias. The local project time window does not apply to cloud runs.
+
+The details show the provider status, repository, update time, and Cursor URL. Press **o** to open the run in Cursor, **c** to copy its URL, or **r** to give it a local alias. Cloud rows do not offer local resume or YOLO commands. Conversation, files, and pull request details are available in Cursor.
+
+Cloud requests run in the background while local sessions remain usable. The footer shows refresh progress, loaded count, and lookup or credential errors. Results refresh after 30 seconds (5 seconds after an error), sampled on the regular UI tick. Press **g** for an immediate refresh. Cloud snapshots are kept in memory only.
 
 ## Startup and cache
 

@@ -329,6 +329,84 @@ Remove the custom name (reset to default).
 
 Also triggers an SSE `update`.
 
+### `GET /api/agents`
+
+IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents are omitted unless `?all=true`.
+
+Cloud agents need a saved Cursor API key or the `LAZYAGENT_CURSOR_API_KEY` environment override. Without either, only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
+
+#### Cursor cloud agent setup
+
+1. Sign in to [Cursor Dashboard → API Keys](https://cursor.com/dashboard/api) and create a **user API key** for the Cloud Agents API. See [Cursor's API key documentation](https://cursor.com/docs/api#creating-api-keys).
+2. Save it once using the hidden prompt:
+
+   ```bash
+   lazyagent credentials set cursor
+   ```
+
+   This writes `providers.cursor.api_key` to `credentials.json` beside lazyagent's `config.json`. The file has `0600` permissions and the directory has `0700` permissions. All interfaces read this shared location. You can also save the key in GUI Settings under **Cursor cloud agents**; the saved value is never returned to the frontend.
+
+3. Start or restart the API:
+
+   ```bash
+   lazyagent --api
+   ```
+
+4. Query `GET /api/agents` using your usual lazyagent bearer token. Add `?all=true` to include idle cloud agents, and check `errors` for failed or pending cloud lookups.
+
+The Cursor key authenticates lazyagent to Cursor. The [API passphrase](#authentication) authenticates your clients to lazyagent; configure it separately.
+
+Check the active source or remove the saved key without printing its value:
+
+```bash
+lazyagent credentials status cursor
+lazyagent credentials remove cursor
+```
+
+For temporary overrides or a secret-manager deployment, the existing environment variable still works and takes precedence over the saved key:
+
+```bash
+LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+```
+
+Environment overrides are not copied into `credentials.json`. Removing a saved key does not unset an environment override. The key is resolved when the API server is created; restart it after setting, rotating, or removing credentials. GUI Settings updates its own monitor immediately.
+
+Services, login items, and separately launched desktop processes can use the saved credential when running as the same user with the same config directory. See [Provider API credentials](../reference/configuration.md#provider-api-credentials) for paths and the extensible file format. There is no key field in ordinary `config.json`.
+
+Cloud agents also appear in the [TUI](terminal-ui.md#cursor-cloud-agents) and both GUI layouts when Cursor is among the enabled providers. Demo mode and other-agent-only monitors stay local. `/api/sessions` and maintenance commands continue to operate on local sessions. Local Cursor discovery needs no cloud API key.
+
+#### Cloud caching and errors
+
+Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is taken from list items when available, otherwise loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
+
+Cloud `url` values are restricted to HTTPS agent pages on `cursor.com`. Missing or invalid upstream URLs fall back to `https://cursor.com/agents/<escaped-id>`, matching the TUI and GUI actions.
+
+A request waits at most 10 seconds for cloud data. A slower refresh continues in the background, shared by all callers, with a 2-minute deadline and a 30-second timeout per upstream request. Until it finishes, the API returns available IDE agents and the last cloud snapshot, with `refresh in progress; cloud results may be incomplete` in `errors`. When the refresh finishes, later polls receive the result.
+
+If a page or repository lookup fails, available IDE and cloud agents are still returned alongside an entry in `errors`. A failed repository lookup leaves `repo` absent, or keeps its last cached value if available. Check `errors` before treating the result as complete.
+
+**Response: `200 OK`**
+
+```json
+{
+  "agents": [
+    {
+      "id": "bc-1",
+      "source": "cloud",
+      "agent": "cursor",
+      "name": "cloud run",
+      "status": "working",
+      "repo": "https://github.com/o/r",
+      "url": "https://cursor.com/agents/bc-1",
+      "updated_at": "2026-11-03T20:00:00Z"
+    }
+  ],
+  "errors": []
+}
+```
+
+`source` is `ide` or `cloud`. `status` is `working`, `needs_you` or `idle` (IDE `waiting` maps to `needs_you`). `errors` lists sources that failed, such as `cloud: list cursor agents: cursor api returned 401`, so an empty `agents` list can be told apart from a broken lookup.
+
 ### `GET /api/stats`
 
 Summary statistics.

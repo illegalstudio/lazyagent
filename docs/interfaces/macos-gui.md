@@ -45,6 +45,12 @@ Each card carries an action bar: **Resume** opens the normal resume command in a
 
 The bottom status bar shows session counts and the window's total cost; **? shortcuts** (or the <kbd>?</kbd> key) opens the keyboard-shortcut reference. Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes away and lazyagent returns to menu bar accessory mode.
 
+## Cursor cloud agents
+
+Cursor cloud runs appear in both the attached panel and detached dashboard when a shared API key is configured and Cursor is included in the monitored agents. See [cloud setup and behavior](linux-gui.md#cursor-cloud-agents) for the common GUI controls. Cloud cards show the source, run name, and repository. Their actions open the run in Cursor or copy its URL; the detail panel omits local-only metrics and resume commands.
+
+Cloud refreshes happen in the background, with progress and errors in the cloud status bar. **Idle cloud** (or **a**) includes idle runs of any age; active runs are shown regardless of update time. The toolbar refresh button refreshes both sources. Demo mode never fetches cloud data.
+
 ## Settings
 
 The gear icon opens the Settings panel:
@@ -54,8 +60,9 @@ The gear icon opens the Settings panel:
 - **Agents** — which agents to monitor (applies at the next launch).
 - **Hide projects containing** — path fragments to exclude, one per line (applies immediately).
 - **API authentication** — set, rotate, or clear the HTTP API passphrase and copy the derived bearer token. The current passphrase is never displayed; a running `--api` server picks changes up at its next restart.
+- **Cursor cloud agents**: save, replace, or remove the shared Cursor user API key, or open the API-key dashboard. Changes apply to this GUI immediately; restart other running instances. Environment overrides take precedence. The saved key is never displayed.
 
-Everything saves to the same `config.json` the CLI uses — see [Configuration](../reference/configuration.md).
+Preferences save to the same `config.json` the CLI uses. Provider keys save separately in `credentials.json` beside it. See [Configuration](../reference/configuration.md).
 
 ## Keybindings
 
@@ -65,6 +72,7 @@ Everything saves to the same `config.json` the CLI uses — see [Configuration](
 | <kbd>↓</kbd> / <kbd>j</kbd> | Move down |
 | <kbd>+</kbd> / <kbd>-</kbd> | Adjust time window |
 | <kbd>f</kbd> | Cycle activity filter |
+| <kbd>a</kbd> | Show or hide idle Cursor cloud agents |
 | <kbd>/</kbd> | Search sessions |
 | <kbd>l</kbd> | Open limits; close them in the attached panel |
 | <kbd>r</kbd> | Rename session; refresh while the limits view is open |

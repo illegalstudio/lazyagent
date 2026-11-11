@@ -58,6 +58,12 @@ export function GetCardDensity(): $CancellablePromise<string> {
     return $Call.ByID(2985488372);
 }
 
+export function GetCloudStatus(): $CancellablePromise<core$0.CloudStatus> {
+    return $Call.ByID(4029465101).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
 /**
  * GetConfig returns the current config. The API passphrase is scrubbed
  * before returning so the secret never crosses the Wails IPC boundary into
@@ -65,7 +71,13 @@ export function GetCardDensity(): $CancellablePromise<string> {
  */
 export function GetConfig(): $CancellablePromise<core$0.Config> {
     return $Call.ByID(1670992424).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType1($result);
+    });
+}
+
+export function GetCursorCredentialStatus(): $CancellablePromise<$models.CredentialStatus> {
+    return $Call.ByID(1556673159).then(($result: any) => {
+        return $$createType2($result);
     });
 }
 
@@ -84,7 +96,7 @@ export function GetDetailWidth(): $CancellablePromise<number> {
  */
 export function GetLimits(): $CancellablePromise<limits$0.View> {
     return $Call.ByID(1368178874).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -93,7 +105,7 @@ export function GetLimits(): $CancellablePromise<limits$0.View> {
  */
 export function GetSessionDetail(id: string): $CancellablePromise<$models.SessionFull | null> {
     return $Call.ByID(378650659, id).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
 }
 
@@ -109,7 +121,7 @@ export function GetSessionName(sessionID: string): $CancellablePromise<string> {
  */
 export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
     return $Call.ByID(330309427).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType7($result);
     });
 }
 
@@ -118,7 +130,7 @@ export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
  */
 export function GetSettings(): $CancellablePromise<$models.Settings> {
     return $Call.ByID(1562138763).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType8($result);
     });
 }
 
@@ -159,6 +171,17 @@ export function IsPinned(): $CancellablePromise<boolean> {
 }
 
 /**
+ * OpenCloudSession resolves the selected ID and validates the provider URL.
+ */
+export function OpenCloudSession(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3231971977, id);
+}
+
+export function OpenCursorAPIKeys(): $CancellablePromise<void> {
+    return $Call.ByID(3251983132);
+}
+
+/**
  * OpenInEditor opens a directory in the user's editor.
  * For Cursor sessions, it opens Cursor IDE directly.
  * Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
@@ -182,6 +205,10 @@ export function OpenReleases(): $CancellablePromise<void> {
  */
 export function Refresh(): $CancellablePromise<void> {
     return $Call.ByID(310175433);
+}
+
+export function RemoveCursorAPIKey(): $CancellablePromise<void> {
+    return $Call.ByID(3424873867);
 }
 
 /**
@@ -227,6 +254,14 @@ export function SetCardDensity(d: string): $CancellablePromise<void> {
     return $Call.ByID(2444020248, d);
 }
 
+export function SetCloudShowIdle(show: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1772290044, show);
+}
+
+export function SetCursorAPIKey(key: string): $CancellablePromise<void> {
+    return $Call.ByID(1268330447, key);
+}
+
 /**
  * SetDetailWidth persists the desktop detail-panel width. Unlike the
  * density setter it clamps instead of rejecting: the value comes from a
@@ -265,10 +300,12 @@ export function TogglePin(): $CancellablePromise<void> {
 }
 
 // Private type creation functions
-const $$createType0 = core$0.Config.createFrom;
-const $$createType1 = limits$0.View.createFrom;
-const $$createType2 = $models.SessionFull.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $models.SessionItem.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $models.Settings.createFrom;
+const $$createType0 = core$0.CloudStatus.createFrom;
+const $$createType1 = core$0.Config.createFrom;
+const $$createType2 = $models.CredentialStatus.createFrom;
+const $$createType3 = limits$0.View.createFrom;
+const $$createType4 = $models.SessionFull.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);
+const $$createType6 = $models.SessionItem.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $models.Settings.createFrom;

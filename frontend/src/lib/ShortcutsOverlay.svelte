@@ -11,7 +11,7 @@
     },
     {
       title: "View",
-      keys: [["⌘1 ⌘2 ⌘3", "Card density"], ["f", "Cycle activity filter"], ["l", "Open limits"], ["+ / −", "Time window"]],
+      keys: [["⌘1 ⌘2 ⌘3", "Card density"], ["f", "Cycle activity filter"], ["a", "Include idle cloud agents"], ["l", "Open limits"], ["+ / −", "Time window"]],
     },
     {
       title: "Session",
