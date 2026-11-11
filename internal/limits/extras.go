@@ -14,6 +14,7 @@ type Reset struct {
 	Left      int       // resets still available under this grant
 	Total     int       // resets granted in total; 0 when the provider does not say
 	ExpiresAt time.Time // when unused resets lapse; zero when unknown
+	NextAt    time.Time // when a spent recurring reset comes back; zero when unknown
 	Usable    bool      // the provider says it can be redeemed right now
 	Status    string    // why it cannot be redeemed now, or "" when usable or unknown
 }
@@ -40,6 +41,9 @@ func resetText(r Reset, now time.Time) string {
 	parts := []string{resetCountText(r)}
 	if !r.ExpiresAt.IsZero() {
 		parts = append(parts, "expires "+relativeAbsolute(r.ExpiresAt, now))
+	}
+	if !r.NextAt.IsZero() {
+		parts = append(parts, "next available "+relativeAbsolute(r.NextAt, now))
 	}
 	switch {
 	case r.Status != "":

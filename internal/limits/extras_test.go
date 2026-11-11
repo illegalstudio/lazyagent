@@ -102,6 +102,47 @@ func TestClaudeJuniperTideReset(t *testing.T) {
 	}
 }
 
+func TestClaudeJuniperTideHeldAndSpent(t *testing.T) {
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+
+	// Held, but only redeemable at a usage limit: still counts as left.
+	held := claudeUsageResponse{
+		Limits: []claudeLimit{{Kind: "weekly_all", Percent: 10}},
+		JuniperTide: &claudeJuniperTide{
+			InExperiment: true, ResetsPerWeek: 1, IneligibleReason: "not_at_wall",
+		},
+	}
+	r := claudeUsageToReport(&held, now).Resets
+	if len(r) != 1 || r[0].Left != 1 || r[0].Usable || r[0].Status != "only at a usage limit" {
+		t.Fatalf("held reset = %+v", r)
+	}
+	if got := resetText(r[0], now); got != "1 of 1 left · only at a usage limit" {
+		t.Errorf("held text = %q", got)
+	}
+
+	// Spent this week: none left, and the comeback is a live countdown.
+	next := now.Add(50 * time.Hour)
+	spent := held
+	spent.JuniperTide = &claudeJuniperTide{
+		Eligible: true, ResetsPerWeek: 1, NextAvailableAt: next.Format(time.RFC3339),
+	}
+	r = claudeUsageToReport(&spent, now).Resets
+	if len(r) != 1 || r[0].Left != 0 || !r[0].NextAt.Equal(next) || r[0].Status != "" {
+		t.Fatalf("spent reset = %+v", r)
+	}
+	if got := resetText(r[0], now.Add(time.Hour)); !strings.Contains(got, "next available in 2d 1h") {
+		t.Errorf("spent text an hour later = %q, want a countdown from render time", got)
+	}
+	j := buildJSON([]agentReport{{agent: "claude", report: claudeUsageToReport(&spent, now)}}, nil, now.Add(time.Hour))
+	rj := j.Reports[0].Resets[0]
+	if rj.NextAvailableAt == nil || rj.NextAvailableInSeconds != int64(49*3600) {
+		t.Errorf("json next available = %v / %d", rj.NextAvailableAt, rj.NextAvailableInSeconds)
+	}
+	if v := buildResetView(r[0], now); v.NextUnix != next.Unix() {
+		t.Errorf("view NextUnix = %d, want %d", v.NextUnix, next.Unix())
+	}
+}
+
 func TestClaudeUserAgentClaimsRecentVersion(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

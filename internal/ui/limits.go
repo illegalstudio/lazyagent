@@ -115,16 +115,44 @@ func (m Model) renderLimitsHint(moreBelow bool) string {
 	return lipgloss.NewStyle().Foreground(m.theme.Muted).Render(h)
 }
 
+// Summary agent column bounds. Scoped rows ("Codex Code review", "Claude
+// Fable") can outgrow the 14-cell minimum; the cap keeps both 24-cell value
+// columns inside the modal's 76-cell content width (2 + 22 + 2 + 24 + 2 + 24).
+const (
+	limitsAgentColMin = 14
+	limitsAgentColMax = 22
+)
+
 func (m Model) renderLimitsSummaryLines() []string {
+	nameW := limitsAgentColMin
+	for _, row := range m.limitsView.Summary {
+		if w := lipgloss.Width(row.Provider); w > nameW {
+			nameW = min(w, limitsAgentColMax)
+		}
+	}
 	lines := []string{
 		lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).Render(
-			fmt.Sprintf("  %-14s  %-24s  %-24s", "Agent", "5h", "Week / Global")),
+			fmt.Sprintf("  %-*s  %-24s  %-24s", nameW, "Agent", "5h", "Week / Global")),
 	}
 	for _, row := range m.limitsView.Summary {
-		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(fmt.Sprintf("%-14s", row.Provider))
+		name := ellipsize(row.Provider, nameW)
+		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(name + strings.Repeat(" ", nameW-lipgloss.Width(name)))
 		lines = append(lines, "  "+prov+"  "+m.summaryCellText(row.FiveHour)+"  "+m.summaryCellText(row.WeekGlobal))
 	}
 	return lines
+}
+
+// ellipsize shortens s to at most width display cells, ending in "…" when it
+// had to cut.
+func ellipsize(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > width {
+		r = r[:len(r)-1]
+	}
+	return string(r) + "…"
 }
 
 func (m Model) summaryCellText(c limits.SummaryCell) string {

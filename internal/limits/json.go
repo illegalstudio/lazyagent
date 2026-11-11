@@ -41,7 +41,10 @@ type resetJSON struct {
 	Status           string     `json:"status"`
 	ExpiresAt        *time.Time `json:"expires_at"`         // null when unknown
 	ExpiresInSeconds int64      `json:"expires_in_seconds"` // 0 when unknown or passed
-	Text             string     `json:"text"`
+	// A spent recurring reset (Claude's weekly 5-hour reset) comes back here.
+	NextAvailableAt        *time.Time `json:"next_available_at"`         // null when unknown
+	NextAvailableInSeconds int64      `json:"next_available_in_seconds"` // 0 when unknown or passed
+	Text                   string     `json:"text"`
 }
 
 // creditJSON is a balance or spend pool beyond the included usage. Amounts
@@ -155,6 +158,13 @@ func buildReportJSON(ar agentReport, now time.Time) reportJSON {
 			rsj.ExpiresAt = &expires
 			if rem := expires.Sub(now); rem > 0 {
 				rsj.ExpiresInSeconds = int64(rem.Seconds())
+			}
+		}
+		if !rs.NextAt.IsZero() {
+			next := rs.NextAt
+			rsj.NextAvailableAt = &next
+			if rem := next.Sub(now); rem > 0 {
+				rsj.NextAvailableInSeconds = int64(rem.Seconds())
 			}
 		}
 		rj.Resets = append(rj.Resets, rsj)

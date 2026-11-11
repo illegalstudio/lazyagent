@@ -105,26 +105,48 @@ func TestRenderLimitsSummaryLines_ColumnsAlign(t *testing.T) {
 			{Label: "monthly", WindowMinutes: 31 * 24 * 60, UsedPercent: 5.2, ResetsAt: now.Add(24 * time.Hour)},
 		}},
 	}
+	// Scoped rows: one wider than the 14-cell minimum, one past the cap.
+	reports = append(reports,
+		limits.Report{Provider: "Codex", Windows: []limits.Window{
+			{Label: "7-day", Scope: "Code review", WindowMinutes: 7 * 24 * 60, UsedPercent: 3, ResetsAt: now.Add(48 * time.Hour)},
+			{Label: "7-day", Scope: "GPT-5.3-Codex-Spark", WindowMinutes: 7 * 24 * 60, UsedPercent: 1, ResetsAt: now.Add(48 * time.Hour)},
+		}},
+	)
 	view := limits.BuildView(reports, now)
 	m := limitsTestModel(limitsTabSummary, false, view)
 
 	lines := m.renderLimitsSummaryLines()
-	if len(lines) != 4 {
-		t.Fatalf("got %d lines, want 4 (header + 3 rows)", len(lines))
+	if len(lines) != 6 {
+		t.Fatalf("got %d lines, want 6 (header + 5 rows): %q", len(lines), lines)
+	}
+	for i, ln := range lines {
+		if w := lipgloss.Width(ln); w > 76 {
+			t.Errorf("line %d is %d cells wide, past the modal's 76-cell content: %q", i, w, ln)
+		}
+	}
+	if !strings.Contains(lines[4], "Codex Code review") {
+		t.Errorf("row under the cap should keep its full name: %q", lines[4])
+	}
+	if !strings.Contains(lines[5], "…") {
+		t.Errorf("row past the cap should be ellipsized: %q", lines[5])
 	}
 
-	headerLoc := columnGutterRe.FindStringIndex(strings.TrimPrefix(lines[0], "  "))
+	// Columns are compared in display cells, not bytes: an ellipsized name
+	// ends in "…", which is one cell but three bytes.
+	header := strings.TrimPrefix(lines[0], "  ")
+	headerLoc := columnGutterRe.FindStringIndex(header)
 	if headerLoc == nil {
 		t.Fatalf("header line has no column gutter: %q", lines[0])
 	}
-	wantCol := headerLoc[1]
+	wantCol := lipgloss.Width(header[:headerLoc[1]])
 
 	for i, ln := range lines[1:] {
-		loc := columnGutterRe.FindStringIndex(strings.TrimPrefix(ln, "  "))
+		row := strings.TrimPrefix(ln, "  ")
+		loc := columnGutterRe.FindStringIndex(row)
 		if loc == nil {
 			t.Fatalf("row %d: no column gutter found: %q", i, ln)
 		}
-		if got := loc[1]; got != wantCol {
+		if got := lipgloss.Width(row[:loc[1]]); got != wantCol {
 			t.Errorf("row %d: data column starts at %d, want %d (header's column) — %q", i, got, wantCol, ln)
 		}
 	}

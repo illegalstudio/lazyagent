@@ -53,6 +53,8 @@ type ResetView struct {
 	Status          string
 	ExpiresUnix     int64  // 0 when unknown
 	ExpiresAbsolute string // "Tue 9 Mar 08:59 CET" or ""
+	NextUnix        int64  // when a spent recurring reset comes back; 0 when unknown
+	NextAbsolute    string // "Tue 9 Mar 08:59 CET" or ""
 	Text            string // full one-line rendering, as the CLI prints it
 }
 
@@ -179,6 +181,10 @@ func buildResetView(r Reset, now time.Time) ResetView {
 	if !r.ExpiresAt.IsZero() {
 		rv.ExpiresUnix = r.ExpiresAt.Unix()
 		rv.ExpiresAbsolute = r.ExpiresAt.Local().Format("Mon 2 Jan 15:04 MST")
+	}
+	if !r.NextAt.IsZero() {
+		rv.NextUnix = r.NextAt.Unix()
+		rv.NextAbsolute = r.NextAt.Local().Format("Mon 2 Jan 15:04 MST")
 	}
 	return rv
 }

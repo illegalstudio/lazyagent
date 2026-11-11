@@ -384,14 +384,19 @@ func claudeResets(usage *claudeUsageResponse, now time.Time) []Reset {
 			Total:  jt.ResetsPerWeek,
 			Usable: jt.Available,
 		}
-		if jt.Available {
-			r.Left = 1
-		}
-		if next, err := time.Parse(time.RFC3339Nano, jt.NextAvailableAt); err == nil && !jt.Available {
-			r.Status = "next available " + relativeAbsolute(next, now)
-		} else if jt.IneligibleReason == "not_at_wall" {
+		held := max(jt.ResetsPerWeek, 1)
+		next, nextErr := time.Parse(time.RFC3339Nano, jt.NextAvailableAt)
+		switch {
+		case jt.Available:
+			r.Left = held
+		case nextErr == nil:
+			// Spent this week: it comes back at next_available_at.
+			r.NextAt = next
+		case jt.IneligibleReason == "not_at_wall":
+			// Held, but redeemable only once a limit is hit.
+			r.Left = held
 			r.Status = "only at a usage limit"
-		} else if jt.IneligibleReason != "" {
+		case jt.IneligibleReason != "":
 			r.Status = humanReason(jt.IneligibleReason)
 		}
 		out = append(out, r)

@@ -13,7 +13,7 @@ export class CreditView {
     "Enabled": boolean;
 
     /**
-     * "28,315.67 credits", "disabled · org level disabled until"
+     * "28,315.67 credits", "disabled · set by your organization"
      */
     "Text": string;
 
@@ -126,6 +126,16 @@ export class ResetView {
     "ExpiresAbsolute": string;
 
     /**
+     * when a spent recurring reset comes back; 0 when unknown
+     */
+    "NextUnix": number;
+
+    /**
+     * "Tue 9 Mar 08:59 CET" or ""
+     */
+    "NextAbsolute": string;
+
+    /**
      * full one-line rendering, as the CLI prints it
      */
     "Text": string;
@@ -152,6 +162,12 @@ export class ResetView {
         }
         if (!("ExpiresAbsolute" in $$source)) {
             this["ExpiresAbsolute"] = "";
+        }
+        if (!("NextUnix" in $$source)) {
+            this["NextUnix"] = 0;
+        }
+        if (!("NextAbsolute" in $$source)) {
+            this["NextAbsolute"] = "";
         }
         if (!("Text" in $$source)) {
             this["Text"] = "";

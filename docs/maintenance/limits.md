@@ -187,6 +187,8 @@ lazyagent limits --json | jq '.reports[] | {agent, used: .summary.week_global.us
           "status": "",
           "expires_at": "2027-03-09T07:59:00Z",
           "expires_in_seconds": 10231200,
+          "next_available_at": null,
+          "next_available_in_seconds": 0,
           "text": "1 of 1 left · expires in 118d 10h (Tue 9 Mar 08:59 CET) · usable now"
         }
       ],
@@ -265,6 +267,7 @@ Each reset:
 | `usable` | The provider says the reset can be redeemed right now |
 | `status` | Why it cannot be redeemed now (`only at a usage limit`, `paused`, …), or `""` |
 | `expires_at`, `expires_in_seconds` | When unused resets lapse; `null` / `0` when unknown |
+| `next_available_at`, `next_available_in_seconds` | When a spent recurring reset (Claude's weekly `5-hour limit reset`) comes back; `null` / `0` when unknown or not spent |
 | `text` | The one-line rendering the detailed view prints |
 
 Each credit:

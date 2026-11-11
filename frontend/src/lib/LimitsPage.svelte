@@ -93,6 +93,10 @@
       const remaining = r.ExpiresUnix * 1000 - now;
       parts.push(remaining > 0 ? `expires in ${formatDuration(remaining / 1000)}` : "expired");
     }
+    if (r.NextUnix > 0) {
+      const remaining = r.NextUnix * 1000 - now;
+      parts.push(remaining > 0 ? `next available in ${formatDuration(remaining / 1000)}` : "available again");
+    }
     if (r.Status) parts.push(r.Status);
     else if (r.Usable) parts.push("usable now");
     return parts.join(" · ");
@@ -213,7 +217,7 @@
                     <span class="truncate text-[11px] text-text" title={r.Label}>{r.Label}</span>
                     <span
                       class="truncate text-[10px] tabular-nums {r.Usable ? 'text-activity-writing' : 'text-subtext'}"
-                      title={r.ExpiresAbsolute ? `expires ${r.ExpiresAbsolute}` : r.Text}
+                      title={r.ExpiresAbsolute ? `expires ${r.ExpiresAbsolute}` : r.NextAbsolute ? `next available ${r.NextAbsolute}` : r.Text}
                     >{resetLine(r)}</span>
                   </div>
                 {/each}
