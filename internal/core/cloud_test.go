@@ -30,9 +30,13 @@ func TestCloudMonitorNonblockingDiscoveryAndFilters(t *testing.T) {
 	if err := mgr.Reload(); err != nil {
 		t.Fatal(err)
 	}
+	start := time.Now()
 	mgr.setCloud(cloud.NewCursor(upstream.URL, "test-key"), nil)
 	<-started
 	local := mgr.VisibleSessions()
+	if time.Since(start) > time.Second {
+		t.Fatal("monitor reads waited for blocked cloud discovery")
+	}
 	if len(local) != 1 || local[0].SessionID != "same" || !mgr.CloudStatus().Loading {
 		t.Fatalf("local sessions must remain available during refresh: %v, %+v", local, mgr.CloudStatus())
 	}

@@ -43,6 +43,27 @@ func TestCloudItemCapabilities(t *testing.T) {
 	}
 }
 
+func TestCloudPollingNotifiesAfterOtherReaders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mgr := core.NewSessionManager(30, demo.Provider{})
+	defer mgr.Close()
+	svc := &SessionService{manager: mgr}
+	previous := mgr.CloudStatus()
+	mgr.SetCloudShowIdle(true)
+	// A bound method can sample a changed snapshot before the watcher tick.
+	mgr.VisibleSessions()
+	mgr.SessionDetail("missing")
+	if mgr.UpdateCloud() {
+		t.Fatal("the manager should already have sampled the change")
+	}
+	if !svc.pollCloud(&previous) {
+		t.Fatal("watcher must notify even when another reader applied the status first")
+	}
+	if svc.pollCloud(&previous) {
+		t.Fatal("an unchanged snapshot must not emit repeatedly")
+	}
+}
+
 func TestGUICursorCredentialsShareResolver(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("LAZYAGENT_CURSOR_API_KEY", "")

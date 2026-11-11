@@ -352,3 +352,38 @@ func TestAgentsRejectsMissingToken(t *testing.T) {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}
 }
+
+func TestGetAgentsReturnsOnlyCursorCloudURLs(t *testing.T) {
+	srv, ts := newTestServer(t)
+	defer ts.Close()
+	cases := []struct{ id, upstream, want string }{
+		{"other-host", "https://evil.example/agents/one", "https://cursor.com/agents/other-host"},
+		{"script", "javascript:alert(1)", "https://cursor.com/agents/script"},
+		{"userinfo", "https://user@cursor.com/agents/one", "https://cursor.com/agents/userinfo"},
+		{"missing/slash", "", "https://cursor.com/agents/missing%2Fslash"},
+		{"valid", "https://cursor.com/agents/valid?tab=files", "https://cursor.com/agents/valid?tab=files"},
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		items := make([]map[string]any, 0, len(cases))
+		for _, tc := range cases {
+			items = append(items, map[string]any{"id": tc.id, "url": tc.upstream, "status": "ACTIVE", "repos": []any{}})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"items": items})
+	}))
+	defer upstream.Close()
+	srv.cloud = newCloudAgents(upstream.URL, "fixture-key")
+	defer srv.cloud.Close()
+	out := getAgents(t, ts.URL)
+	if len(out.Errors) != 0 || len(out.Agents) != len(cases) {
+		t.Fatalf("cloud response: %+v", out)
+	}
+	byID := make(map[string]string)
+	for _, item := range out.Agents {
+		byID[item.ID] = item.URL
+	}
+	for _, tc := range cases {
+		if got := byID[tc.id]; got != tc.want {
+			t.Errorf("%s URL = %q, want %q", tc.id, got, tc.want)
+		}
+	}
+}

@@ -379,6 +379,8 @@ Cloud agents also appear in the [TUI](terminal-ui.md#cursor-cloud-agents) and bo
 
 Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is taken from list items when available, otherwise loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
 
+Cloud `url` values are restricted to HTTPS agent pages on `cursor.com`. Missing or invalid upstream URLs fall back to `https://cursor.com/agents/<escaped-id>`, matching the TUI and GUI actions.
+
 A request waits at most 10 seconds for cloud data. A slower refresh continues in the background, shared by all callers, with a 2-minute deadline and a 30-second timeout per upstream request. Until it finishes, the API returns available IDE agents and the last cloud snapshot, with `refresh in progress; cloud results may be incomplete` in `errors`. When the refresh finishes, later polls receive the result.
 
 If a page or repository lookup fails, available IDE and cloud agents are still returned alongside an entry in `errors`. A failed repository lookup leaves `repo` absent, or keeps its last cached value if available. Check `errors` before treating the result as complete.

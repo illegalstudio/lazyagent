@@ -274,13 +274,17 @@ func (c *Cursor) fetchPages(ctx context.Context) ([]Agent, error) {
 				}
 				c.repos[a.ID] = cloudRepo{url: repo, fetched: time.Now()}
 			}
+			webURL, urlErr := AgentURL(a.URL)
+			if urlErr != nil {
+				webURL = "https://cursor.com/agents/" + url.PathEscape(a.ID)
+			}
 			items = append(items, Agent{
 				ID:        a.ID,
 				Source:    "cloud",
 				Agent:     "cursor",
 				Name:      a.Name,
 				Status:    cloudStatus(a.Status),
-				URL:       a.URL,
+				URL:       webURL,
 				UpdatedAt: a.UpdatedAt,
 			})
 		}

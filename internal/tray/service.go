@@ -115,6 +115,7 @@ func (s *SessionService) watchLoop() {
 	events := s.manager.WatcherEvents()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	var lastCloud core.CloudStatus
 
 	// Only use a periodic reload ticker when no file watcher is available.
 	var reloadC <-chan time.Time
@@ -132,7 +133,7 @@ func (s *SessionService) watchLoop() {
 			_ = s.manager.Reload()
 			s.emitUpdate()
 		case <-ticker.C:
-			cloudChanged := s.manager.UpdateCloud()
+			cloudChanged := s.pollCloud(&lastCloud)
 			localChanged := s.manager.UpdateActivities()
 			if cloudChanged || localChanged {
 				s.emitUpdate()
@@ -142,6 +143,16 @@ func (s *SessionService) watchLoop() {
 			s.emitUpdate()
 		}
 	}
+}
+
+// Track the subscriber's last snapshot separately from manager reads, which
+// may apply a refresh before the polling loop observes it.
+func (s *SessionService) pollCloud(previous *core.CloudStatus) bool {
+	s.manager.UpdateCloud()
+	current := s.manager.CloudStatus()
+	changed := current != *previous
+	*previous = current
+	return changed
 }
 
 func (s *SessionService) emitUpdate() {

@@ -38,6 +38,8 @@
   });
 
   function handleLimitsRefresh(e: KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName) || target?.isContentEditable) return;
     if ($showLimits && (e.key === "r" || e.key === "R")) {
       e.preventDefault();
       e.stopImmediatePropagation();
