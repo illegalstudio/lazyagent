@@ -7,7 +7,9 @@ sidebar:
 
 `lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per provider, with two rows for standalone Cursor because its Auto/Composer and API pools are metered independently. The table has a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
 
-Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single credit window: **weekly** on xAI's unified billing (displayed as `xAI`), **monthly** on legacy plans; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; standalone Cursor exposes two **monthly** rows sharing one billing-cycle window, its Auto/Composer pool and its usage-based API pool, each against its own allowance.
+Claude and Codex each expose a **5-hour** and a **7-day** window, plus any model- or feature-scoped windows the provider reports (Claude's **Fable** weekly cap, Codex per-model limits and its code-review limit); Grok exposes a single credit window: **weekly** on xAI's unified billing (displayed as `xAI`), **monthly** on legacy plans; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; standalone Cursor exposes two **monthly** rows sharing one billing-cycle window, its Auto/Composer pool and its usage-based API pool, each against its own allowance.
+
+The detailed view, `--json`, the TUI's Detailed tab, and the GUI also list the **limit resets** the account holds (Claude reset grants such as the Fable launch resets, Codex banked resets) and **extra credits** beyond the included usage (Claude extra usage, Codex credits, Cursor on-demand spend, Grok prepaid balance). lazyagent only reports them: redeeming a reset stays in the vendor's own client.
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok credit period have I burned?"* before kicking off a long Grok run.
 
@@ -53,6 +55,7 @@ By default the command prints a compact terminal table:
 │ Agent         │ 5h                     │ Week (or Global)       │
 ├───────────────┼────────────────────────┼────────────────────────┤
 │ Claude        │ 21.0% used / 40.0% exp │ 23.0% used / 57.1% exp │
+│ Claude Fable  │ --                     │ 18.0% used / 57.1% exp │
 │ Codex         │ 4.0% used / 90.0% exp  │ 11.0% used / 42.9% exp │
 │ Grok          │ --                     │ 13.9% used / 51.6% exp │
 │ Kimi          │ 10.0% used / 33.3% exp │ 20.0% used / 14.3% exp │
@@ -61,7 +64,7 @@ By default the command prints a compact terminal table:
 ╰───────────────┴────────────────────────┴────────────────────────╯
 ```
 
-Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok uses its credit-period window (weekly on unified billing, monthly on legacy plans) and both Cursor rows use their monthly billing window. Neither Cursor row populates the `5h` column — they only have a monthly window.
+Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. A window scoped to a model or feature gets its own row named after the provider and the scope (`Claude Fable`, `Codex Code review`), so it never replaces the plan-wide figure in the provider's own row. Resets and credits are not in the table: use `--detailed`, `--json`, or the GUI. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok uses its credit-period window (weekly on unified billing, monthly on legacy plans) and both Cursor rows use their monthly billing window. Neither Cursor row populates the `5h` column — they only have a monthly window.
 
 With `--detailed`, each window prints four lines:
 
@@ -99,7 +102,20 @@ Claude Code
     Resets:   in 4d 11h (Tue 5 May 05:00 CEST)
     Pace:     underutilizing (0.64× of expected 35.8%)
 
-  Note: reads /api/oauth/usage, an undocumented Claude endpoint. May break or be revoked by Anthropic without notice.
+  7-day window (Fable)
+    Used:      18.0%  ████░░░░░░░░░░░░░░░░
+    Elapsed:   35.8%  ███████░░░░░░░░░░░░░
+    Resets:   in 4d 11h (Tue 5 May 05:00 CEST)
+    Pace:     underutilizing (0.50× of expected 35.8%)
+    Detail:   9% of the weekly limit used, capped at 50%
+
+  Resets
+    New model launch: one Fable reset  1 of 1 left · expires in 118d 10h (Tue 9 Mar 08:59 CET) · usable now
+
+  Credits
+    Extra usage  disabled · set by your organization
+
+  Note: reads /api/oauth/usage, an undocumented Claude endpoint, identifying as Claude Code so Anthropic reports reset grants. May break or be revoked by Anthropic without notice.
 
 Codex
 
@@ -114,6 +130,12 @@ Codex
     Elapsed:   34.1%  ███████░░░░░░░░░░░░░
     Resets:   in 4d 14h (Tue 5 May 07:56 CEST)
     Pace:     underutilizing (0.32× of expected 34.1%)
+
+  Resets
+    Full reset  1 left · expires in 20d 3h (Mon 30 Nov 21:05 CET) · usable now
+
+  Credits
+    Credits  28,315.67 credits · ~7,079-36,810 local messages · ~1,133-7,079 cloud messages
 
   Source: Codex (ChatGPT pro) /backend-api/wham/usage
   Note: reads /backend-api/wham/usage, the endpoint Codex CLI polls for its rate-limit display. May break or be revoked by OpenAI without notice.
@@ -142,6 +164,8 @@ lazyagent limits --json | jq '.reports[] | {agent, used: .summary.week_global.us
       "windows": [
         {
           "label": "5-hour",
+          "scope": "",
+          "detail": "",
           "window_minutes": 300,
           "used_percent": 21,
           "expected_percent": 39.9,
@@ -152,6 +176,32 @@ lazyagent limits --json | jq '.reports[] | {agent, used: .summary.week_global.us
           "resets_at": "2026-09-07T14:30:00Z",
           "reset_in_seconds": 9912,
           "reset_relative": "in 2h 45m"
+        }
+      ],
+      "resets": [
+        {
+          "label": "New model launch: one Fable reset",
+          "left": 1,
+          "total": 1,
+          "usable": true,
+          "status": "",
+          "expires_at": "2027-03-09T07:59:00Z",
+          "expires_in_seconds": 10231200,
+          "next_available_at": null,
+          "next_available_in_seconds": 0,
+          "text": "1 of 1 left · expires in 118d 10h (Tue 9 Mar 08:59 CET) · usable now"
+        }
+      ],
+      "credits": [
+        {
+          "label": "Extra usage",
+          "unit": "EUR",
+          "enabled": false,
+          "balance": null,
+          "used": 0,
+          "limit": null,
+          "status": "set by your organization",
+          "text": "disabled · set by your organization"
         }
       ],
       "summary": {
@@ -186,14 +236,18 @@ Each report:
 | `provider` | Display name used by the detailed view (`Claude Code`, `Cursor Models`, …) |
 | `short_name` | Label used by the summary table (`Claude`, `Kimi`, …) |
 | `source`, `note` | The provenance line and the disclaimer from the detailed view, or `""` |
-| `windows` | Every window the provider exposes, see below |
-| `summary.five_hour`, `summary.week_global` | The two summary-table cells, each `{used_percent, expected_percent, severity, text}` or `null` when the provider has no such window (what the table prints as `--`) |
+| `windows` | Every window the provider exposes, scoped ones included, see below |
+| `resets` | Limit resets the account holds, see below; `[]` when none are reported |
+| `credits` | Balances and spend pools beyond the included usage, see below; `[]` when none are reported |
+| `summary.five_hour`, `summary.week_global` | The two summary-table cells for the plan-wide windows, each `{used_percent, expected_percent, severity, text}` or `null` when the provider has no such window (what the table prints as `--`). Scoped windows never fill these cells; read them from `windows` by `scope` |
 
 Each window:
 
 | Field | Meaning |
 |-------|---------|
 | `label` | Provider wording: `5-hour`, `7-day`, `weekly`, `monthly`, … |
+| `scope` | The model or feature the window is limited to (`Fable`, `Code review`, a Codex limit name), or `""` for plan-wide windows |
+| `detail` | Optional provider context, such as a scoped window's share of the plan-wide limit, or `""` |
 | `window_minutes` | Window length, `0` when the provider does not state it |
 | `used_percent` | Quota consumed, 0-100 |
 | `expected_percent` | Where a perfectly linear pace would be for the elapsed window time |
@@ -203,6 +257,29 @@ Each window:
 | `resets_at` | RFC 3339 reset time, or `null` when unknown |
 | `reset_in_seconds` | Seconds until reset, `0` when unknown or already passed |
 | `reset_relative` | The `in 3h 17m` string from the detailed view, or `""` |
+
+Each reset:
+
+| Field | Meaning |
+|-------|---------|
+| `label` | Provider wording: the Claude grant label (`New model launch: one Fable reset`), `5-hour limit reset`, or the Codex title (`Full reset`) |
+| `left`, `total` | Resets still available and granted in total; `total` is `0` when the provider does not say |
+| `usable` | The provider says the reset can be redeemed right now |
+| `status` | Why it cannot be redeemed now (`only at a usage limit`, `paused`, …), or `""` |
+| `expires_at`, `expires_in_seconds` | When unused resets lapse; `null` / `0` when unknown |
+| `next_available_at`, `next_available_in_seconds` | When a spent recurring reset (Claude's weekly `5-hour limit reset`) comes back; `null` / `0` when unknown or not spent |
+| `text` | The one-line rendering the detailed view prints |
+
+Each credit:
+
+| Field | Meaning |
+|-------|---------|
+| `label` | `Extra usage` (Claude), `Credits` (Codex), `On-demand` (Cursor), `Prepaid balance` (Grok) |
+| `unit` | ISO currency code (`USD`, `EUR`) or `credits` |
+| `enabled` | Whether the pool can be drawn on |
+| `balance`, `used`, `limit` | Amounts in `unit`, `null` when the provider does not report them |
+| `status` | Qualifier: a disabled reason, `spend limit reached`, the Codex message estimates, … |
+| `text` | The one-line rendering the detailed view prints |
 
 Summary-cell `severity` blends pace and absolute usage the same way the table colors do: `danger` when used ≥ 90% or over pace, `warn` when used ≥ 75%, `ok` when comfortably under pace, `default` when on track.
 
@@ -218,13 +295,19 @@ Unlike the human output, `--json` lists `not_installed` and `unavailable` agents
 
 The polling caveat below applies doubly to anything built on `--json`: refresh on demand or on a generous timer, never in a tight loop.
 
+### Over HTTP
+
+The [HTTP API](../interfaces/http-api.md#get-apilimits) serves the same document at `GET /api/limits`, with `?agent=` in place of `--agent`. The server queries the providers at most once every 120 seconds, whatever the selector and however often clients call it: every request in between gets the data of the last round, with countdowns recomputed.
+
 ## How it gets the data
 
 The providers work differently — there's a single command, but several paths under the hood.
 
 ### Claude Code
 
-A single HTTPS GET to `https://api.anthropic.com/api/oauth/usage` with the user's OAuth bearer token and `anthropic-beta: oauth-2025-04-20`. This is the **same** endpoint Claude Code's interactive `/status` slash command queries.
+A single HTTPS GET to `https://api.anthropic.com/api/oauth/usage?at_wall=1` with the user's OAuth bearer token and `anthropic-beta: oauth-2025-04-20`. This is the **same** endpoint Claude Code's `/status` and `/usage` read; `at_wall=1` is the variant Claude Code reads at a usage limit, which adds the reset programs to the usual meters and extra usage. It is a read: redeeming a reset is a separate `POST /api/organizations/{org}/reset_rate_limits` that lazyagent never sends.
+
+The response's `limits[]` rows drive the windows: `session` becomes the `5-hour` window, `weekly_all` the `7-day` window, and `weekly_scoped` a `7-day` window scoped to the model it names (`Fable`). `weekly_scoped_shares` adds how much of the plan-wide weekly limit the scoped meter has used and its cap (the `Detail:` line). When the server sends no rows, lazyagent falls back to the legacy `five_hour` / `seven_day` fields. `extra_usage` becomes the `Extra usage` credit (amounts are in minor units of its currency), `cedar_ember.grants[]` with resets left become resets (for example the Fable resets granted at a model launch), and `juniper_tide` becomes the weekly `5-hour limit reset` when the account takes part in it.
 
 The OAuth token is read in this priority order:
 
@@ -234,7 +317,7 @@ The OAuth token is read in this priority order:
 
 If none of the three is present, the command tells you to run `claude` to log in.
 
-The User-Agent identifies lazyagent honestly (`lazyagent/<version> (+https://github.com/illegalstudio/lazyagent)`); it does **not** impersonate Claude Code. If Anthropic ever audits this traffic, the request can be attributed to lazyagent and the project page tells them where to file a complaint.
+**User-Agent.** For Claude only, lazyagent identifies as Claude Code: `claude-cli/<version> (external, cli)`. Anthropic reports reset grants only to the `claude_code_cli` surface, which it derives from a User-Agent starting with `claude-cli/`; with any other User-Agent the reset programs come back as `ineligible_reason: "surface"`. The server also rejects old versions (`cli_version`), so lazyagent sends the installed version recorded in `~/.claude.json` (`lastReleaseNotesSeen`), and never less than 2.1.322. Every other provider still receives the honest `lazyagent/<version> (+https://github.com/illegalstudio/lazyagent)` User-Agent.
 
 ### Codex
 
@@ -244,6 +327,8 @@ The OAuth token (and account id) are read in this priority order:
 
 1. **`CODEX_OAUTH_TOKEN`** environment variable (with optional `CODEX_ACCOUNT_ID`) — useful for CI or overrides
 2. **`~/.codex/auth.json`** — where the Codex CLI persists its ChatGPT login under `tokens.access_token` / `tokens.account_id`
+
+The response also carries `credits` (balance as a decimal string plus `approx_local_messages` / `approx_cloud_messages`, the `[low, high]` message estimates the Codex CLI shows), `spend_control`, `rate_limit_reset_credits.available_count`, `additional_rate_limits[]` (separately metered models or features, each with its own windows, shown scoped by `limit_name`), and `code_review_rate_limit` (shown scoped as `Code review`). When at least one reset is available, lazyagent also reads `GET /backend-api/wham/rate-limit-reset-credits`, the list the Codex CLI shows, for each reset's title and expiry; if that read fails the count alone is reported. Its sibling `.../consume` redeems a reset and is never called.
 
 If neither is present, the command tells you to run `codex` to log in. If the token has expired the endpoint returns 401 and lazyagent surfaces a message telling you to open the Codex CLI again to refresh it.
 
@@ -269,6 +354,8 @@ When `config.isUnifiedBillingUser` is `true`, the provider name is **xAI** in th
 The fallback reports the subscription of the account signed in to Cursor. Standalone Cursor pools cannot replace Grok usage. If Cursor is missing, signed out, unavailable, or fails too, the original Grok error remains. A missing Grok login does not trigger the fallback; Cursor can still be queried independently.
 
 **Legacy** accounts instead carry one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
+
+On unified billing the `Source:` line also breaks the period down by product (`productUsage`, e.g. `(GrokBuild 3.0%, GrokBot 2.0%)`), and a positive `prepaidBalance` (in cents) becomes the `Prepaid balance` credit.
 
 In either shape, when the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `(on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* budget.
 
@@ -301,6 +388,8 @@ Grok does not need to be installed or logged in for this path: `--agent cursor` 
 
 **Two pools, two rows.** Cursor meters spend into an **Auto / Composer** pool and a **usage-based API** pool, each against its own allowance, and reports each as its own percentage. lazyagent shows both: `Cursor Models` uses `autoPercentUsed`, `Cursor API` uses `apiPercentUsed`. They share one monthly window bounded by `billingCycleStart` and `billingCycleEnd`, and both appear or disappear together since one call produces both.
 
+**On-demand spend.** On standalone plans, `onDemand` from the same response (`enabled`, `used`, `limit`, in cents; `limit` is `null` when uncapped) becomes the `On-demand` credit on the `Cursor API` row, since on-demand usage draws on the same usage-based pricing.
+
 **Why `Cursor Models` reads lower than Cursor's UI.** When Auto is the selected model, Cursor's own dashboard shows the *combined* figure (`totalPercentUsed`), not the Auto pool's own utilization. lazyagent deliberately shows `autoPercentUsed`: with two separate rows, using the combined total would double-count the API spend the second row already reports.
 
 **No dollar amounts.** The endpoint returns percentages, not the per-pool split in currency. It does carry `plan.used` / `plan.limit`, but those are not the denominators of any of the three percentages, so rendering them would mislead. The percentage comes straight from Cursor — there is no plan table to keep in sync and nothing to override.
@@ -323,11 +412,12 @@ The default `--agent all` mode is forgiving: a missing agent is not an error, it
 
 ## Disclaimers (Claude Code, Grok, Kimi, Cursor)
 
-`/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` UI and is subject to:
+`/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` and `/usage` UI and is subject to:
 
-- **Aggressive rate limiting** — the endpoint will reject sustained polling with HTTP 429. lazyagent is intentionally on-demand only and does not poll.
+- **Aggressive rate limiting** — the endpoint will reject sustained polling with HTTP 429. lazyagent is intentionally on-demand only and does not poll; `GET /api/limits` reuses one provider round for 120 seconds, so API clients cannot drive it faster than once every two minutes.
 - **No stability guarantee** — the endpoint, response shape, or beta header may change without notice. lazyagent fails gracefully when this happens (clear error, exit code 1).
 - **Subscription scope** — the endpoint reflects the limits of the Claude.ai Pro/Max plan associated with the OAuth token. API-key users (Console, Bedrock, Vertex) won't see meaningful data here.
+- **Client identification**: the request identifies as Claude Code so the reset grants are reported. If Anthropic changes how it scopes them, the resets disappear from the output while the meters keep working.
 
 If you're distributing lazyagent or building automation on top of it, prefer running `lazyagent limits` only when a human has asked for it. Don't put it in a `watch` loop.
 

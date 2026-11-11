@@ -6,6 +6,42 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * CreditView is a render-ready credit balance or spend pool.
+ */
+export class CreditView {
+    "Label": string;
+    "Enabled": boolean;
+
+    /**
+     * "28,315.67 credits", "disabled · set by your organization"
+     */
+    "Text": string;
+
+    /** Creates a new CreditView instance. */
+    constructor($$source: Partial<CreditView> = {}) {
+        if (!("Label" in $$source)) {
+            this["Label"] = "";
+        }
+        if (!("Enabled" in $$source)) {
+            this["Enabled"] = false;
+        }
+        if (!("Text" in $$source)) {
+            this["Text"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CreditView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CreditView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CreditView($$parsedSource as Partial<CreditView>);
+    }
+}
+
+/**
  * ReportView is the render-ready projection of a Report.
  */
 export class ReportView {
@@ -13,6 +49,8 @@ export class ReportView {
     "Source": string;
     "Note": string;
     "Windows": WindowView[];
+    "Resets": ResetView[];
+    "Credits": CreditView[];
 
     /** Creates a new ReportView instance. */
     constructor($$source: Partial<ReportView> = {}) {
@@ -28,6 +66,12 @@ export class ReportView {
         if (!("Windows" in $$source)) {
             this["Windows"] = [];
         }
+        if (!("Resets" in $$source)) {
+            this["Resets"] = [];
+        }
+        if (!("Credits" in $$source)) {
+            this["Credits"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -37,11 +81,107 @@ export class ReportView {
      */
     static createFrom($$source: any = {}): ReportView {
         const $$createField3_0 = $$createType1;
+        const $$createField4_0 = $$createType3;
+        const $$createField5_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("Windows" in $$parsedSource) {
             $$parsedSource["Windows"] = $$createField3_0($$parsedSource["Windows"]);
         }
+        if ("Resets" in $$parsedSource) {
+            $$parsedSource["Resets"] = $$createField4_0($$parsedSource["Resets"]);
+        }
+        if ("Credits" in $$parsedSource) {
+            $$parsedSource["Credits"] = $$createField5_0($$parsedSource["Credits"]);
+        }
         return new ReportView($$parsedSource as Partial<ReportView>);
+    }
+}
+
+/**
+ * ResetView is a render-ready banked limit reset.
+ */
+export class ResetView {
+    "Label": string;
+    "Left": number;
+
+    /**
+     * 0 when the provider does not say
+     */
+    "Total": number;
+
+    /**
+     * redeemable right now, per the provider
+     */
+    "Usable": boolean;
+    "Status": string;
+
+    /**
+     * 0 when unknown
+     */
+    "ExpiresUnix": number;
+
+    /**
+     * "Tue 9 Mar 08:59 CET" or ""
+     */
+    "ExpiresAbsolute": string;
+
+    /**
+     * when a spent recurring reset comes back; 0 when unknown
+     */
+    "NextUnix": number;
+
+    /**
+     * "Tue 9 Mar 08:59 CET" or ""
+     */
+    "NextAbsolute": string;
+
+    /**
+     * full one-line rendering, as the CLI prints it
+     */
+    "Text": string;
+
+    /** Creates a new ResetView instance. */
+    constructor($$source: Partial<ResetView> = {}) {
+        if (!("Label" in $$source)) {
+            this["Label"] = "";
+        }
+        if (!("Left" in $$source)) {
+            this["Left"] = 0;
+        }
+        if (!("Total" in $$source)) {
+            this["Total"] = 0;
+        }
+        if (!("Usable" in $$source)) {
+            this["Usable"] = false;
+        }
+        if (!("Status" in $$source)) {
+            this["Status"] = "";
+        }
+        if (!("ExpiresUnix" in $$source)) {
+            this["ExpiresUnix"] = 0;
+        }
+        if (!("ExpiresAbsolute" in $$source)) {
+            this["ExpiresAbsolute"] = "";
+        }
+        if (!("NextUnix" in $$source)) {
+            this["NextUnix"] = 0;
+        }
+        if (!("NextAbsolute" in $$source)) {
+            this["NextAbsolute"] = "";
+        }
+        if (!("Text" in $$source)) {
+            this["Text"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ResetView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ResetView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ResetView($$parsedSource as Partial<ResetView>);
     }
 }
 
@@ -148,8 +288,8 @@ export class SummaryRow {
      * Creates a new SummaryRow instance from a string or object.
      */
     static createFrom($$source: any = {}): SummaryRow {
-        const $$createField1_0 = $$createType2;
-        const $$createField2_0 = $$createType2;
+        const $$createField1_0 = $$createType6;
+        const $$createField2_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("FiveHour" in $$parsedSource) {
             $$parsedSource["FiveHour"] = $$createField1_0($$parsedSource["FiveHour"]);
@@ -188,8 +328,8 @@ export class View {
      * Creates a new View instance from a string or object.
      */
     static createFrom($$source: any = {}): View {
-        const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType6;
+        const $$createField0_0 = $$createType8;
+        const $$createField1_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("Reports" in $$parsedSource) {
             $$parsedSource["Reports"] = $$createField0_0($$parsedSource["Reports"]);
@@ -206,6 +346,21 @@ export class View {
  */
 export class WindowView {
     "Label": string;
+
+    /**
+     * model or feature the window is limited to, "" when plan-wide
+     */
+    "Scope": string;
+
+    /**
+     * "7-day window" or "7-day window (Fable)"
+     */
+    "Title": string;
+
+    /**
+     * optional provider context, "" when none
+     */
+    "Detail": string;
     "UsedPercent": number;
 
     /**
@@ -240,6 +395,15 @@ export class WindowView {
     constructor($$source: Partial<WindowView> = {}) {
         if (!("Label" in $$source)) {
             this["Label"] = "";
+        }
+        if (!("Scope" in $$source)) {
+            this["Scope"] = "";
+        }
+        if (!("Title" in $$source)) {
+            this["Title"] = "";
+        }
+        if (!("Detail" in $$source)) {
+            this["Detail"] = "";
         }
         if (!("UsedPercent" in $$source)) {
             this["UsedPercent"] = 0;
@@ -284,8 +448,12 @@ export class WindowView {
 // Private type creation functions
 const $$createType0 = WindowView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = SummaryCell.createFrom;
-const $$createType3 = ReportView.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = SummaryRow.createFrom;
-const $$createType6 = $Create.Array($$createType5);
+const $$createType2 = ResetView.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = CreditView.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = SummaryCell.createFrom;
+const $$createType7 = ReportView.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = SummaryRow.createFrom;
+const $$createType10 = $Create.Array($$createType9);

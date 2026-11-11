@@ -174,8 +174,10 @@ sidebar:
 - ✅ Grok via `/v1/billing` on `cli-chat-proxy.grok.com`, token resolved from `GROK_OAUTH_TOKEN` / `~/.grok/auth.json`
 - ✅ Kimi Code via `/coding/v1/usages` on the logged-in deployment (`api.kimi.ai` / `api.kimi.com`), token resolved from `KIMI_CODE_OAUTH_TOKEN` / the per-environment slot under `~/.kimi-code/credentials/`, refreshed through Kimi's own `refresh_token` grant when expired
 - ✅ Cursor via `/api/usage-summary` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the Auto/Composer and usage-based API pools as two rows against Cursor's own per-pool percentages
-- ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
+- ✅ Honest lazyagent User-Agent for every provider except Claude, which identifies as Claude Code so Anthropic reports reset grants; graceful failure on 401/429, disclaimer in `--help` and output
 - ✅ `lazyagent limits --json` — stable machine-readable report (windows, pace, severity, reset times, per-agent errors) for widgets and scripts
+- ✅ Model-scoped windows (Claude Fable, Codex per-model and code review), banked limit resets, and extra credits (Claude extra usage, Codex credits, Cursor on-demand, Grok prepaid balance) in the detailed view, JSON, TUI, and GUI
+- ✅ `GET /api/limits` serves the `--json` document over the HTTP API, querying the providers at most once every 120 seconds
 
 ## v0.10 — Outbound webhooks
 

@@ -56,15 +56,15 @@ func (m Model) renderLimitsModal() string {
 		bodyLines = m.renderLimitsDetailedLines()
 	}
 
-	scroll := 0
-	if m.limitsTab == limitsTabDetailed {
-		scroll = m.limitsScroll
-		if maxScroll := len(bodyLines) - maxBodyH; scroll > maxScroll {
-			scroll = maxScroll
-		}
-		if scroll < 0 {
-			scroll = 0
-		}
+	// Both tabs scroll: scoped rows ("Claude Fable", "Codex Code review")
+	// can push the Summary past a short terminal too. Switching tabs resets
+	// limitsScroll, so each tab starts at its top.
+	scroll := m.limitsScroll
+	if maxScroll := len(bodyLines) - maxBodyH; scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
 	}
 	visible, moreBelow := windowLines(bodyLines, scroll, maxBodyH)
 	body := strings.Join(visible, "\n")
@@ -115,16 +115,44 @@ func (m Model) renderLimitsHint(moreBelow bool) string {
 	return lipgloss.NewStyle().Foreground(m.theme.Muted).Render(h)
 }
 
+// Summary agent column bounds. Scoped rows ("Codex Code review", "Claude
+// Fable") can outgrow the 14-cell minimum; the cap keeps both 24-cell value
+// columns inside the modal's 76-cell content width (2 + 22 + 2 + 24 + 2 + 24).
+const (
+	limitsAgentColMin = 14
+	limitsAgentColMax = 22
+)
+
 func (m Model) renderLimitsSummaryLines() []string {
+	nameW := limitsAgentColMin
+	for _, row := range m.limitsView.Summary {
+		if w := lipgloss.Width(row.Provider); w > nameW {
+			nameW = min(w, limitsAgentColMax)
+		}
+	}
 	lines := []string{
 		lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).Render(
-			fmt.Sprintf("  %-14s  %-24s  %-24s", "Agent", "5h", "Week / Global")),
+			fmt.Sprintf("  %-*s  %-24s  %-24s", nameW, "Agent", "5h", "Week / Global")),
 	}
 	for _, row := range m.limitsView.Summary {
-		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(fmt.Sprintf("%-14s", row.Provider))
+		name := ellipsize(row.Provider, nameW)
+		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(name + strings.Repeat(" ", nameW-lipgloss.Width(name)))
 		lines = append(lines, "  "+prov+"  "+m.summaryCellText(row.FiveHour)+"  "+m.summaryCellText(row.WeekGlobal))
 	}
 	return lines
+}
+
+// ellipsize shortens s to at most width display cells, ending in "…" when it
+// had to cut.
+func ellipsize(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > width {
+		r = r[:len(r)-1]
+	}
+	return string(r) + "…"
 }
 
 func (m Model) summaryCellText(c limits.SummaryCell) string {
@@ -141,7 +169,7 @@ func (m Model) renderLimitsDetailedLines() []string {
 		}
 		lines = append(lines, lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(r.Provider))
 		for _, w := range r.Windows {
-			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(w.Label+" window"))
+			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(w.Title))
 			lines = append(lines, fmt.Sprintf("    Used:     %5.1f%%  %s",
 				w.UsedPercent, m.limitsBar(w.UsedPercent, barW, m.limitsSeverityColor(w.UsedSeverity))))
 			lines = append(lines, fmt.Sprintf("    Expected: %5.1f%%  %s",
@@ -169,12 +197,45 @@ func (m Model) renderLimitsDetailedLines() []string {
 				}
 			}
 			lines = append(lines, "    Pace:     "+lipgloss.NewStyle().Foreground(paceColor).Render(pace))
+			if w.Detail != "" {
+				lines = append(lines, "    Detail:   "+lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(w.Detail))
+			}
 		}
+		lines = append(lines, m.renderLimitsExtrasLines(r)...)
 		if r.Source != "" {
 			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Muted).Render(r.Source))
 		}
 		if r.Note != "" {
 			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Muted).Render(r.Note))
+		}
+	}
+	return lines
+}
+
+// renderLimitsExtrasLines renders the Resets and Credits sections of one
+// report: label in the text color, the one-line value muted. A reset usable
+// right now is highlighted with the accent color.
+func (m Model) renderLimitsExtrasLines(r limits.ReportView) []string {
+	var lines []string
+	heading := func(title string) string {
+		return "  " + lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(title)
+	}
+	if len(r.Resets) > 0 {
+		lines = append(lines, heading("Resets"))
+		for _, rs := range r.Resets {
+			color := m.theme.Subtext
+			if rs.Usable {
+				color = m.theme.Accent
+			}
+			lines = append(lines, "    "+lipgloss.NewStyle().Foreground(m.theme.Text).Render(rs.Label)+"  "+
+				lipgloss.NewStyle().Foreground(color).Render(rs.Text))
+		}
+	}
+	if len(r.Credits) > 0 {
+		lines = append(lines, heading("Credits"))
+		for _, c := range r.Credits {
+			lines = append(lines, "    "+lipgloss.NewStyle().Foreground(m.theme.Text).Render(c.Label)+"  "+
+				lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(c.Text))
 		}
 	}
 	return lines

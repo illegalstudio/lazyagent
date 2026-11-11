@@ -1,0 +1,23 @@
+{
+  "five_hour": null,
+  "seven_day": {"utilization": 14.0, "resets_at": "2026-11-17T02:59:59.985332+00:00"},
+  "limits": [
+    {"kind": "weekly_all", "group": "weekly", "percent": 14, "severity": "normal", "resets_at": "2026-11-17T02:59:59.985332+00:00", "scope": null, "is_active": false},
+    {"kind": "weekly_scoped", "group": "weekly", "percent": 18, "severity": "normal", "resets_at": "2026-11-17T02:59:59.985511+00:00", "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}, "is_active": true}
+  ],
+  "weekly_scoped_shares": [{"limit_index": 1, "used_percent_of_weekly": 9, "allowance_percent_of_weekly": 50}],
+  "extra_usage": {"is_enabled": false, "monthly_limit": 0, "used_credits": 0.0, "utilization": null, "currency": "EUR", "decimal_places": 2, "disabled_reason": "org_level_disabled_until", "user_disabled": false, "spend_limit_reached": false},
+  "cedar_ember": {
+    "eligible": true,
+    "ineligible_reason": null,
+    "at_limit": false,
+    "exhausted": [],
+    "grants": [
+      {"id": "launch-fable", "label": "New model launch: one Fable reset", "resets_total": 1, "resets_left": 1, "starts_at": "2026-11-09T18:00:00+00:00", "ends_at": "2027-03-09T07:59:00+00:00", "clears": ["seven_day_overage_included"], "paused": false, "usable_now": true, "use_requires_limit": false, "blocking": [], "type": "full", "unavailable_reason": null, "gives_back_weekly": true},
+      {"id": "launch-fable-used", "label": "Already used reset", "resets_total": 1, "resets_left": 0, "ends_at": "2027-03-09T07:59:00+00:00", "paused": false, "usable_now": false, "use_requires_limit": false}
+    ],
+    "next_grant_id": "launch-fable",
+    "weekly_resets_at": "2026-11-17T03:00:00+00:00"
+  },
+  "juniper_tide": {"eligible": false, "ineligible_reason": "not_at_wall", "in_experiment": false, "arm": null, "available": false, "next_available_at": null, "weekly_resets_at": null, "resets_per_week": 1}
+}

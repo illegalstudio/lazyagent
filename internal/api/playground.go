@@ -116,6 +116,12 @@ const playgroundHTML = `<!DOCTYPE html>
   <div class="desc">Current lazyagent configuration</div>
 </div>
 
+<div class="endpoint locked" data-locked="1" onclick="fetchEndpoint('/api/limits')">
+  <span class="method get">GET</span>
+  <span class="path">/api/limits</span>
+  <div class="desc">Rate limits, banked resets, and extra credits per agent (same JSON as lazyagent limits --json; ?agent=claude to narrow)</div>
+</div>
+
 <div class="endpoint locked" data-locked="1" onclick="toggleSSE()">
   <span class="method get sse-badge">SSE</span>
   <span class="path">/api/events</span>

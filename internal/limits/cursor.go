@@ -208,7 +208,16 @@ type cursorUsageSummary struct {
 // Individual accounts populate individualUsage and leave teamUsage as {};
 // team-billed accounts do the reverse.
 type cursorUsageBlock struct {
-	Plan *cursorPlanUsage `json:"plan"`
+	Plan     *cursorPlanUsage     `json:"plan"`
+	OnDemand *cursorOnDemandUsage `json:"onDemand"`
+}
+
+// cursorOnDemandUsage is usage-based spend beyond the plan's included
+// allowance. Amounts are in US cents; limit is null when uncapped.
+type cursorOnDemandUsage struct {
+	Enabled bool     `json:"enabled"`
+	Used    *float64 `json:"used"`
+	Limit   *float64 `json:"limit"`
 }
 
 // AutoPercentUsed and APIPercentUsed are pointers so a renamed or missing
@@ -280,6 +289,11 @@ func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
 		}}
 	}
 
+	var apiCredits []Credit
+	if c, ok := cursorOnDemandCredit(cursorOnDemandBlock(s)); ok {
+		apiCredits = append(apiCredits, c)
+	}
+
 	return []Report{
 		{
 			Provider: "Cursor Models",
@@ -293,7 +307,35 @@ func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
 			Source: fmt.Sprintf("Source: %.1f%% of the plan's included API allowance (%s); %s",
 				apiPercentUsed, planName, cycle),
 			Windows: window(apiPercentUsed),
+			Credits: apiCredits,
 			Note:    "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the usage-based (API) pool only. Undocumented; may break or be revoked by Cursor without notice.",
 		},
 	}, nil
+}
+
+// cursorOnDemandBlock returns the on-demand block of the same scope
+// cursorPlanBlock picked: individual when its plan is enabled, else team.
+func cursorOnDemandBlock(s *cursorUsageSummary) *cursorOnDemandUsage {
+	if p := s.IndividualUsage.Plan; p != nil && p.Enabled {
+		return s.IndividualUsage.OnDemand
+	}
+	return s.TeamUsage.OnDemand
+}
+
+// cursorOnDemandCredit maps on-demand spend, which draws on the same
+// usage-based pricing as the API pool, to a credit line on the Cursor API row.
+func cursorOnDemandCredit(o *cursorOnDemandUsage) (Credit, bool) {
+	if o == nil {
+		return Credit{}, false
+	}
+	c := Credit{Label: "On-demand", Unit: "USD", Enabled: o.Enabled}
+	if o.Used != nil {
+		c.Used = floatPtr(*o.Used / 100)
+	}
+	if o.Limit != nil && *o.Limit > 0 {
+		c.Limit = floatPtr(*o.Limit / 100)
+	} else if o.Enabled {
+		c.Status = "no spend limit"
+	}
+	return c, true
 }
