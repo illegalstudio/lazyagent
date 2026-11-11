@@ -493,11 +493,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Plus):
 			m.manager.SetWindowMinutes(m.manager.WindowMinutes() + 10)
-			m.refreshUserView()
+			m.afterSessionsUpdate()
 
 		case key.Matches(msg, keys.Minus):
 			m.manager.SetWindowMinutes(m.manager.WindowMinutes() - 10)
-			m.refreshUserView()
+			m.afterSessionsUpdate()
 
 		case key.Matches(msg, keys.Rename):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {

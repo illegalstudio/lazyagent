@@ -25,10 +25,15 @@ func (p testProvider) WatchDirs() []string            { return nil }
 
 func testModel(t *testing.T, sessions ...*model.Session) Model {
 	t.Helper()
+	return testModelWithProvider(t, testProvider{sessions: sessions})
+}
+
+func testModelWithProvider(t *testing.T, provider core.SessionProvider) Model {
+	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	theme := DarkTheme()
-	manager := core.NewSessionManager(60, testProvider{sessions: sessions})
+	manager := core.NewSessionManager(60, provider)
 	if err := manager.Reload(); err != nil {
 		t.Fatalf("Reload failed: %v", err)
 	}
@@ -181,6 +186,36 @@ func TestUserFiltersKeepChosenRowAcrossRenderTicks(t *testing.T) {
 			m = updated.(Model)
 			if m.cursor != 0 || m.selectedID != "first" || m.visible[m.cursor].SessionID != "first" {
 				t.Fatalf("render tick restored stale selection: cursor %d, selected %q", m.cursor, m.selectedID)
+			}
+		})
+	}
+}
+
+func TestWindowAdjustmentPreservesSelectionWhenSessionsArrive(t *testing.T) {
+	for _, key := range []string{"+", "-"} {
+		t.Run(key, func(t *testing.T) {
+			now := time.Now()
+			provider := &testProvider{sessions: []*model.Session{
+				{SessionID: "first", LastActivity: now},
+				{SessionID: "selected", LastActivity: now.Add(-time.Second)},
+			}}
+			m := testModelWithProvider(t, provider)
+			defer m.manager.Close()
+			m.cursor, m.selectedID = 1, "selected"
+			// Discovery has a new row before the UI samples the next snapshot.
+			provider.sessions = append(provider.sessions, &model.Session{SessionID: "new", LastActivity: now.Add(time.Second)})
+			if err := m.manager.Reload(); err != nil {
+				t.Fatal(err)
+			}
+			updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+			m = updated.(Model)
+			if m.selectedID != "selected" || m.cursor != 2 || m.visible[m.cursor].SessionID != "selected" {
+				t.Fatalf("window adjustment changed the selected session: cursor %d, id %q", m.cursor, m.selectedID)
+			}
+			updated, _ = m.Update(renderTickMsg(now))
+			m = updated.(Model)
+			if m.selectedID != "selected" || m.visible[m.cursor].SessionID != "selected" {
+				t.Fatal("render tick changed selection after window adjustment")
 			}
 		})
 	}
