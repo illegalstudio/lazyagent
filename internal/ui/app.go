@@ -463,7 +463,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.listOffset = 0
 			}
-			m.refreshVisible()
+			m.refreshUserView()
 			return m, nil
 		}
 
@@ -493,17 +493,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, keys.Plus):
 			m.manager.SetWindowMinutes(m.manager.WindowMinutes() + 10)
-			m.refreshVisible()
-			if n := len(m.visible); m.cursor >= n && n > 0 {
-				m.cursor = n - 1
-			}
+			m.refreshUserView()
 
 		case key.Matches(msg, keys.Minus):
 			m.manager.SetWindowMinutes(m.manager.WindowMinutes() - 10)
-			m.refreshVisible()
-			if n := len(m.visible); m.cursor >= n && n > 0 {
-				m.cursor = n - 1
-			}
+			m.refreshUserView()
 
 		case key.Matches(msg, keys.Rename):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
@@ -547,7 +541,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.manager.SetActivityFilter(core.NextActivityFilter(m.manager.ActivityFilter()))
 			m.cursor = 0
 			m.listOffset = 0
-			m.refreshVisible()
+			m.refreshUserView()
 
 		case key.Matches(msg, keys.Open):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
@@ -728,6 +722,22 @@ func (m *Model) handleMouse(msg tea.MouseMsg) {
 func (m *Model) refreshVisible() {
 	m.manager.SetSearchQuery(m.searchQuery)
 	m.visible = m.manager.VisibleSessions()
+}
+
+// User filters choose a new row. Remember it before asynchronous refreshes
+// attempt to preserve the selection by ID.
+func (m *Model) refreshUserView() {
+	m.refreshVisible()
+	m.selectedID = ""
+	m.detailOffset = 0
+	if len(m.visible) == 0 {
+		m.cursor = 0
+		m.listOffset = 0
+		return
+	}
+	m.cursor = core.Clamp(0, len(m.visible)-1, m.cursor)
+	m.selectedID = m.visible[m.cursor].SessionID
+	m.ensureListVisible()
 }
 
 // afterSessionsUpdate recomputes the visible list and preserves cursor

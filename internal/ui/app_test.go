@@ -150,3 +150,38 @@ func TestCloudRowDetailsAndActions(t *testing.T) {
 		t.Fatal("browser command accepted unsafe URL")
 	}
 }
+
+func TestUserFiltersKeepChosenRowAcrossRenderTicks(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		search bool
+		query  string
+		key    tea.KeyMsg
+	}{
+		{"filter", false, "", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")}},
+		{"search typing", true, "", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}},
+		{"search backspace", true, "s", tea.KeyMsg{Type: tea.KeyBackspace}},
+		{"search escape", true, "s", tea.KeyMsg{Type: tea.KeyEsc}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now()
+			m := testModel(t,
+				&model.Session{SessionID: "first", Name: "shared first", LastActivity: now},
+				&model.Session{SessionID: "second", Name: "shared second", LastActivity: now.Add(-time.Second)},
+			)
+			defer m.manager.Close()
+			m.cursor, m.selectedID = 1, "second"
+			m.searchMode, m.searchQuery = tc.search, tc.query
+			updated, _ := m.Update(tc.key)
+			m = updated.(Model)
+			if len(m.visible) != 2 || m.cursor != 0 || m.selectedID != "first" {
+				t.Fatalf("filter did not remember its chosen row: cursor %d, selected %q", m.cursor, m.selectedID)
+			}
+			updated, _ = m.Update(renderTickMsg(now))
+			m = updated.(Model)
+			if m.cursor != 0 || m.selectedID != "first" || m.visible[m.cursor].SessionID != "first" {
+				t.Fatalf("render tick restored stale selection: cursor %d, selected %q", m.cursor, m.selectedID)
+			}
+		})
+	}
+}
