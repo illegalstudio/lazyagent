@@ -238,6 +238,13 @@ type Snapshot struct {
 	errs    []agentError
 }
 
+// CheckAgent reports whether agent is a selector Collect accepts ("all", or
+// one of claude, codex, grok, kimi, cursor), with the CLI's error otherwise.
+func CheckAgent(agent string) error {
+	_, err := resolveAgents(agent)
+	return err
+}
+
 // Collect fetches agent ("all", or one of claude, codex, grok, kimi, cursor)
 // exactly as `lazyagent limits --json` does. The only error is an unsupported
 // agent name; per-agent failures land in the document's "errors" array.

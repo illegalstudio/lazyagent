@@ -40,8 +40,10 @@ type Server struct {
 
 	// Rate-limit snapshots per agent selector, so polling clients do not
 	// turn into a request storm against the providers' usage endpoints.
+	// limitsMu only guards the map; each slot has its own lock, held across
+	// that selector's fetch, so a slow "all" never delays a cached "claude".
 	limitsMu    sync.Mutex
-	limitsCache map[string]limitsCacheEntry
+	limitsCache map[string]*limitsSlot
 	limitsFetch func(ctx context.Context, agent string) (limitsSnapshot, error)
 }
 
@@ -62,6 +64,14 @@ type limitsSnapshot interface {
 type limitsCacheEntry struct {
 	snapshot  limitsSnapshot
 	fetchedAt time.Time
+}
+
+// limitsSlot is one selector's cache entry. Its lock serializes fetches for
+// that selector, so concurrent requests share one provider round.
+type limitsSlot struct {
+	mu    sync.Mutex
+	entry limitsCacheEntry
+	ok    bool
 }
 
 // New creates a new API server.
@@ -96,7 +106,7 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 		authSalt: authSalt,
 		sseSubs:  make(map[chan struct{}]struct{}),
 
-		limitsCache: make(map[string]limitsCacheEntry),
+		limitsCache: make(map[string]*limitsSlot),
 		limitsFetch: func(ctx context.Context, agent string) (limitsSnapshot, error) {
 			return limits.Collect(ctx, agent)
 		},
@@ -410,6 +420,12 @@ func (s *Server) handleGetLimits(w http.ResponseWriter, r *http.Request) {
 	if agent == "" {
 		agent = "all"
 	}
+	// Validate before touching the cache so arbitrary selectors never get a
+	// slot of their own.
+	if err := limits.CheckAgent(agent); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	entry, err := s.cachedLimits(agent)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -421,15 +437,17 @@ func (s *Server) handleGetLimits(w http.ResponseWriter, r *http.Request) {
 }
 
 // cachedLimits returns a fresh enough snapshot for agent, fetching it when the
-// cached one is missing or expired. The lock is held across the fetch so
-// concurrent requests share one provider round instead of each starting
-// their own. The fetch runs on its own deadline, not the request's, so a
-// client hanging up early does not leave a truncated snapshot in the cache.
+// cached one is missing or expired. The selector's slot lock is held across
+// the fetch so concurrent requests for it share one provider round; other
+// selectors are not blocked. The fetch runs on its own deadline, not the
+// request's, so a client hanging up early does not leave a truncated
+// snapshot in the cache.
 func (s *Server) cachedLimits(agent string) (limitsCacheEntry, error) {
-	s.limitsMu.Lock()
-	defer s.limitsMu.Unlock()
-	if e, ok := s.limitsCache[agent]; ok && time.Since(e.fetchedAt) < limitsCacheTTL {
-		return e, nil
+	slot := s.limitsSlot(agent)
+	slot.mu.Lock()
+	defer slot.mu.Unlock()
+	if slot.ok && time.Since(slot.entry.fetchedAt) < limitsCacheTTL {
+		return slot.entry, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), limitsFetchTimeout)
 	defer cancel()
@@ -437,9 +455,22 @@ func (s *Server) cachedLimits(agent string) (limitsCacheEntry, error) {
 	if err != nil {
 		return limitsCacheEntry{}, err
 	}
-	e := limitsCacheEntry{snapshot: snap, fetchedAt: time.Now()}
-	s.limitsCache[agent] = e
-	return e, nil
+	slot.entry = limitsCacheEntry{snapshot: snap, fetchedAt: time.Now()}
+	slot.ok = true
+	return slot.entry, nil
+}
+
+// limitsSlot returns agent's cache slot, creating it on first use. Callers
+// validate agent first, so the map holds at most one slot per known selector.
+func (s *Server) limitsSlot(agent string) *limitsSlot {
+	s.limitsMu.Lock()
+	defer s.limitsMu.Unlock()
+	slot, ok := s.limitsCache[agent]
+	if !ok {
+		slot = &limitsSlot{}
+		s.limitsCache[agent] = slot
+	}
+	return slot
 }
 
 func (s *Server) handleAuthInfo(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -256,8 +257,16 @@ func codexGET(ctx context.Context, url, token, accountID string) (int, []byte, e
 // codexResetCreditsURL sits next to the usage URL, so a CODEX_USAGE_URL
 // override (tests, proxies) moves both and the token never leaves the
 // configured host.
+// Only the path changes: a query string or fragment on the override is kept.
 func codexResetCreditsURL() string {
-	return strings.TrimSuffix(strings.TrimRight(codexUsageURL(), "/"), "/usage") + "/rate-limit-reset-credits"
+	raw := codexUsageURL()
+	u, err := url.Parse(raw)
+	if err != nil {
+		return strings.TrimSuffix(strings.TrimRight(raw, "/"), "/usage") + "/rate-limit-reset-credits"
+	}
+	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/usage") + "/rate-limit-reset-credits"
+	u.RawPath = ""
+	return u.String()
 }
 
 func codexUsageURL() string {

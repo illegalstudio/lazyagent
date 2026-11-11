@@ -56,15 +56,15 @@ func (m Model) renderLimitsModal() string {
 		bodyLines = m.renderLimitsDetailedLines()
 	}
 
-	scroll := 0
-	if m.limitsTab == limitsTabDetailed {
-		scroll = m.limitsScroll
-		if maxScroll := len(bodyLines) - maxBodyH; scroll > maxScroll {
-			scroll = maxScroll
-		}
-		if scroll < 0 {
-			scroll = 0
-		}
+	// Both tabs scroll: scoped rows ("Claude Fable", "Codex Code review")
+	// can push the Summary past a short terminal too. Switching tabs resets
+	// limitsScroll, so each tab starts at its top.
+	scroll := m.limitsScroll
+	if maxScroll := len(bodyLines) - maxBodyH; scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
 	}
 	visible, moreBelow := windowLines(bodyLines, scroll, maxBodyH)
 	body := strings.Join(visible, "\n")

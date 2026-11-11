@@ -438,3 +438,19 @@ func TestFormatAmount(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexResetCreditsURLKeepsQuery(t *testing.T) {
+	cases := map[string]string{
+		"":                               "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+		"http://127.0.0.1:9/wham/usage":  "http://127.0.0.1:9/wham/rate-limit-reset-credits",
+		"http://127.0.0.1:9/wham/usage/": "http://127.0.0.1:9/wham/rate-limit-reset-credits",
+		"https://proxy.example/wham/usage?acct=t": "https://proxy.example/wham/rate-limit-reset-credits?acct=t",
+		"https://proxy.example/custom?acct=t&x=1": "https://proxy.example/custom/rate-limit-reset-credits?acct=t&x=1",
+	}
+	for override, want := range cases {
+		t.Setenv("CODEX_USAGE_URL", override)
+		if got := codexResetCreditsURL(); got != want {
+			t.Errorf("CODEX_USAGE_URL=%q: reset URL = %q, want %q", override, got, want)
+		}
+	}
+}

@@ -500,19 +500,60 @@ func TestGetLimitsServesCachedSnapshotPerAgent(t *testing.T) {
 	}
 
 	// An expired entry is fetched again.
-	srv.limitsMu.Lock()
-	e := srv.limitsCache["all"]
-	e.fetchedAt = e.fetchedAt.Add(-limitsCacheTTL)
-	srv.limitsCache["all"] = e
-	srv.limitsMu.Unlock()
+	slot := srv.limitsSlot("all")
+	slot.mu.Lock()
+	slot.entry.fetchedAt = slot.entry.fetchedAt.Add(-limitsCacheTTL)
+	slot.mu.Unlock()
 	authedGet(t, ts.URL+"/api/limits").Body.Close()
 	if got := strings.Join(calls, ","); got != "all,claude,all" {
 		t.Errorf("provider rounds after expiry = %s", got)
 	}
 }
 
+// A slow fetch for one selector must not hold up a cached answer for
+// another.
+func TestGetLimitsSlowSelectorDoesNotBlockOthers(t *testing.T) {
+	srv, ts := newTestServer(t)
+	defer ts.Close()
+
+	release := make(chan struct{})
+	started := make(chan struct{})
+	srv.limitsFetch = func(_ context.Context, agent string) (limitsSnapshot, error) {
+		if agent == "all" {
+			close(started)
+			<-release
+		}
+		return fakeLimitsSnapshot{agent: agent}, nil
+	}
+	authedGet(t, ts.URL+"/api/limits?agent=claude").Body.Close() // warm claude
+
+	slowDone := make(chan struct{})
+	go func() {
+		defer close(slowDone)
+		req, _ := http.NewRequest("GET", ts.URL+"/api/limits", nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	}()
+	<-started
+
+	done := make(chan struct{})
+	go func() {
+		authedGet(t, ts.URL+"/api/limits?agent=claude").Body.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cached claude request waited for the in-flight all fetch")
+	}
+	close(release)
+	<-slowDone
+}
+
 func TestGetLimitsRejectsUnknownAgent(t *testing.T) {
-	_, ts := newTestServer(t)
+	srv, ts := newTestServer(t)
 	defer ts.Close()
 
 	// The real fetcher validates the selector before any network call.
@@ -525,6 +566,9 @@ func TestGetLimitsRejectsUnknownAgent(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	if !strings.Contains(body["error"], "unsupported agent") {
 		t.Errorf("error = %q", body["error"])
+	}
+	if _, ok := srv.limitsCache["nope"]; ok {
+		t.Error("an unknown selector got a cache slot")
 	}
 }
 

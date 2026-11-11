@@ -152,6 +152,25 @@ func TestRenderLimitsSummaryLines_ColumnsAlign(t *testing.T) {
 	}
 }
 
+func TestRenderLimitsModal_SummaryScrolls(t *testing.T) {
+	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	var windows []limits.Window
+	for _, scope := range []string{"", "Fable", "Code review", "Spark", "Mini", "Nano"} {
+		windows = append(windows, limits.Window{Label: "7-day", Scope: scope, WindowMinutes: 7 * 24 * 60, UsedPercent: 5, ResetsAt: now.Add(time.Hour)})
+	}
+	view := limits.BuildView([]limits.Report{{Provider: "Codex", Windows: windows}}, now)
+	m := limitsTestModel(limitsTabSummary, false, view)
+	m.height = 14 // body budget of 4 lines: header + 3 of the 6 rows
+
+	if out := m.renderLimitsModal(); strings.Contains(out, "Codex Nano") || !strings.Contains(out, "↓ more") {
+		t.Fatalf("short terminal should hide the last row and offer more:\n%s", out)
+	}
+	m.limitsScroll = 10 // clamped to the last page
+	if out := m.renderLimitsModal(); !strings.Contains(out, "Codex Nano") {
+		t.Fatalf("scrolled Summary should reach the last row:\n%s", out)
+	}
+}
+
 func TestRenderLimitsModal_Loading(t *testing.T) {
 	m := limitsTestModel(0, true, limits.View{})
 	out := m.renderLimitsModal()
