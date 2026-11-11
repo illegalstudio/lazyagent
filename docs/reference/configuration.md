@@ -175,6 +175,23 @@ Default: `[]` (empty — no outbound webhooks). A list of HTTP endpoints that re
 
 See [Outbound Webhooks](webhooks.md) for the full field reference, payload schema, request headers, HMAC verification, delivery semantics, and troubleshooting tips.
 
+## HTTP API environment variables
+
+These variables are supplied to the process that starts the API server. Restart the API after changing either value. Environment values are not saved to `config.json`.
+
+| Variable | Purpose |
+|----------|---------|
+| `LAZYAGENT_API_PASSPHRASE` | Overrides `api_passphrase` for client authentication to the lazyagent API. |
+| `LAZYAGENT_CURSOR_API_KEY` | Optional Cursor user API key that enables cloud agents in `GET /api/agents`. Without it, that endpoint returns local sessions only. |
+
+For example:
+
+```bash
+LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+```
+
+The Cursor cloud key has no JSON config field or desktop Settings control. For automatic startup, set it in the service or launcher's environment or secret manager. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation, shell usage, and client authentication.
+
 ## Where the config file lives
 
 | OS | Path |

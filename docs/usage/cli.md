@@ -74,6 +74,14 @@ lazyagent --api --host 0.0.0.0:7421   # expose on the network
 
 On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
 
+To include Cursor cloud agents in `GET /api/agents`, provide a Cursor user API key when starting the server:
+
+```bash
+LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+```
+
+The key is optional and read at API startup. Without it, `/api/agents` returns local sessions only. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for where to create the key and how to configure automatic startup.
+
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 
 ### `--host ADDR`

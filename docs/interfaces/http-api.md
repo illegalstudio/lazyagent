@@ -335,6 +335,34 @@ IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents
 
 Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
 
+#### Cursor cloud agent setup
+
+1. Sign in to [Cursor Dashboard → API Keys](https://cursor.com/dashboard/api) and create a **user API key** for the Cloud Agents API. See [Cursor's API key documentation](https://cursor.com/docs/api#creating-api-keys).
+2. Pass the key to the process that starts the lazyagent API:
+
+   ```bash
+   LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+   ```
+
+   To reuse it for commands launched from the same terminal:
+
+   ```bash
+   export LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY'
+   lazyagent --api
+   ```
+
+3. Query `GET /api/agents` using your usual lazyagent bearer token. Add `?all=true` to include idle cloud agents, and check `errors` for failed or pending cloud lookups.
+
+The Cursor key authenticates lazyagent to Cursor. The [API passphrase](#authentication) authenticates your clients to lazyagent; configure it separately.
+
+The key is read when the API server is created. Restart the API after setting or rotating it. There is no Cursor cloud key field in `config.json` or the desktop Settings panel, and lazyagent does not save this environment variable to disk.
+
+For a service, login item, or other automatic startup, supply `LAZYAGENT_CURSOR_API_KEY` through that service or launcher's environment or secret manager. A terminal `export` only applies to processes started from that terminal; an already-running API or a desktop app launched separately will not receive it.
+
+Cloud agents appear in `GET /api/agents`. Local Cursor session discovery needs no cloud API key; `/api/sessions` and the TUI/desktop session lists continue to show local sessions.
+
+#### Cloud caching and errors
+
 Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is taken from list items when available, otherwise loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
 
 A request waits at most 10 seconds for cloud data. A slower refresh continues in the background, shared by all callers, with a 2-minute deadline and a 30-second timeout per upstream request. Until it finishes, the API returns available IDE agents and the last cloud snapshot, with `refresh in progress; cloud results may be incomplete` in `errors`. When the refresh finishes, later polls receive the result.
