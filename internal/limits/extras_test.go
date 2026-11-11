@@ -456,39 +456,50 @@ func TestCodexResetCreditsURLKeepsQuery(t *testing.T) {
 }
 
 func TestSnapshotOnlyNarrowsOneRound(t *testing.T) {
-	pool := &sharedCreditPeriod{start: 1, end: 2}
-	snap := Snapshot{
-		results: []agentReport{
-			{agent: "claude", report: Report{Provider: "Claude Code"}},
-			{agent: "grok", report: Report{Provider: "xAI", sharedPeriod: pool}},
-			{agent: "cursor", report: Report{Provider: "Cursor Models"}},
-		},
-		errs: []agentError{
-			{agent: "kimi", kind: errKindNotInstalled, err: errAgentNotInstalled},
-		},
-	}
 	providers := func(s Snapshot) (out []string) {
 		for _, ar := range s.results {
 			out = append(out, ar.report.Provider)
 		}
 		return out
 	}
-	cases := map[string][]string{
-		"all":    {"Claude Code", "xAI", "Cursor Models"},
-		"claude": {"Claude Code"},
-		"grok":   {"xAI"},
-		"cursor": {"xAI", "Cursor Models"}, // the shared xAI pool shows for either selector
-		"kimi":   nil,
-	}
-	for agent, want := range cases {
-		if got := providers(snap.Only(agent)); strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Errorf("Only(%s) = %v, want %v", agent, got, want)
+	check := func(name string, snap Snapshot, cases map[string][]string) {
+		t.Helper()
+		for agent, want := range cases {
+			if got := providers(snap.Only(agent)); strings.Join(got, ",") != strings.Join(want, ",") {
+				t.Errorf("%s: Only(%s) = %v, want %v", name, agent, got, want)
+			}
 		}
 	}
+
+	// Grok and Cursor read the same xAI pool: the round keeps Grok's copy,
+	// and it answers the cursor selector too.
+	pool := &sharedCreditPeriod{start: 1, end: 2}
+	var results []agentReport
+	results = appendAgentReports(results, "claude", []Report{{Provider: "Claude Code"}})
+	results = appendAgentReports(results, "grok", []Report{{Provider: "xAI", sharedPeriod: pool}})
+	results = appendAgentReports(results, "cursor", []Report{{Provider: "xAI via Cursor", sharedPeriod: &sharedCreditPeriod{start: 1, end: 2}}})
+	snap := Snapshot{results: results, errs: []agentError{{agent: "kimi", kind: errKindNotInstalled, err: errAgentNotInstalled}}}
+	check("same pool", snap, map[string][]string{
+		"all":    {"Claude Code", "xAI"},
+		"claude": {"Claude Code"},
+		"grok":   {"xAI"},
+		"cursor": {"xAI"},
+		"kimi":   nil,
+	})
 	if errs := snap.Only("kimi").errs; len(errs) != 1 || errs[0].agent != "kimi" {
 		t.Errorf("Only(kimi) errors = %+v, want the kimi error", errs)
 	}
 	if errs := snap.Only("claude").errs; len(errs) != 0 {
 		t.Errorf("Only(claude) errors = %+v, want none", errs)
 	}
+
+	// Different credit periods (two accounts): each pool stays with its own
+	// agent and never leaks into the other's selector.
+	results = nil
+	results = appendAgentReports(results, "grok", []Report{{Provider: "xAI", sharedPeriod: &sharedCreditPeriod{start: 1, end: 2}}})
+	results = appendAgentReports(results, "cursor", []Report{{Provider: "xAI via Cursor", sharedPeriod: &sharedCreditPeriod{start: 3, end: 4}}})
+	check("separate pools", Snapshot{results: results}, map[string][]string{
+		"grok":   {"xAI"},
+		"cursor": {"xAI via Cursor"},
+	})
 }

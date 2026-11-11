@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"time"
 )
 
@@ -269,18 +270,17 @@ func (s Snapshot) JSONFor(agent string, now time.Time) any {
 }
 
 // Only narrows an "all" snapshot to one agent, so a single provider round can
-// answer every selector. It keeps that agent's reports and errors. Grok and
-// Cursor share the unified xAI credit pool, which an "all" round reports once
-// under whichever agent read it first; that report is kept for either
-// selector, as an explicit `--agent grok` or `--agent cursor` run shows it.
+// answer every selector. It keeps that agent's reports and errors, plus a
+// report another agent fetched on its behalf: Grok and Cursor reading the
+// same unified xAI credit pool, which the round reports once. A pool from a
+// different credit period belongs to the other agent only and is left out.
 func (s Snapshot) Only(agent string) Snapshot {
 	if agent == "all" {
 		return s
 	}
-	xai := func(a string) bool { return a == "grok" || a == "cursor" }
 	out := Snapshot{}
 	for _, ar := range s.results {
-		if ar.agent == agent || (ar.report.sharedPeriod != nil && xai(agent) && xai(ar.agent)) {
+		if ar.agent == agent || slices.Contains(ar.alsoFor, agent) {
 			out.results = append(out.results, ar)
 		}
 	}

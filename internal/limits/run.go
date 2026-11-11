@@ -48,6 +48,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -78,6 +79,10 @@ type options struct {
 type agentReport struct {
 	agent  string
 	report Report
+	// alsoFor lists other agents this report stands in for: Grok and Cursor
+	// can read the same unified xAI credit pool, which a multi-agent run
+	// reports once. Snapshot.Only uses it to answer a single-agent selector.
+	alsoFor []string
 }
 
 // Error kinds recorded by collect. They double as the "kind" value in the JSON
@@ -260,14 +265,28 @@ Flags:
 	return exitCode
 }
 
-// collect fetches every requested agent in order and classifies each failure.
+// collect fetches every requested agent and classifies each failure. The
+// agents are fetched concurrently, so a slow provider does not eat the
+// others' share of ctx's deadline, and the results keep the order of agents.
 // It never prints; the caller decides what each error kind means for its
 // output format.
 func collect(ctx context.Context, agents []string) ([]agentReport, []agentError) {
+	fetched := make([][]Report, len(agents))
+	fetchErrs := make([]error, len(agents))
+	var wg sync.WaitGroup
+	for i, a := range agents {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fetched[i], fetchErrs[i] = fetchReports(ctx, a)
+		}()
+	}
+	wg.Wait()
+
 	var results []agentReport
 	var errs []agentError
-	for _, a := range agents {
-		rs, err := fetchReports(ctx, a)
+	for i, a := range agents {
+		rs, err := fetched[i], fetchErrs[i]
 		if err != nil {
 			kind := errKindError
 			switch {
@@ -297,8 +316,9 @@ func collect(ctx context.Context, agents []string) ([]agentReport, []agentError)
 				}
 			}
 		}
-		for _, result := range results {
+		for j, result := range results {
 			if result.agent == "cursor" && result.report.sharedPeriod != nil {
+				results[j].alsoFor = append(results[j].alsoFor, "grok")
 				return results, append(errs[:i], errs[i+1:]...)
 			}
 		}
@@ -310,13 +330,17 @@ func collect(ctx context.Context, agents []string) ([]agentReport, []agentError)
 
 // appendAgentReports retains the first source for a matching xAI credit period.
 // Canonical ordering prefers Grok; Cursor still works alone or for another period.
+// The retained report records that it also stands in for the dropped agent.
 func appendAgentReports(results []agentReport, agent string, reports []Report) []agentReport {
 	for _, report := range reports {
 		duplicate := false
 		if report.sharedPeriod != nil {
-			for _, previous := range results {
+			for j, previous := range results {
 				if previous.report.sharedPeriod != nil && *previous.report.sharedPeriod == *report.sharedPeriod {
 					duplicate = true
+					if previous.agent != agent && !slices.Contains(previous.alsoFor, agent) {
+						results[j].alsoFor = append(results[j].alsoFor, agent)
+					}
 					break
 				}
 			}
