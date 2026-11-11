@@ -42,12 +42,46 @@ export class ConversationItem {
 }
 
 /**
+ * CredentialStatus deliberately returns only configuration presence and source.
+ */
+export class CredentialStatus {
+    "configured": boolean;
+    "source": string;
+    "error": string;
+
+    /** Creates a new CredentialStatus instance. */
+    constructor($$source: Partial<CredentialStatus> = {}) {
+        if (!("configured" in $$source)) {
+            this["configured"] = false;
+        }
+        if (!("source" in $$source)) {
+            this["source"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CredentialStatus instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CredentialStatus {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CredentialStatus($$parsedSource as Partial<CredentialStatus>);
+    }
+}
+
+/**
  * SessionFull is the detailed session representation.
  */
 export class SessionFull {
     "sessionId": string;
     "agent": string;
     "source": string;
+    "cloudUrl"?: string;
+    "repoUrl"?: string;
     "cwd": string;
     "shortName": string;
     "agentName": string;
@@ -190,18 +224,18 @@ export class SessionFull {
      * Creates a new SessionFull instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionFull {
-        const $$createField14_0 = $$createType0;
-        const $$createField30_0 = $$createType2;
-        const $$createField31_0 = $$createType4;
+        const $$createField16_0 = $$createType0;
+        const $$createField32_0 = $$createType2;
+        const $$createField33_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField16_0($$parsedSource["sparklineData"]);
         }
         if ("recentTools" in $$parsedSource) {
-            $$parsedSource["recentTools"] = $$createField30_0($$parsedSource["recentTools"]);
+            $$parsedSource["recentTools"] = $$createField32_0($$parsedSource["recentTools"]);
         }
         if ("recentMessages" in $$parsedSource) {
-            $$parsedSource["recentMessages"] = $$createField31_0($$parsedSource["recentMessages"]);
+            $$parsedSource["recentMessages"] = $$createField33_0($$parsedSource["recentMessages"]);
         }
         return new SessionFull($$parsedSource as Partial<SessionFull>);
     }
@@ -214,6 +248,8 @@ export class SessionItem {
     "sessionId": string;
     "agent": string;
     "source": string;
+    "cloudUrl"?: string;
+    "repoUrl"?: string;
     "cwd": string;
     "shortName": string;
     "agentName": string;
@@ -298,10 +334,10 @@ export class SessionItem {
      * Creates a new SessionItem instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionItem {
-        const $$createField14_0 = $$createType0;
+        const $$createField16_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
-            $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
+            $$parsedSource["sparklineData"] = $$createField16_0($$parsedSource["sparklineData"]);
         }
         return new SessionItem($$parsedSource as Partial<SessionItem>);
     }

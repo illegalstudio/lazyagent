@@ -5,6 +5,54 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as time$0 from "../../../../../time/models.js";
+
+/**
+ * CloudStatus is safe for UI bindings: it contains no credential material.
+ */
+export class CloudStatus {
+    "configured": boolean;
+    "loading": boolean;
+    "count": number;
+    "error": string;
+    "updatedAt": time$0.Time;
+    "showIdle": boolean;
+
+    /** Creates a new CloudStatus instance. */
+    constructor($$source: Partial<CloudStatus> = {}) {
+        if (!("configured" in $$source)) {
+            this["configured"] = false;
+        }
+        if (!("loading" in $$source)) {
+            this["loading"] = false;
+        }
+        if (!("count" in $$source)) {
+            this["count"] = 0;
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("updatedAt" in $$source)) {
+            this["updatedAt"] = null;
+        }
+        if (!("showIdle" in $$source)) {
+            this["showIdle"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CloudStatus instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CloudStatus {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CloudStatus($$parsedSource as Partial<CloudStatus>);
+    }
+}
+
 /**
  * Config holds application settings shared by TUI and GUI.
  */

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
+	"github.com/illegalstudio/lazyagent/internal/cloud"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
@@ -55,6 +56,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	s.manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	s.manager.ConfigureCloud()
 	if dir, ok := sessions.ResolveCacheDir(); ok {
 		s.manager.EnableCachePersistence(dir)
 	}
@@ -130,7 +132,9 @@ func (s *SessionService) watchLoop() {
 			_ = s.manager.Reload()
 			s.emitUpdate()
 		case <-ticker.C:
-			if s.manager.UpdateActivities() {
+			cloudChanged := s.manager.UpdateCloud()
+			localChanged := s.manager.UpdateActivities()
+			if cloudChanged || localChanged {
 				s.emitUpdate()
 			}
 		case <-reloadC:
@@ -151,6 +155,8 @@ type SessionItem struct {
 	SessionID           string    `json:"sessionId"`
 	Agent               string    `json:"agent"`
 	Source              string    `json:"source"`
+	CloudURL            string    `json:"cloudUrl,omitempty"`
+	RepoURL             string    `json:"repoUrl,omitempty"`
 	CWD                 string    `json:"cwd"`
 	ShortName           string    `json:"shortName"`
 	AgentName           string    `json:"agentName"`
@@ -212,12 +218,21 @@ func (s *SessionService) buildSessionItem(sess *model.Session, activity core.Act
 	if sess.Desktop != nil {
 		source = "desktop"
 	}
+	shortName := core.ShortName(sess.CWD, nameLen)
+	cloudURL, repoURL := "", ""
+	if sess.Cloud != nil {
+		source = "cloud"
+		shortName = core.TruncateCells(sess.Name, nameLen, "…")
+		cloudURL, repoURL = sess.Cloud.URL, sess.Cloud.Repo
+	}
 	return SessionItem{
 		SessionID:           sess.SessionID,
 		Agent:               sess.Agent,
 		Source:              source,
+		CloudURL:            cloudURL,
+		RepoURL:             repoURL,
 		CWD:                 sess.CWD,
-		ShortName:           core.ShortName(sess.CWD, nameLen),
+		ShortName:           shortName,
 		AgentName:           sess.Name,
 		CustomName:          s.manager.SessionName(sess.SessionID),
 		Activity:            string(activity),
@@ -230,8 +245,8 @@ func (s *SessionService) buildSessionItem(sess *model.Session, activity core.Act
 		SparklineData:       core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
 		CurrentTool:         sess.CurrentTool,
 		LastMessage:         lastMessageSnippet(sess),
-		ResumeAvailable:     core.ResumeArgv(sess.Agent, sess.SessionID) != nil,
-		YoloResumeAvailable: core.YoloResumeArgv(sess.Agent, sess.SessionID) != nil,
+		ResumeAvailable:     sess.Cloud == nil && core.ResumeArgv(sess.Agent, sess.SessionID) != nil,
+		YoloResumeAvailable: sess.Cloud == nil && core.YoloResumeArgv(sess.Agent, sess.SessionID) != nil,
 	}
 }
 
@@ -255,6 +270,9 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 	}
 	sess := &detail.Session
 	wm := s.manager.WindowMinutes()
+	if sess.Cloud != nil {
+		return &SessionFull{SessionItem: s.buildSessionItem(sess, detail.Activity, wm, 80), RecentTools: []ToolItem{}, RecentMessages: []ConversationItem{}}
+	}
 
 	tools := make([]ToolItem, 0, len(sess.RecentTools))
 	for _, t := range sess.RecentTools {
@@ -316,6 +334,28 @@ func (s *SessionService) GetActiveCount() int {
 		}
 	}
 	return count
+}
+
+func (s *SessionService) GetCloudStatus() core.CloudStatus {
+	return s.manager.CloudStatus()
+}
+
+func (s *SessionService) SetCloudShowIdle(show bool) {
+	s.manager.SetCloudShowIdle(show)
+	s.emitUpdate()
+}
+
+// OpenCloudSession resolves the selected ID and validates the provider URL.
+func (s *SessionService) OpenCloudSession(id string) error {
+	detail := s.manager.SessionDetail(id)
+	if detail == nil || detail.Cloud == nil {
+		return fmt.Errorf("cloud agent not found")
+	}
+	url, err := cloud.AgentURL(detail.Cloud.URL)
+	if err != nil {
+		return err
+	}
+	return browser.OpenURL(url)
 }
 
 // GetWindowMinutes returns the current time window in minutes.
@@ -424,6 +464,7 @@ func launchCommandInTerminal(argv []string, cwd string) {
 // the View menu.
 func (s *SessionService) Refresh() {
 	_ = s.manager.Reload()
+	s.manager.RefreshCloud()
 	s.emitUpdate()
 }
 
@@ -431,7 +472,7 @@ func (s *SessionService) Refresh() {
 // directory running either the normal or agent-specific YOLO resume command.
 func (s *SessionService) ResumeInTerminal(sessionID string, yolo bool) {
 	detail := s.manager.SessionDetail(sessionID)
-	if detail == nil {
+	if detail == nil || detail.Cloud != nil {
 		return
 	}
 	mode := core.ResumeNormal
@@ -525,6 +566,48 @@ type Settings struct {
 	Editor               string          `json:"editor"`
 	Agents               map[string]bool `json:"agents"`
 	ExcludeCWDSubstrings []string        `json:"excludeCwdSubstrings"`
+}
+
+// CredentialStatus deliberately returns only configuration presence and source.
+type CredentialStatus struct {
+	Configured bool   `json:"configured"`
+	Source     string `json:"source"`
+	Error      string `json:"error"`
+}
+
+func (s *SessionService) GetCursorCredentialStatus() CredentialStatus {
+	key, source, err := core.ResolveProviderAPIKey("cursor")
+	status := CredentialStatus{Configured: key != "", Source: source}
+	if err != nil {
+		status.Error = err.Error()
+	}
+	return status
+}
+
+func (s *SessionService) SetCursorAPIKey(key string) error {
+	if err := core.SetProviderAPIKey("cursor", key); err != nil {
+		return err
+	}
+	if s.manager != nil {
+		s.manager.ConfigureCloud()
+		s.emitUpdate()
+	}
+	return nil
+}
+
+func (s *SessionService) RemoveCursorAPIKey() error {
+	if err := core.RemoveProviderAPIKey("cursor"); err != nil {
+		return err
+	}
+	if s.manager != nil {
+		s.manager.ConfigureCloud()
+		s.emitUpdate()
+	}
+	return nil
+}
+
+func (s *SessionService) OpenCursorAPIKeys() error {
+	return browser.OpenURL("https://cursor.com/dashboard/api")
 }
 
 // GetSettings returns the GUI-editable settings.

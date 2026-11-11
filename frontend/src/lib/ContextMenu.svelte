@@ -34,11 +34,13 @@
   }
 
   function resume(yolo = false) {
+    if (session.source === "cloud") return;
     SessionService.ResumeInTerminal(session.sessionId, yolo).catch(() => {});
     onclose();
   }
   function openEditor() {
-    SessionService.OpenInEditor(session.cwd, session.agent).catch(() => {});
+    if (session.source === "cloud") SessionService.OpenCloudSession(session.sessionId).catch(() => {});
+    else SessionService.OpenInEditor(session.cwd, session.agent).catch(() => {});
     onclose();
   }
   function rename() {
@@ -57,7 +59,7 @@
     onclose();
   }
   function copyPath() {
-    Clipboard.SetText(session.cwd).catch(() => {});
+    Clipboard.SetText(session.source === "cloud" ? session.cloudUrl || "" : session.cwd).catch(() => {});
     onclose();
   }
 </script>
@@ -76,7 +78,7 @@
   {#if session.yoloResumeAvailable}
     <button class="w-full text-left rounded-md px-2.5 py-1.5 text-activity-writing hover:bg-activity-writing hover:text-surface" onclick={() => resume(true)} role="menuitem">Resume YOLO in terminal</button>
   {/if}
-  <button class="w-full text-left rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-surface" onclick={openEditor} role="menuitem">Open in editor</button>
+  <button class="w-full text-left rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-surface" onclick={openEditor} role="menuitem">{session.source === "cloud" ? "Open in Cursor" : "Open in editor"}</button>
   <button class="w-full text-left rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-surface" onclick={rename} role="menuitem">Rename…</button>
   <div class="my-1 border-t border-border"></div>
   {#if session.resumeAvailable}
@@ -85,5 +87,5 @@
   {#if session.yoloResumeAvailable}
     <button class="w-full text-left rounded-md px-2.5 py-1.5 text-activity-writing hover:bg-activity-writing hover:text-surface" onclick={() => copyResume(true)} role="menuitem">Copy YOLO command</button>
   {/if}
-  <button class="w-full text-left rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-surface" onclick={copyPath} role="menuitem">Copy project path</button>
+  <button class="w-full text-left rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-surface" onclick={copyPath} role="menuitem">{session.source === "cloud" ? "Copy cloud URL" : "Copy project path"}</button>
 </div>

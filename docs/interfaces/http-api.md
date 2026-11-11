@@ -344,7 +344,7 @@ Cloud agents need a saved Cursor API key or the `LAZYAGENT_CURSOR_API_KEY` envir
    lazyagent credentials set cursor
    ```
 
-   This writes `providers.cursor.api_key` to `credentials.json` beside lazyagent's `config.json`. The file has `0600` permissions and the directory has `0700` permissions. The same Go resolver is available to all interfaces; keys are kept outside ordinary config responses and GUI bindings.
+   This writes `providers.cursor.api_key` to `credentials.json` beside lazyagent's `config.json`. The file has `0600` permissions and the directory has `0700` permissions. All interfaces read this shared location. You can also save the key in GUI Settings under **Cursor cloud agents**; the saved value is never returned to the frontend.
 
 3. Start or restart the API:
 
@@ -369,11 +369,11 @@ For temporary overrides or a secret-manager deployment, the existing environment
 LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
 ```
 
-Environment overrides are not copied into `credentials.json`. Removing a saved key does not unset an environment override. The key is resolved when the API server is created; restart running interfaces after setting, rotating, or removing credentials.
+Environment overrides are not copied into `credentials.json`. Removing a saved key does not unset an environment override. The key is resolved when the API server is created; restart it after setting, rotating, or removing credentials. GUI Settings updates its own monitor immediately.
 
-Services, login items, and separately launched desktop processes can use the saved credential when running as the same user with the same config directory. See [Provider API credentials](../reference/configuration.md#provider-api-credentials) for paths and the extensible file format. There is no key field in ordinary `config.json` or the desktop Settings panel.
+Services, login items, and separately launched desktop processes can use the saved credential when running as the same user with the same config directory. See [Provider API credentials](../reference/configuration.md#provider-api-credentials) for paths and the extensible file format. There is no key field in ordinary `config.json`.
 
-Cloud agents currently appear in `GET /api/agents`. Shared credential storage prepares TUI and GUI integration; their session lists and `/api/sessions` still show local sessions. Local Cursor discovery needs no cloud API key.
+Cloud agents also appear in the [TUI](terminal-ui.md#cursor-cloud-agents) and both GUI layouts when Cursor is among the enabled providers. Demo mode and other-agent-only monitors stay local. `/api/sessions` and maintenance commands continue to operate on local sessions. Local Cursor discovery needs no cloud API key.
 
 #### Cloud caching and errors
 

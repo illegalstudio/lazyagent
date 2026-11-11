@@ -11,11 +11,13 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/illegalstudio/lazyagent/internal/cloud"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/sessions"
 	"github.com/illegalstudio/lazyagent/internal/version"
+	"github.com/pkg/browser"
 )
 
 // tickMsg triggers a full session reload (fallback when file watcher misses events).
@@ -35,6 +37,18 @@ type updateAvailableMsg struct{ version string }
 
 // editorFinishedMsg is sent when a TUI editor (tea.Exec) exits.
 type editorFinishedMsg struct{ err error }
+
+type cloudActionMsg struct{ err error }
+
+func openCloudCmd(raw string) tea.Cmd {
+	return func() tea.Msg {
+		url, err := cloud.AgentURL(raw)
+		if err == nil {
+			err = browser.OpenURL(url)
+		}
+		return cloudActionMsg{err: err}
+	}
+}
 
 // limitsLoadedMsg is sent when a limits fetch completes. The request ID keeps
 // an older fetch from overwriting a newer refresh.
@@ -120,37 +134,41 @@ type Model struct {
 }
 
 type keyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Tab      key.Binding
-	Quit     key.Binding
-	Rename   key.Binding
-	Plus     key.Binding
-	Minus    key.Binding
-	Filter   key.Binding
-	Search   key.Binding
-	Esc      key.Binding
-	Open     key.Binding
-	Copy     key.Binding
-	CopyYolo key.Binding
-	Limits   key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Tab       key.Binding
+	Quit      key.Binding
+	Rename    key.Binding
+	Plus      key.Binding
+	Minus     key.Binding
+	Filter    key.Binding
+	Search    key.Binding
+	Esc       key.Binding
+	Open      key.Binding
+	Copy      key.Binding
+	CopyYolo  key.Binding
+	Limits    key.Binding
+	CloudIdle key.Binding
+	Refresh   key.Binding
 }
 
 var keys = keyMap{
-	Up:       key.NewBinding(key.WithKeys("up", "k")),
-	Down:     key.NewBinding(key.WithKeys("down", "j")),
-	Tab:      key.NewBinding(key.WithKeys("tab")),
-	Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Rename:   key.NewBinding(key.WithKeys("r")),
-	Plus:     key.NewBinding(key.WithKeys("+", "=")),
-	Minus:    key.NewBinding(key.WithKeys("-")),
-	Filter:   key.NewBinding(key.WithKeys("f")),
-	Search:   key.NewBinding(key.WithKeys("/")),
-	Esc:      key.NewBinding(key.WithKeys("esc")),
-	Open:     key.NewBinding(key.WithKeys("o")),
-	Copy:     key.NewBinding(key.WithKeys("c")),
-	CopyYolo: key.NewBinding(key.WithKeys("C")),
-	Limits:   key.NewBinding(key.WithKeys("l")),
+	Up:        key.NewBinding(key.WithKeys("up", "k")),
+	Down:      key.NewBinding(key.WithKeys("down", "j")),
+	Tab:       key.NewBinding(key.WithKeys("tab")),
+	Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c")),
+	Rename:    key.NewBinding(key.WithKeys("r")),
+	Plus:      key.NewBinding(key.WithKeys("+", "=")),
+	Minus:     key.NewBinding(key.WithKeys("-")),
+	Filter:    key.NewBinding(key.WithKeys("f")),
+	Search:    key.NewBinding(key.WithKeys("/")),
+	Esc:       key.NewBinding(key.WithKeys("esc")),
+	Open:      key.NewBinding(key.WithKeys("o")),
+	Copy:      key.NewBinding(key.WithKeys("c")),
+	CopyYolo:  key.NewBinding(key.WithKeys("C")),
+	Limits:    key.NewBinding(key.WithKeys("l")),
+	CloudIdle: key.NewBinding(key.WithKeys("a")),
+	Refresh:   key.NewBinding(key.WithKeys("g")),
 }
 
 func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
@@ -158,6 +176,7 @@ func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 	t := LoadTheme(cfg.TUI.Theme)
 	mgr := core.NewSessionManager(cfg.WindowMinutes, provider)
 	mgr.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	mgr.ConfigureCloud()
 	if bus != nil {
 		mgr.SetEventBus(bus)
 	}
@@ -254,6 +273,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorFinishedMsg:
 		// TUI editor exited, bubbletea resumes automatically.
+	case cloudActionMsg:
+		if msg.err != nil {
+			m.flashMsg = "Unable to open Cursor cloud agent: " + msg.err.Error()
+		}
 
 	case limitsLoadedMsg:
 		if m.limitsOpen && msg.requestID == m.limitsRequest {
@@ -275,7 +298,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Re-render only — no I/O, but update in-memory activity states.
 		m.spinFrame++
 		m.manager.UpdateActivities()
-		m.refreshVisible()
+		m.afterSessionsUpdate()
 		return m, renderTickCmd()
 
 	case tickMsg:
@@ -445,6 +468,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch {
+		case key.Matches(msg, keys.Refresh):
+			m.manager.RefreshCloud()
+			return m, makeLoadCmd(m.manager)
+		case key.Matches(msg, keys.CloudIdle):
+			m.manager.SetCloudShowIdle(!m.manager.CloudStatus().ShowIdle)
+			m.afterSessionsUpdate()
+			return m, nil
 		case key.Matches(msg, keys.Limits):
 			m.limitsOpen = true
 			m.limitsLoading = true
@@ -522,6 +552,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Open):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
 				s := m.visible[m.cursor]
+				if s.Cloud != nil {
+					return m, openCloudCmd(s.Cloud.URL)
+				}
 				cwd := s.CWD
 
 				// Cursor sessions open in Cursor IDE if available.
@@ -564,6 +597,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Copy):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
 				s := m.visible[m.cursor]
+				if s.Cloud != nil {
+					url, err := cloud.AgentURL(s.Cloud.URL)
+					if err != nil {
+						m.flashMsg = err.Error()
+					} else if core.CopyToClipboard(url) == nil {
+						m.copiedAt = time.Now()
+						m.copiedField = "remote"
+					}
+					return m, nil
+				}
 				if cmd := core.ResumeCommand(s.Agent, s.SessionID); cmd != "" {
 					if core.CopyToClipboard(cmd) == nil {
 						m.copiedAt = time.Now()
@@ -575,6 +618,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.CopyYolo):
 			if len(m.visible) > 0 && m.cursor < len(m.visible) {
 				s := m.visible[m.cursor]
+				if s.Cloud != nil {
+					m.flashMsg = "Use o to open this agent in Cursor."
+					return m, nil
+				}
 				if cmd := core.YoloResumeCommand(s.Agent, s.SessionID); cmd != "" {
 					if core.CopyToClipboard(cmd) == nil {
 						m.copiedAt = time.Now()
@@ -1010,7 +1057,9 @@ func (m Model) renderListRow(s *model.Session, nameW, sparkW int, selected bool)
 	customName := m.manager.SessionName(s.SessionID)
 	// Agent/source badge for visual distinction.
 	agentPrefix := ""
-	if s.Agent == "pi" {
+	if s.Cloud != nil {
+		agentPrefix = "C cloud "
+	} else if s.Agent == "pi" {
 		agentPrefix = "π "
 	} else if s.Agent == "opencode" {
 		agentPrefix = "O "
@@ -1128,6 +1177,21 @@ func (m Model) buildDetailLines(s *model.Session, width int) []string {
 
 	row := func(label, value string) string {
 		return m.sty.label.Render(label) + m.sty.value.Render(value)
+	}
+	if s.Cloud != nil {
+		add(row("Source", "Cursor cloud"))
+		add(row("Agent ID", core.CloudDisplayText(s.Cloud.ID)))
+		if s.Cloud.Repo != "" {
+			add(row("Repository", core.CloudDisplayText(s.Cloud.Repo)))
+		}
+		if s.GitBranch != "" {
+			add(row("Branch", core.CloudDisplayText(s.GitBranch)))
+		}
+		add(row("Cursor URL", core.CloudDisplayText(s.Cloud.URL)))
+		add(row("Updated", core.FormatDuration(time.Since(s.LastActivity))+" ago"))
+		add("")
+		add("o open in Cursor   c copy URL   r rename locally")
+		return lines
 	}
 
 	if s.SessionID != "" {
@@ -1313,9 +1377,25 @@ func (m Model) renderHelp() string {
 		m.sty.helpKey.Render("o")+m.sty.help.Render(" open"),
 		m.sty.helpKey.Render("c/C")+m.sty.help.Render(" copy normal/YOLO"),
 		m.sty.helpKey.Render("r")+m.sty.help.Render(" rename"),
+		m.sty.helpKey.Render("g")+m.sty.help.Render(" refresh"),
 		m.sty.helpKey.Render("q")+m.sty.help.Render(" quit"),
 	)
 	helpLine := m.sty.help.Width(m.width).Render(strings.Join(parts, "  "))
+	state := m.manager.CloudStatus()
+	if state.Configured {
+		status := fmt.Sprintf("Cursor cloud: %d loaded", state.Count)
+		if !state.ShowIdle {
+			status += " (idle hidden; a to show)"
+		}
+		if state.Loading {
+			status += " - refreshing"
+		}
+		if state.Error != "" {
+			status += " - " + state.Error
+		}
+		status = core.TruncateCells(core.CloudDisplayText(status), m.width, "…")
+		helpLine = m.sty.help.Width(m.width).Render(status) + "\n" + helpLine
+	}
 	if m.updateVersion != "" {
 		updateLine := lipgloss.NewStyle().
 			Foreground(m.theme.Accent).

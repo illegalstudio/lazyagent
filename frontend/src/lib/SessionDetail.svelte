@@ -21,12 +21,13 @@
 
   function openEditor() {
     if (detail) {
-      SessionService.OpenInEditor(detail.cwd, detail.agent).catch(() => {});
+      if (detail.source === "cloud") SessionService.OpenCloudSession(detail.sessionId).catch(() => {});
+      else SessionService.OpenInEditor(detail.cwd, detail.agent).catch(() => {});
     }
   }
 
   function resume(yolo = false) {
-    if (detail) {
+    if (detail && detail.source !== "cloud") {
       SessionService.ResumeInTerminal(detail.sessionId, yolo).catch(() => {});
     }
   }
@@ -108,9 +109,9 @@
           <button
             class="rounded px-2 py-1 text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors no-drag"
             onclick={openEditor}
-            title="Open in editor"
+            title={detail.source === "cloud" ? "Open cloud agent in Cursor" : "Open in editor"}
           >
-            Open
+            {detail.source === "cloud" ? "Open in Cursor" : "Open"}
           </button>
         </div>
       </div>
@@ -122,6 +123,17 @@
       </div>
     </div>
 
+    {#if detail.source === "cloud"}
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-[12px] border-t border-border pt-3">
+        <dt class="text-subtext">Source</dt><dd class="text-accent">Cursor cloud</dd>
+        {#if detail.repoUrl}<dt class="text-subtext">Repository</dt><dd class="text-text break-all">{detail.repoUrl}</dd>{/if}
+        {#if detail.gitBranch}<dt class="text-subtext">Branch</dt><dd class="text-text">{detail.gitBranch}</dd>{/if}
+        <dt class="text-subtext">Updated</dt><dd class="text-text">{timeAgo(detail.lastActivity)}</dd>
+        <dt class="text-subtext">Cursor URL</dt><dd class="text-text break-all">{detail.cloudUrl}</dd>
+      </dl>
+      <button class="self-start rounded bg-surface-hover hover:bg-surface-active text-text px-2.5 py-1.5 text-[11px] no-drag" onclick={() => Clipboard.SetText(detail?.cloudUrl || "").catch(() => {})}>Copy cloud URL</button>
+      <p class="text-[11px] text-subtext">Open in Cursor to view the conversation, files and pull request.</p>
+    {:else}
     <!-- Sparkline -->
     <div class="bg-surface rounded-lg p-2">
       <Sparkline data={detail.sparklineData} {color} width={320} height={32} />
@@ -278,6 +290,7 @@
           {/each}
         </div>
       </div>
+    {/if}
     {/if}
   </div>
 {:else}

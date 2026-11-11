@@ -21,6 +21,7 @@
     toggleDetach,
     setSearch,
     syncDetachState,
+    toggleIdleCloud,
   } from "./lib/actions";
   import PanelView from "./lib/PanelView.svelte";
   import DesktopView from "./lib/DesktopView.svelte";
@@ -54,6 +55,9 @@
       return;
     }
 
+    const target = e.target as HTMLElement;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName) || target?.isContentEditable) return;
+
     if ($showLimits) {
       if (!$isDetached && (e.key === "Escape" || e.key === "l" || e.key === "L")) {
         e.preventDefault();
@@ -73,6 +77,9 @@
     } else if (e.key === "d") {
       e.preventDefault();
       toggleDetach();
+    } else if (e.key === "a") {
+      e.preventDefault();
+      toggleIdleCloud().catch(() => {});
     } else if (e.key === "f") {
       e.preventDefault();
       cycleFilter();

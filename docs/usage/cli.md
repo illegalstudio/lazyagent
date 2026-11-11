@@ -75,14 +75,14 @@ lazyagent --api --host 0.0.0.0:7421   # expose on the network
 
 On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
 
-To include Cursor cloud agents in `GET /api/agents`, save a Cursor user API key once, then start the server:
+To include Cursor cloud agents in TUI, GUI, and `GET /api/agents`, save a Cursor user API key once, then start the desired interface:
 
 ```bash
 lazyagent credentials set cursor
 lazyagent --api
 ```
 
-The optional key is read at API startup from the shared `credentials.json` file. `LAZYAGENT_CURSOR_API_KEY` overrides the saved value. Without either, `/api/agents` returns local sessions only. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation and automatic startup.
+The optional key is read at startup from the shared `credentials.json` file. `LAZYAGENT_CURSOR_API_KEY` overrides the saved value. GUI Settings can also save or remove it, updating that GUI immediately. Without either source, lists remain local. TUI and GUI only fetch cloud runs when Cursor is among the selected agents; demo mode stays local. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation and automatic startup.
 
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 

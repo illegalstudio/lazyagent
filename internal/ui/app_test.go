@@ -114,3 +114,39 @@ func TestSearchBackspaceDeletesWholeChineseRune(t *testing.T) {
 		t.Fatalf("searchQuery = %q, want %q", got, "中")
 	}
 }
+
+func TestCloudRowDetailsAndActions(t *testing.T) {
+	s := &model.Session{SessionID: "cloud:cursor:one", Agent: "cursor", Name: "Remote run", LastActivity: time.Now(), Cloud: &model.CloudSession{ID: "one", URL: "https://cursor.com/agents/one", Repo: "https://github.com/org/project", Status: "working"}}
+	m := testModel(t, s)
+	defer m.manager.Close()
+	if row := m.renderListRow(s, 40, 0, false); !strings.Contains(row, "C cloud") {
+		t.Fatalf("missing cloud badge: %q", row)
+	}
+	detail := strings.Join(m.buildDetailLines(s, 120), "\n")
+	for _, want := range []string{"Cursor cloud", "https://github.com/org/project", "https://cursor.com/agents/one", "o open in Cursor"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("missing %q in cloud details", want)
+		}
+	}
+	for _, localOnly := range []string{"cursor-agent resume", "Tokens", "Conversation"} {
+		if strings.Contains(detail, localOnly) {
+			t.Errorf("local data leaked into cloud details: %s", localOnly)
+		}
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	if cmd == nil || updated.(Model).editorPicker {
+		t.Fatal("cloud open must return a browser command without editor picker")
+	}
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("C")})
+	if cmd != nil || !strings.Contains(updated.(Model).flashMsg, "open this agent") {
+		t.Fatal("cloud YOLO action must be disabled")
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	if !updated.(Model).manager.CloudStatus().ShowIdle {
+		t.Fatal("a must toggle idle cloud history")
+	}
+	invalid := openCloudCmd("javascript:alert(1)")().(cloudActionMsg)
+	if invalid.err == nil {
+		t.Fatal("browser command accepted unsafe URL")
+	}
+}

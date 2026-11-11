@@ -103,12 +103,26 @@ type Session struct {
 
 	// Remote control (Claude Code only, empty if unavailable)
 	RemoteURL string
+
+	// Cloud identifies a remote agent. Its repository is not a local CWD.
+	Cloud *CloudSession
+}
+
+type CloudSession struct {
+	ID     string
+	URL    string
+	Repo   string
+	Status string
 }
 
 // Clone returns a deep copy of the Session suitable for use as a base
 // in incremental parsing. Slice fields are copied so the original is not mutated.
 func (s *Session) Clone() *Session {
 	cp := *s
+	if s.Cloud != nil {
+		cloud := *s.Cloud
+		cp.Cloud = &cloud
+	}
 	if len(s.RecentTools) > 0 {
 		cp.RecentTools = make([]ToolCall, len(s.RecentTools))
 		copy(cp.RecentTools, s.RecentTools)

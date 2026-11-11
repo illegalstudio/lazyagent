@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
+	"github.com/illegalstudio/lazyagent/internal/cloud"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
@@ -33,7 +34,7 @@ type Server struct {
 	srv      *http.Server
 	ln       net.Listener
 	authSalt string
-	cloud    *cloudAgents
+	cloud    *cloud.Cursor
 
 	cloudConfigErr error
 
@@ -82,6 +83,10 @@ type limitsCacheEntry struct {
 // token disables auth entirely (used only by tests and by callers that
 // explicitly opt out).
 func New(host string, provider core.SessionProvider, bearerToken, authSalt string, bus *core.EventBus) (*Server, error) {
+	return newServer(host, provider, bearerToken, authSalt, bus, cursorAPIBase)
+}
+
+func newServer(host string, provider core.SessionProvider, bearerToken, authSalt string, bus *core.EventBus, cloudBaseURL string) (*Server, error) {
 	authSalt = strings.TrimSpace(authSalt)
 	if authSalt == "" {
 		authSalt = apiauth.SaltPrefix
@@ -101,7 +106,7 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 	s := &Server{
 		manager:  manager,
 		authSalt: authSalt,
-		cloud:    newCloudAgents(cursorAPIBase, cloudKey),
+		cloud:    newCloudAgents(cloudBaseURL, cloudKey),
 		sseSubs:  make(map[chan struct{}]struct{}),
 
 		limitsFetch: func(ctx context.Context) (limitsSnapshot, error) {
@@ -170,7 +175,7 @@ func (s *Server) Addr() net.Addr {
 
 // Run starts the watcher, background loops, and serves HTTP. Blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context) error {
-	defer s.cloud.cancel()
+	defer s.cloud.Close()
 	if err := s.manager.StartWatcher(); err != nil {
 		log.Printf("Warning: file watcher unavailable: %v", err)
 	}
@@ -197,7 +202,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		s.cloud.cancel()
+		s.cloud.Close()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		s.srv.Shutdown(shutCtx)

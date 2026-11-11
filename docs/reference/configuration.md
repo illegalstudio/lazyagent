@@ -197,9 +197,9 @@ The file contains plaintext secrets, has `0600` permissions, and is written atom
 }
 ```
 
-A nonempty `LAZYAGENT_<PROVIDER>_API_KEY` environment variable takes precedence over the saved value, for example `LAZYAGENT_CURSOR_API_KEY`. Environment overrides are never saved automatically. Removing a saved key does not unset an override. Restart running interfaces after changing credentials.
+A nonempty `LAZYAGENT_<PROVIDER>_API_KEY` environment variable takes precedence over the saved value, for example `LAZYAGENT_CURSOR_API_KEY`. Environment overrides are never saved automatically. Removing a saved key does not unset an override. Restart running interfaces after changing credentials through the CLI. Saving or removing the key in GUI Settings applies immediately to that GUI instance; restart other running instances.
 
-The shared Go resolver can be reused by API, TUI, and GUI code. Provider keys are separate from `Config`, so `/api/config` and desktop config bindings never return them. Currently the Cursor key enables cloud agents in `GET /api/agents`; TUI/GUI cloud session views require a separate integration. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup).
+The API, TUI, attached GUI panel, and detached desktop all use the same resolver. Provider keys are separate from `Config`, so `/api/config` and desktop config getters never return them. GUI Settings has a password field to save a replacement key, a removal action, and a link to create a key. It never displays the saved value. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup).
 
 ## HTTP API environment variables
 

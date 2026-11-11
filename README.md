@@ -187,6 +187,8 @@ lazyagent credentials set cursor  Save the shared Cursor cloud API key
 lazyagent --help             Show full help
 ```
 
+Cursor cloud runs appear alongside local sessions in the TUI, tray panel, and desktop dashboard. Save a key with `lazyagent credentials set cursor` or in GUI Settings, then restart other running instances. Use **a** (or **Idle cloud** in the GUI) to include completed runs. Cloud actions open the run in Cursor or copy its URL. See [cloud setup](docs/interfaces/http-api.md#cursor-cloud-agent-setup).
+
 ## Documentation
 
 Full documentation — supported agents, activity states, keybindings, configuration, the HTTP API, maintenance commands, and architecture — lives at:

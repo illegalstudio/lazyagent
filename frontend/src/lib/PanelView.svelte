@@ -20,17 +20,21 @@
     setSearch,
   } from "./actions";
   import SessionList from "./SessionList.svelte";
+  import CloudStatus from "./CloudStatus.svelte";
+  import SettingsModal from "./SettingsModal.svelte";
   import SessionDetail from "./SessionDetail.svelte";
   import LimitsPage from "./LimitsPage.svelte";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
   let showDetail = $derived($selectedId !== null);
+  let settingsOpen = $state(false);
 </script>
 
 <div class="flex flex-col h-screen bg-surface">
   <!-- Header -->
   <header class="flex items-center justify-between px-3 py-2 bg-surface border-b border-border drag-region">
     <div class="flex items-center gap-2 no-drag">
+      <button class="text-subtext hover:text-text" onclick={() => settingsOpen = true} title="Settings" aria-label="Settings">⚙</button>
       <h1 class="text-[14px] font-bold text-accent">lazyagent</h1>
       <span class="text-[11px] text-subtext">
         {$activeCount} active
@@ -75,6 +79,8 @@
       >{$isDetached ? "\u2921" : "\u2922"}</button>
     </div>
   </header>
+
+  <CloudStatus />
 
   <!-- Search bar -->
   {#if $searching}
@@ -132,3 +138,5 @@
     </div>
   </footer>
 </div>
+
+{#if settingsOpen}<SettingsModal onclose={() => settingsOpen = false} />{/if}

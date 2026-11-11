@@ -108,10 +108,15 @@
             {:else if session.source === "desktop"}<span class="text-accent">D</span>
             {/if}
             {session.customName || session.agentName || session.shortName}
+            {#if session.source === "cloud"}<span class="text-[10px] text-accent ml-1">cloud</span>{/if}
           </div>
         {/if}
         <div class="mt-0.5">
-          <Sparkline data={session.sparklineData} {color} width={100} height={16} />
+          {#if session.source === "cloud"}
+            <div class="text-[10px] text-subtext truncate">{session.repoUrl || "Cursor cloud agent"}</div>
+          {:else}
+            <Sparkline data={session.sparklineData} {color} width={100} height={16} />
+          {/if}
         </div>
       </div>
 

@@ -34,6 +34,14 @@ permissive flag. pi only exposes the normal action.
 
 GUI editors are still launched directly from the configured `editor` command or `$VISUAL`.
 
+## Cursor cloud agents
+
+The attached panel and detached dashboard both show Cursor cloud runs alongside local sessions. Open **Settings** (the gear icon in either layout), then **Cursor cloud agents** to create, save, replace, or remove a Cursor API key. The password field never displays the saved value. Keys share the [same credential file as the CLI and API](../reference/configuration.md#provider-api-credentials). Changes apply to this GUI immediately; restart other running instances. An environment override takes precedence and remains active after removing a saved key.
+
+Cloud rows and cards carry a **cloud** badge. Select one for its repository, update time, and URL; **Open in Cursor** opens the run in your browser and **Copy cloud URL** copies its link. Local terminal, editor, and YOLO actions are replaced by cloud actions. Run conversations, files, and pull request details stay in Cursor.
+
+The cloud status bar reports background refreshes, count, and errors while local sessions remain usable. **Idle cloud** (or **a**) includes completed and idle runs of any age. Active runs always remain eligible regardless of their last update time. Search and activity filters apply to both sources; the time window applies to local sessions. The refresh toolbar button also refreshes cloud data immediately. Without a key, or with Cursor excluded from the monitored agents, the lists stay local. Demo mode never fetches cloud data.
+
 ## Tray compatibility
 
 Lazyagent exposes a StatusNotifierItem tray icon. KDE Plasma, many panels, and Ubuntu's GNOME session support it directly. A vanilla GNOME Shell installation may require an AppIndicator/KStatusNotifierItem extension; without a tray host the background process can run without a visible icon.

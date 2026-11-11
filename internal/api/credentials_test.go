@@ -27,12 +27,6 @@ func TestServerLoadsSharedCursorCredentialsWithoutExposingThem(t *testing.T) {
 			if override != "" {
 				want = override
 			}
-			srv, err := New(":0", testProvider{}, testToken, testSalt, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			srv.ln.Close()
-			defer srv.cloud.cancel()
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				user, password, ok := r.BasicAuth()
 				if !ok || user != want || password != "" {
@@ -43,7 +37,12 @@ func TestServerLoadsSharedCursorCredentialsWithoutExposingThem(t *testing.T) {
 				w.Write([]byte(`{"items":[{"id":"bc-1","status":"ACTIVE","repos":[]}]}`))
 			}))
 			defer upstream.Close()
-			srv.cloud.baseURL = upstream.URL
+			srv, err := newServer(":0", testProvider{}, testToken, testSalt, nil, upstream.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv.ln.Close()
+			defer srv.cloud.Close()
 			local := httptest.NewServer(srv.srv.Handler)
 			defer local.Close()
 			out := getAgents(t, local.URL)
@@ -81,7 +80,7 @@ func TestMalformedProviderCredentialsKeepLocalAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv.ln.Close()
-	defer srv.cloud.cancel()
+	defer srv.cloud.Close()
 	if err := srv.manager.Reload(); err != nil {
 		t.Fatal(err)
 	}

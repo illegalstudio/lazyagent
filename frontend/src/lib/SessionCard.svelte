@@ -58,10 +58,12 @@
   }
 
   function resume(yolo = false) {
+    if (session.source === "cloud") return;
     SessionService.ResumeInTerminal(session.sessionId, yolo).catch(() => {});
   }
   function openEditor() {
-    SessionService.OpenInEditor(session.cwd, session.agent).catch(() => {});
+    if (session.source === "cloud") SessionService.OpenCloudSession(session.sessionId).catch(() => {});
+    else SessionService.OpenInEditor(session.cwd, session.agent).catch(() => {});
   }
   function moreMenu(e: MouseEvent) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -97,6 +99,7 @@
           <span class="truncate text-[13px] font-semibold text-text">
             {#if glyph}<span class="{session.agent === 'pi' ? 'text-activity-spawning' : session.source === 'desktop' ? 'text-accent' : 'text-subtext'} font-normal">{glyph}</span>{/if}
             {name}
+            {#if session.source === "cloud"}<span class="text-[10px] text-accent font-normal">cloud</span>{/if}
           </span>
         {/if}
       </div>
@@ -105,17 +108,19 @@
       </div>
     </div>
 
-    <div class="mt-1.5">
-      <Sparkline data={session.sparklineData} {color} width={140} height={16} />
-    </div>
+    {#if session.source !== "cloud"}
+      <div class="mt-1.5"><Sparkline data={session.sparklineData} {color} width={140} height={16} /></div>
+    {:else if session.repoUrl}
+      <div class="mt-1.5 text-[10.5px] text-subtext truncate w-full" title={session.repoUrl}>{session.repoUrl}</div>
+    {/if}
 
     <div class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10.5px] text-subtext w-full">
       {#if density !== "compact"}
         {#if session.model}<span class="bg-surface-hover rounded px-1.5 py-px truncate max-w-[9rem]">{session.model}</span>{/if}
         {#if session.gitBranch}<span class="truncate max-w-[9rem]">⎇ {session.gitBranch}</span>{/if}
       {/if}
-      <span class="text-activity-reading font-medium">{formatCost(session.costUsd)}</span>
-      {#if density === "compact"}
+      {#if session.source !== "cloud"}<span class="text-activity-reading font-medium">{formatCost(session.costUsd)}</span>{/if}
+      {#if density === "compact" || session.source === "cloud"}
         <span>{timeAgo(session.lastActivity)}</span>
       {:else}
         <span>{session.totalMessages} msg</span>
@@ -157,8 +162,8 @@
     <button
       class="rounded-md bg-surface-hover hover:bg-surface-active text-text text-[10.5px] px-2 py-0.5"
       onclick={openEditor}
-      title="Open the project in your editor"
-    >Editor</button>
+      title={session.source === "cloud" ? "Open cloud agent in Cursor" : "Open the project in your editor"}
+    >{session.source === "cloud" ? "Open in Cursor" : "Editor"}</button>
     <button
       class="rounded-md bg-surface-hover hover:bg-surface-active text-text text-[10.5px] px-2 py-0.5"
       onclick={startRename}
