@@ -454,3 +454,41 @@ func TestCodexResetCreditsURLKeepsQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotOnlyNarrowsOneRound(t *testing.T) {
+	pool := &sharedCreditPeriod{start: 1, end: 2}
+	snap := Snapshot{
+		results: []agentReport{
+			{agent: "claude", report: Report{Provider: "Claude Code"}},
+			{agent: "grok", report: Report{Provider: "xAI", sharedPeriod: pool}},
+			{agent: "cursor", report: Report{Provider: "Cursor Models"}},
+		},
+		errs: []agentError{
+			{agent: "kimi", kind: errKindNotInstalled, err: errAgentNotInstalled},
+		},
+	}
+	providers := func(s Snapshot) (out []string) {
+		for _, ar := range s.results {
+			out = append(out, ar.report.Provider)
+		}
+		return out
+	}
+	cases := map[string][]string{
+		"all":    {"Claude Code", "xAI", "Cursor Models"},
+		"claude": {"Claude Code"},
+		"grok":   {"xAI"},
+		"cursor": {"xAI", "Cursor Models"}, // the shared xAI pool shows for either selector
+		"kimi":   nil,
+	}
+	for agent, want := range cases {
+		if got := providers(snap.Only(agent)); strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("Only(%s) = %v, want %v", agent, got, want)
+		}
+	}
+	if errs := snap.Only("kimi").errs; len(errs) != 1 || errs[0].agent != "kimi" {
+		t.Errorf("Only(kimi) errors = %+v, want the kimi error", errs)
+	}
+	if errs := snap.Only("claude").errs; len(errs) != 0 {
+		t.Errorf("Only(claude) errors = %+v, want none", errs)
+	}
+}

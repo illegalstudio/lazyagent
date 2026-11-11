@@ -413,7 +413,7 @@ Rate-limit usage, banked limit resets, and extra credits for Claude Code, Codex,
 
 A failing provider never fails the request: it appears in `errors` with `kind` set to `not_installed`, `unavailable`, or `error`, and the other providers are still reported. An unknown `agent` returns `400` with `{"error": "..."}`.
 
-Each `agent` value is cached for 60 seconds, because the providers' usage endpoints are undocumented and rate limited. The `Age` header gives the age of the cached provider data in seconds; `generated_at` and the countdown fields (`reset_in_seconds`, `expires_in_seconds`, `next_available_in_seconds`) are computed on every request. A fetch takes up to 30 seconds when the cache is cold. lazyagent only reads these endpoints and never redeems a reset.
+**Rate limit toward the providers.** The providers' usage endpoints are undocumented and answer sustained polling with `429`, so the API never queries them more than once every **120 seconds**, however often clients call it and whichever `agent` they pass. One provider round answers every selector until it is 120 seconds old; the next request after that runs a new round, and requests that arrive while it runs wait for it (up to 30 seconds). The `Age` header gives the age of that round in seconds. `generated_at` and the countdown fields (`reset_in_seconds`, `expires_in_seconds`, `next_available_in_seconds`) are computed on every request, so they stay accurate between rounds. Polling more often than every two minutes returns the same provider data. lazyagent only reads these endpoints and never redeems a reset.
 
 ### `GET /api/events`
 

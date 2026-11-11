@@ -455,108 +455,74 @@ func TestSSE(t *testing.T) {
 	}
 }
 
-// fakeLimitsSnapshot renders a fixed document, so limits tests never reach
-// the providers.
-type fakeLimitsSnapshot struct{ agent string }
+// fakeLimitsSnapshot renders a fixed document naming the selector, so limits
+// tests never reach the providers.
+type fakeLimitsSnapshot struct{ round int }
 
-func (f fakeLimitsSnapshot) JSON(now time.Time) any {
-	return map[string]any{"agent": f.agent, "generated_at": now}
+func (f fakeLimitsSnapshot) JSONFor(agent string, now time.Time) any {
+	return map[string]any{"agent": agent, "round": f.round, "generated_at": now}
 }
 
-func TestGetLimitsServesCachedSnapshotPerAgent(t *testing.T) {
+func TestGetLimitsSharesOneProviderRound(t *testing.T) {
 	srv, ts := newTestServer(t)
 	defer ts.Close()
 
-	var calls []string
-	srv.limitsFetch = func(_ context.Context, agent string) (limitsSnapshot, error) {
-		calls = append(calls, agent)
-		return fakeLimitsSnapshot{agent: agent}, nil
+	rounds := 0
+	srv.limitsFetch = func(context.Context) (limitsSnapshot, error) {
+		rounds++
+		return fakeLimitsSnapshot{round: rounds}, nil
 	}
 
-	for _, tc := range []struct{ query, agent string }{
-		{"", "all"},
-		{"?agent=all", "all"},       // cached: same selector as the default
-		{"?agent=Claude", "claude"}, // selectors are case-insensitive
-		{"?agent=claude", "claude"}, // cached
-	} {
-		resp := authedGet(t, ts.URL+"/api/limits"+tc.query)
-		var body map[string]any
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			t.Fatalf("%q: decode: %v", tc.query, err)
-		}
-		resp.Body.Close()
+	get := func(query string) map[string]any {
+		t.Helper()
+		resp := authedGet(t, ts.URL+"/api/limits"+query)
+		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("%q: status %d", tc.query, resp.StatusCode)
-		}
-		if body["agent"] != tc.agent {
-			t.Errorf("%q: agent = %v, want %s", tc.query, body["agent"], tc.agent)
+			t.Fatalf("%q: status %d", query, resp.StatusCode)
 		}
 		if resp.Header.Get("Age") == "" {
-			t.Errorf("%q: missing Age header", tc.query)
+			t.Errorf("%q: missing Age header", query)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("%q: decode: %v", query, err)
+		}
+		return body
+	}
+
+	// Every selector is cut from the same round.
+	for _, tc := range []struct{ query, agent string }{
+		{"", "all"},
+		{"?agent=claude", "claude"},
+		{"?agent=Codex", "codex"}, // selectors are case-insensitive
+		{"?agent=all", "all"},
+	} {
+		body := get(tc.query)
+		if body["agent"] != tc.agent || body["round"] != float64(1) {
+			t.Errorf("%q: body = %v, want agent %s from round 1", tc.query, body, tc.agent)
 		}
 	}
-	if got := strings.Join(calls, ","); got != "all,claude" {
-		t.Errorf("provider rounds = %s, want all,claude (one per selector)", got)
+	if rounds != 1 {
+		t.Fatalf("provider rounds = %d, want 1 within the interval", rounds)
 	}
 
-	// An expired entry is fetched again.
-	slot := srv.limitsSlot("all")
-	slot.mu.Lock()
-	slot.entry.fetchedAt = slot.entry.fetchedAt.Add(-limitsCacheTTL)
-	slot.mu.Unlock()
-	authedGet(t, ts.URL+"/api/limits").Body.Close()
-	if got := strings.Join(calls, ","); got != "all,claude,all" {
-		t.Errorf("provider rounds after expiry = %s", got)
+	// Once the interval has passed, the next request runs a new round.
+	srv.limitsMu.Lock()
+	srv.limitsLast.fetchedAt = srv.limitsLast.fetchedAt.Add(-limitsMinInterval)
+	srv.limitsMu.Unlock()
+	if body := get("?agent=claude"); body["round"] != float64(2) {
+		t.Errorf("after the interval: body = %v, want round 2", body)
 	}
-}
-
-// A slow fetch for one selector must not hold up a cached answer for
-// another.
-func TestGetLimitsSlowSelectorDoesNotBlockOthers(t *testing.T) {
-	srv, ts := newTestServer(t)
-	defer ts.Close()
-
-	release := make(chan struct{})
-	started := make(chan struct{})
-	srv.limitsFetch = func(_ context.Context, agent string) (limitsSnapshot, error) {
-		if agent == "all" {
-			close(started)
-			<-release
-		}
-		return fakeLimitsSnapshot{agent: agent}, nil
-	}
-	authedGet(t, ts.URL+"/api/limits?agent=claude").Body.Close() // warm claude
-
-	slowDone := make(chan struct{})
-	go func() {
-		defer close(slowDone)
-		req, _ := http.NewRequest("GET", ts.URL+"/api/limits", nil)
-		req.Header.Set("Authorization", "Bearer "+testToken)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			resp.Body.Close()
-		}
-	}()
-	<-started
-
-	done := make(chan struct{})
-	go func() {
-		authedGet(t, ts.URL+"/api/limits?agent=claude").Body.Close()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("cached claude request waited for the in-flight all fetch")
-	}
-	close(release)
-	<-slowDone
 }
 
 func TestGetLimitsRejectsUnknownAgent(t *testing.T) {
 	srv, ts := newTestServer(t)
 	defer ts.Close()
+	srv.limitsFetch = func(context.Context) (limitsSnapshot, error) {
+		t.Error("an unknown selector reached the providers")
+		return fakeLimitsSnapshot{}, nil
+	}
 
-	// The real fetcher validates the selector before any network call.
 	resp := authedGet(t, ts.URL+"/api/limits?agent=nope")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -566,9 +532,6 @@ func TestGetLimitsRejectsUnknownAgent(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	if !strings.Contains(body["error"], "unsupported agent") {
 		t.Errorf("error = %q", body["error"])
-	}
-	if _, ok := srv.limitsCache["nope"]; ok {
-		t.Error("an unknown selector got a cache slot")
 	}
 }
 

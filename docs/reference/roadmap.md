@@ -177,7 +177,7 @@ sidebar:
 - ✅ Honest lazyagent User-Agent for every provider except Claude, which identifies as Claude Code so Anthropic reports reset grants; graceful failure on 401/429, disclaimer in `--help` and output
 - ✅ `lazyagent limits --json` — stable machine-readable report (windows, pace, severity, reset times, per-agent errors) for widgets and scripts
 - ✅ Model-scoped windows (Claude Fable, Codex per-model and code review), banked limit resets, and extra credits (Claude extra usage, Codex credits, Cursor on-demand, Grok prepaid balance) in the detailed view, JSON, TUI, and GUI
-- ✅ `GET /api/limits` serves the `--json` document over the HTTP API, cached for 60 seconds per agent selector
+- ✅ `GET /api/limits` serves the `--json` document over the HTTP API, querying the providers at most once every 120 seconds
 
 ## v0.10 — Outbound webhooks
 

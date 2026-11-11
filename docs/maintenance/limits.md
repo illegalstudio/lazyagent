@@ -297,7 +297,7 @@ The polling caveat below applies doubly to anything built on `--json`: refresh o
 
 ### Over HTTP
 
-The [HTTP API](../interfaces/http-api.md#get-apilimits) serves the same document at `GET /api/limits`, with `?agent=` in place of `--agent`. The server caches each selector's result for 60 seconds, so clients that poll the API reach the providers at most once a minute per selector.
+The [HTTP API](../interfaces/http-api.md#get-apilimits) serves the same document at `GET /api/limits`, with `?agent=` in place of `--agent`. The server queries the providers at most once every 120 seconds, whatever the selector and however often clients call it: every request in between gets the data of the last round, with countdowns recomputed.
 
 ## How it gets the data
 
@@ -414,7 +414,7 @@ The default `--agent all` mode is forgiving: a missing agent is not an error, it
 
 `/api/oauth/usage` is **not** part of Anthropic's documented public API. As of this writing it is used internally by Claude Code's `/status` and `/usage` UI and is subject to:
 
-- **Aggressive rate limiting** — the endpoint will reject sustained polling with HTTP 429. lazyagent is intentionally on-demand only and does not poll; `GET /api/limits` caches each result for 60 seconds, so API clients cannot drive it faster than once a minute.
+- **Aggressive rate limiting** — the endpoint will reject sustained polling with HTTP 429. lazyagent is intentionally on-demand only and does not poll; `GET /api/limits` reuses one provider round for 120 seconds, so API clients cannot drive it faster than once every two minutes.
 - **No stability guarantee** — the endpoint, response shape, or beta header may change without notice. lazyagent fails gracefully when this happens (clear error, exit code 1).
 - **Subscription scope** — the endpoint reflects the limits of the Claude.ai Pro/Max plan associated with the OAuth token. API-key users (Console, Bedrock, Vertex) won't see meaningful data here.
 - **Client identification**: the request identifies as Claude Code so the reset grants are reported. If Anthropic changes how it scopes them, the resets disappear from the output while the meters keep working.

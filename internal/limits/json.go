@@ -262,3 +262,32 @@ func Collect(ctx context.Context, agent string) (Snapshot, error) {
 func (s Snapshot) JSON(now time.Time) any {
 	return buildJSON(s.results, s.errs, now)
 }
+
+// JSONFor is JSON narrowed to one agent selector (see Only).
+func (s Snapshot) JSONFor(agent string, now time.Time) any {
+	return s.Only(agent).JSON(now)
+}
+
+// Only narrows an "all" snapshot to one agent, so a single provider round can
+// answer every selector. It keeps that agent's reports and errors. Grok and
+// Cursor share the unified xAI credit pool, which an "all" round reports once
+// under whichever agent read it first; that report is kept for either
+// selector, as an explicit `--agent grok` or `--agent cursor` run shows it.
+func (s Snapshot) Only(agent string) Snapshot {
+	if agent == "all" {
+		return s
+	}
+	xai := func(a string) bool { return a == "grok" || a == "cursor" }
+	out := Snapshot{}
+	for _, ar := range s.results {
+		if ar.agent == agent || (ar.report.sharedPeriod != nil && xai(agent) && xai(ar.agent)) {
+			out.results = append(out.results, ar)
+		}
+	}
+	for _, ae := range s.errs {
+		if ae.agent == agent {
+			out.errs = append(out.errs, ae)
+		}
+	}
+	return out
+}
