@@ -8,12 +8,14 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/sessions"
 )
@@ -35,6 +37,31 @@ type Server struct {
 	// SSE subscribers.
 	ssemu   sync.Mutex
 	sseSubs map[chan struct{}]struct{}
+
+	// Rate-limit snapshots per agent selector, so polling clients do not
+	// turn into a request storm against the providers' usage endpoints.
+	limitsMu    sync.Mutex
+	limitsCache map[string]limitsCacheEntry
+	limitsFetch func(ctx context.Context, agent string) (limitsSnapshot, error)
+}
+
+// limitsCacheTTL bounds how often GET /api/limits reaches the providers. The
+// Codex CLI polls the same kind of endpoint about once a minute.
+const limitsCacheTTL = 60 * time.Second
+
+// limitsFetchTimeout caps one provider round, matching the TUI and GUI.
+const limitsFetchTimeout = 30 * time.Second
+
+// limitsSnapshot renders a fetched set of agents as the `lazyagent limits
+// --json` document at a given instant. limits.Snapshot implements it; tests
+// substitute a fake so they never reach the network.
+type limitsSnapshot interface {
+	JSON(now time.Time) any
+}
+
+type limitsCacheEntry struct {
+	snapshot  limitsSnapshot
+	fetchedAt time.Time
 }
 
 // New creates a new API server.
@@ -68,6 +95,11 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 		manager:  manager,
 		authSalt: authSalt,
 		sseSubs:  make(map[chan struct{}]struct{}),
+
+		limitsCache: make(map[string]limitsCacheEntry),
+		limitsFetch: func(ctx context.Context, agent string) (limitsSnapshot, error) {
+			return limits.Collect(ctx, agent)
+		},
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
@@ -250,6 +282,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/sessions/{id}/name", s.handleDeleteSessionName)
 	s.mux.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
+	s.mux.HandleFunc("GET /api/limits", s.handleGetLimits)
 	s.mux.HandleFunc("GET /api/events", s.handleSSE)
 }
 
@@ -366,6 +399,47 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		ActiveSessions: activeCount,
 		WindowMinutes:  s.manager.WindowMinutes(),
 	})
+}
+
+// handleGetLimits serves the same document `lazyagent limits --json` prints.
+// ?agent= selects claude, codex, grok, kimi, cursor, or all (the default).
+// Results are cached per selector for limitsCacheTTL; the Age header says how
+// old the provider data is, while the countdowns are computed per request.
+func (s *Server) handleGetLimits(w http.ResponseWriter, r *http.Request) {
+	agent := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("agent")))
+	if agent == "" {
+		agent = "all"
+	}
+	entry, err := s.cachedLimits(agent)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	now := time.Now()
+	w.Header().Set("Age", strconv.Itoa(int(now.Sub(entry.fetchedAt).Seconds())))
+	writeJSON(w, http.StatusOK, entry.snapshot.JSON(now))
+}
+
+// cachedLimits returns a fresh enough snapshot for agent, fetching it when the
+// cached one is missing or expired. The lock is held across the fetch so
+// concurrent requests share one provider round instead of each starting
+// their own. The fetch runs on its own deadline, not the request's, so a
+// client hanging up early does not leave a truncated snapshot in the cache.
+func (s *Server) cachedLimits(agent string) (limitsCacheEntry, error) {
+	s.limitsMu.Lock()
+	defer s.limitsMu.Unlock()
+	if e, ok := s.limitsCache[agent]; ok && time.Since(e.fetchedAt) < limitsCacheTTL {
+		return e, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limitsFetchTimeout)
+	defer cancel()
+	snap, err := s.limitsFetch(ctx, agent)
+	if err != nil {
+		return limitsCacheEntry{}, err
+	}
+	e := limitsCacheEntry{snapshot: snap, fetchedAt: time.Now()}
+	s.limitsCache[agent] = e
+	return e, nil
 }
 
 func (s *Server) handleAuthInfo(w http.ResponseWriter, r *http.Request) {
