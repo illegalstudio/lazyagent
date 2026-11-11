@@ -3,11 +3,13 @@
 // billing windows. The --detailed view also includes a "pace" indicator that
 // compares actual consumption to a perfectly linear consumption rate.
 //
-// IMPORTANT (Claude): the source for Claude is /api/oauth/usage on
-// api.anthropic.com — the same endpoint Claude Code's own `/status` calls.
-// As of this writing Anthropic does not document it publicly. lazyagent
-// queries it on explicit user invocation only (no polling). Behavior may
-// change without notice; failures degrade gracefully.
+// IMPORTANT (Claude): the source for Claude is /api/oauth/usage?at_wall=1 on
+// api.anthropic.com, the same endpoint Claude Code's own `/status` and
+// `/usage` call. As of this writing Anthropic does not document it publicly.
+// The request identifies as Claude Code (claude-cli/<version>) because the
+// reset grants are only reported to that surface. lazyagent queries it on
+// explicit user invocation only (no polling) and never redeems a reset.
+// Behavior may change without notice; failures degrade gracefully.
 //
 // IMPORTANT (Codex): the source for Codex is /backend-api/wham/usage on
 // chatgpt.com — the same endpoint the Codex CLI's TUI polls (~every 60s) to
@@ -128,17 +130,21 @@ Usage:
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
   weekly/global window. Expected % is the linear pace for elapsed window time.
-  Missing windows are shown as --.
+  Missing windows are shown as --. Windows scoped to a model or feature
+  (Claude Fable, Codex code review) get their own row.
 
 JSON output:
   --json prints one object with "reports" (every window with used %, expected %,
-  pace, severity, and reset time) and "errors" (agents that produced no report,
+  pace, severity, and reset time, plus available limit resets and extra
+  credits) and "errors" (agents that produced no report,
   each tagged not_installed, unavailable, or error). Nothing else is written to
   stdout, and --detailed is redundant because the JSON is always complete.
 
 Detailed output explains:
   - Used %:    how much of the window has been consumed
   - Elapsed %: how far we are into the window's time
+  - Resets:    limit resets the account holds (Claude, Codex); never redeemed
+  - Credits:   extra usage, credit balances, on-demand spend, prepaid balance
   - Pace:      consumption vs. a perfectly linear pace
                  underutilizing  (used < 0.85 × elapsed)
                  on track        (0.85 ≤ used/elapsed ≤ 1.15)

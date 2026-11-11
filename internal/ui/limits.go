@@ -141,7 +141,7 @@ func (m Model) renderLimitsDetailedLines() []string {
 		}
 		lines = append(lines, lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(r.Provider))
 		for _, w := range r.Windows {
-			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(w.Label+" window"))
+			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(w.Title))
 			lines = append(lines, fmt.Sprintf("    Used:     %5.1f%%  %s",
 				w.UsedPercent, m.limitsBar(w.UsedPercent, barW, m.limitsSeverityColor(w.UsedSeverity))))
 			lines = append(lines, fmt.Sprintf("    Expected: %5.1f%%  %s",
@@ -169,12 +169,45 @@ func (m Model) renderLimitsDetailedLines() []string {
 				}
 			}
 			lines = append(lines, "    Pace:     "+lipgloss.NewStyle().Foreground(paceColor).Render(pace))
+			if w.Detail != "" {
+				lines = append(lines, "    Detail:   "+lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(w.Detail))
+			}
 		}
+		lines = append(lines, m.renderLimitsExtrasLines(r)...)
 		if r.Source != "" {
 			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Muted).Render(r.Source))
 		}
 		if r.Note != "" {
 			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(m.theme.Muted).Render(r.Note))
+		}
+	}
+	return lines
+}
+
+// renderLimitsExtrasLines renders the Resets and Credits sections of one
+// report: label in the text color, the one-line value muted. A reset usable
+// right now is highlighted with the accent color.
+func (m Model) renderLimitsExtrasLines(r limits.ReportView) []string {
+	var lines []string
+	heading := func(title string) string {
+		return "  " + lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Render(title)
+	}
+	if len(r.Resets) > 0 {
+		lines = append(lines, heading("Resets"))
+		for _, rs := range r.Resets {
+			color := m.theme.Subtext
+			if rs.Usable {
+				color = m.theme.Accent
+			}
+			lines = append(lines, "    "+lipgloss.NewStyle().Foreground(m.theme.Text).Render(rs.Label)+"  "+
+				lipgloss.NewStyle().Foreground(color).Render(rs.Text))
+		}
+	}
+	if len(r.Credits) > 0 {
+		lines = append(lines, heading("Credits"))
+		for _, c := range r.Credits {
+			lines = append(lines, "    "+lipgloss.NewStyle().Foreground(m.theme.Text).Render(c.Label)+"  "+
+				lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(c.Text))
 		}
 	}
 	return lines

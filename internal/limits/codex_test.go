@@ -53,8 +53,13 @@ func TestCodexUsageToReport(t *testing.T) {
 	if !strings.Contains(report.Source, "pro") {
 		t.Fatalf("source = %q, want it to mention the plan", report.Source)
 	}
-	if len(report.Windows) != 2 {
-		t.Fatalf("got %d windows, want 2", len(report.Windows))
+	// The two plan-wide windows, then the Spark model's own 5-hour window,
+	// scoped by its limit name so it gets its own summary row.
+	if len(report.Windows) != 3 {
+		t.Fatalf("got %d windows, want 3", len(report.Windows))
+	}
+	if spark := report.Windows[2]; spark.Scope != "GPT-5.3-Codex-Spark" || spark.Label != "5-hour" || spark.UsedPercent != 0 {
+		t.Fatalf("additional = %+v, want scoped GPT-5.3-Codex-Spark 5-hour window", spark)
 	}
 
 	p := report.Windows[0]
@@ -119,7 +124,7 @@ func TestFetchCodexReportLive(t *testing.T) {
 	if gotAccount != "acc-9" {
 		t.Fatalf("chatgpt-account-id header = %q, want acc-9", gotAccount)
 	}
-	if len(report.Windows) != 2 || report.Windows[0].UsedPercent != 24 || report.Windows[1].UsedPercent != 93 {
+	if len(report.Windows) != 3 || report.Windows[0].UsedPercent != 24 || report.Windows[1].UsedPercent != 93 {
 		t.Fatalf("windows = %+v, want live 24%%/93%%", report.Windows)
 	}
 }

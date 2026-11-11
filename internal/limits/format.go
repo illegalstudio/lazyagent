@@ -15,6 +15,13 @@ type Window struct {
 	WindowMinutes int       // 300 / 10080
 	UsedPercent   float64   // 0-100
 	ResetsAt      time.Time // when the window rolls over
+	// Scope names the model or feature a window is limited to ("Fable",
+	// "Code review"). Empty for the plan-wide windows. Scoped windows get
+	// their own summary row and never fill the report's own summary cells.
+	Scope string
+	// Detail is optional provider context for the window, shown under it in
+	// the detailed views ("9% of the weekly limit, capped at 50%").
+	Detail string
 }
 
 // Report is the data we render for one provider.
@@ -23,6 +30,8 @@ type Report struct {
 	Source   string   // short note shown before the disclaimer (provenance)
 	Windows  []Window // 5h, 7d, ...
 	Note     string   // disclaimer (may be empty)
+	Resets   []Reset  // banked limit resets the account can redeem
+	Credits  []Credit // balances and spend pools beyond the included usage
 	// Grok and Cursor can expose the same xAI credit period. Millisecond
 	// boundaries identify matching periods without comparing rounded usage.
 	sharedPeriod *sharedCreditPeriod
@@ -231,7 +240,7 @@ func renderReport(b *strings.Builder, r Report, now time.Time) {
 	for _, w := range r.Windows {
 		wp := paceForWindow(w, now)
 
-		fmt.Fprintf(b, "\n  %s\n", styled(w.Label+" window", styleWindowLabel))
+		fmt.Fprintf(b, "\n  %s\n", styled(windowTitle(w), styleWindowLabel))
 		fmt.Fprintf(b, "    Used:     %5.1f%%  %s\n",
 			w.UsedPercent,
 			renderBar(w.UsedPercent, barWidth, barStyleForUsed(w.UsedPercent)),
@@ -252,7 +261,11 @@ func renderReport(b *strings.Builder, r Report, now time.Time) {
 				styled(fmt.Sprintf("(%.2f× of expected %.1f%%)", wp.ratio, wp.elapsedPercent), chatops.StyleMuted),
 			)
 		}
+		if w.Detail != "" {
+			fmt.Fprintf(b, "    Detail:   %s\n", styled(w.Detail, chatops.StyleMuted))
+		}
 	}
+	renderExtras(b, r, now)
 	if r.Source != "" || r.Note != "" {
 		b.WriteString("\n")
 	}
@@ -314,11 +327,13 @@ func summaryCellSeverity(usedPercent float64, p pace) summarySeverity {
 func renderSummaryTable(b *strings.Builder, reports []Report, now time.Time) {
 	t := chatops.NewTable().Headers("Agent", "5h", "Week (or Global)")
 	for _, report := range reports {
-		t.Row(
-			summaryProviderName(report.Provider),
-			summaryCell(report, summaryFiveHour, now),
-			summaryCell(report, summaryWeekGlobal, now),
-		)
+		for _, row := range summaryRowReports(report) {
+			t.Row(
+				row.name,
+				summaryCell(row.report, summaryFiveHour, now),
+				summaryCell(row.report, summaryWeekGlobal, now),
+			)
+		}
 	}
 	b.WriteString(t.String())
 	b.WriteString("\n")
@@ -350,27 +365,71 @@ func summaryCellContent(report Report, kind summaryWindowKind, now time.Time) (t
 	return fmt.Sprintf("%.1f%% used / %.1f%% exp", w.UsedPercent, wp.elapsedPercent), w.UsedPercent, wp.pace, true
 }
 
+// summaryWindow picks the plan-wide window for a summary column. Scoped
+// windows are skipped: they get their own rows from summaryRowReports.
 func summaryWindow(windows []Window, kind summaryWindowKind) (Window, bool) {
 	switch kind {
 	case summaryFiveHour:
 		for _, w := range windows {
-			if isFiveHourWindow(w) {
+			if w.Scope == "" && isFiveHourWindow(w) {
 				return w, true
 			}
 		}
 	case summaryWeekGlobal:
 		for _, w := range windows {
-			if isWeeklyWindow(w) {
+			if w.Scope == "" && isWeeklyWindow(w) {
 				return w, true
 			}
 		}
 		for _, w := range windows {
-			if isGlobalWindow(w) {
+			if w.Scope == "" && isGlobalWindow(w) {
 				return w, true
 			}
 		}
 	}
 	return Window{}, false
+}
+
+// summaryRowReport is one row of the summary table: a display name and the
+// windows that fill its cells.
+type summaryRowReport struct {
+	name   string
+	report Report
+}
+
+// summaryRowReports expands a report into its summary rows: the report's own
+// row for the plan-wide windows, followed by one row per scope ("Claude
+// Fable") holding that scope's windows with the scope cleared, so the regular
+// column matchers apply. A report whose windows are all scoped keeps only the
+// scoped rows.
+func summaryRowReports(r Report) []summaryRowReport {
+	name := summaryProviderName(r.Provider)
+	var scopes []string
+	byScope := map[string][]Window{}
+	hasPlanWide := false
+	for _, w := range r.Windows {
+		if w.Scope == "" {
+			hasPlanWide = true
+			continue
+		}
+		scope := w.Scope
+		if _, seen := byScope[scope]; !seen {
+			scopes = append(scopes, scope)
+		}
+		w.Scope = ""
+		byScope[scope] = append(byScope[scope], w)
+	}
+	var rows []summaryRowReport
+	if hasPlanWide || len(scopes) == 0 {
+		rows = append(rows, summaryRowReport{name: name, report: r})
+	}
+	for _, scope := range scopes {
+		rows = append(rows, summaryRowReport{
+			name:   name + " " + scope,
+			report: Report{Provider: r.Provider, Windows: byScope[scope]},
+		})
+	}
+	return rows
 }
 
 func summaryProviderName(provider string) string {

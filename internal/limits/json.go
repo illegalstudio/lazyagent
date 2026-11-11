@@ -1,6 +1,7 @@
 package limits
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"time"
@@ -25,11 +26,41 @@ type reportJSON struct {
 	Source    string       `json:"source"`
 	Note      string       `json:"note"`
 	Windows   []windowJSON `json:"windows"`
+	Resets    []resetJSON  `json:"resets"`
+	Credits   []creditJSON `json:"credits"`
 	Summary   summaryJSON  `json:"summary"`
+}
+
+// resetJSON is a banked limit reset the account holds. lazyagent never
+// redeems one; this only reports what the provider says is available.
+type resetJSON struct {
+	Label            string     `json:"label"`
+	Left             int        `json:"left"`
+	Total            int        `json:"total"` // 0 when the provider does not say
+	Usable           bool       `json:"usable"`
+	Status           string     `json:"status"`
+	ExpiresAt        *time.Time `json:"expires_at"`         // null when unknown
+	ExpiresInSeconds int64      `json:"expires_in_seconds"` // 0 when unknown or passed
+	Text             string     `json:"text"`
+}
+
+// creditJSON is a balance or spend pool beyond the included usage. Amounts
+// are in unit (an ISO currency code or "credits") and null when unreported.
+type creditJSON struct {
+	Label   string   `json:"label"`
+	Unit    string   `json:"unit"`
+	Enabled bool     `json:"enabled"`
+	Balance *float64 `json:"balance"`
+	Used    *float64 `json:"used"`
+	Limit   *float64 `json:"limit"`
+	Status  string   `json:"status"`
+	Text    string   `json:"text"`
 }
 
 type windowJSON struct {
 	Label           string     `json:"label"`
+	Scope           string     `json:"scope"`  // model or feature the window is limited to, "" when plan-wide
+	Detail          string     `json:"detail"` // optional provider context, "" when none
 	WindowMinutes   int        `json:"window_minutes"`
 	UsedPercent     float64    `json:"used_percent"`
 	ExpectedPercent float64    `json:"expected_percent"` // linear pace for elapsed window time
@@ -100,6 +131,8 @@ func buildReportJSON(ar agentReport, now time.Time) reportJSON {
 		Source:    r.Source,
 		Note:      r.Note,
 		Windows:   make([]windowJSON, 0, len(r.Windows)),
+		Resets:    make([]resetJSON, 0, len(r.Resets)),
+		Credits:   make([]creditJSON, 0, len(r.Credits)),
 		Summary: summaryJSON{
 			FiveHour:   buildSummaryCellJSON(r, summaryFiveHour, now),
 			WeekGlobal: buildSummaryCellJSON(r, summaryWeekGlobal, now),
@@ -108,6 +141,36 @@ func buildReportJSON(ar agentReport, now time.Time) reportJSON {
 	for _, w := range r.Windows {
 		rj.Windows = append(rj.Windows, buildWindowJSON(w, now))
 	}
+	for _, rs := range r.Resets {
+		rsj := resetJSON{
+			Label:  rs.Label,
+			Left:   rs.Left,
+			Total:  rs.Total,
+			Usable: rs.Usable,
+			Status: rs.Status,
+			Text:   resetText(rs, now),
+		}
+		if !rs.ExpiresAt.IsZero() {
+			expires := rs.ExpiresAt
+			rsj.ExpiresAt = &expires
+			if rem := expires.Sub(now); rem > 0 {
+				rsj.ExpiresInSeconds = int64(rem.Seconds())
+			}
+		}
+		rj.Resets = append(rj.Resets, rsj)
+	}
+	for _, c := range r.Credits {
+		rj.Credits = append(rj.Credits, creditJSON{
+			Label:   c.Label,
+			Unit:    c.Unit,
+			Enabled: c.Enabled,
+			Balance: c.Balance,
+			Used:    c.Used,
+			Limit:   c.Limit,
+			Status:  c.Status,
+			Text:    creditText(c),
+		})
+	}
 	return rj
 }
 
@@ -115,6 +178,8 @@ func buildWindowJSON(w Window, now time.Time) windowJSON {
 	wv := buildWindowView(w, now)
 	wj := windowJSON{
 		Label:           wv.Label,
+		Scope:           w.Scope,
+		Detail:          w.Detail,
 		WindowMinutes:   w.WindowMinutes,
 		UsedPercent:     wv.UsedPercent,
 		ExpectedPercent: wv.ExpectedPercent,
@@ -152,4 +217,31 @@ func writeJSON(w io.Writer, results []agentReport, errs []agentError, now time.T
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(buildJSON(results, errs, now))
+}
+
+// Snapshot is one fetch of a set of agents, kept so it can be rendered as the
+// `lazyagent limits --json` document at any later instant. Rendering is
+// separate from fetching so a cached snapshot still reports live countdowns
+// (reset_in_seconds, expires_in_seconds) instead of the ones at fetch time.
+type Snapshot struct {
+	results []agentReport
+	errs    []agentError
+}
+
+// Collect fetches agent ("all", or one of claude, codex, grok, kimi, cursor)
+// exactly as `lazyagent limits --json` does. The only error is an unsupported
+// agent name; per-agent failures land in the document's "errors" array.
+func Collect(ctx context.Context, agent string) (Snapshot, error) {
+	agents, err := resolveAgents(agent)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	results, errs := collect(ctx, agents)
+	return Snapshot{results: results, errs: errs}, nil
+}
+
+// JSON returns the `lazyagent limits --json` document for this snapshot as of
+// now, ready for json.Marshal.
+func (s Snapshot) JSON(now time.Time) any {
+	return buildJSON(s.results, s.errs, now)
 }

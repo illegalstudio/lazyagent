@@ -4,6 +4,7 @@
     View,
     Severity,
     type WindowView,
+    type ResetView,
   } from "../bindings/github.com/illegalstudio/lazyagent/internal/limits/models";
 
   interface Props {
@@ -85,6 +86,18 @@
     return w.ResetRelative ? `resets ${w.ResetRelative}` : "";
   }
 
+  // Banked reset: count, live expiry countdown, and why it cannot be used now.
+  function resetLine(r: ResetView): string {
+    const parts = [r.Total > 0 ? `${r.Left} of ${r.Total} left` : `${r.Left} left`];
+    if (r.ExpiresUnix > 0) {
+      const remaining = r.ExpiresUnix * 1000 - now;
+      parts.push(remaining > 0 ? `expires in ${formatDuration(remaining / 1000)}` : "expired");
+    }
+    if (r.Status) parts.push(r.Status);
+    else if (r.Usable) parts.push("usable now");
+    return parts.join(" · ");
+  }
+
   function agoText(): string {
     if (fetchedAt <= 0) return "";
     const seconds = Math.max(0, (now - fetchedAt) / 1000);
@@ -150,7 +163,7 @@
               {#each report.Windows as w}
                 <div class="flex flex-col gap-1.5">
                   <div class="flex items-baseline gap-2">
-                    <span class="truncate text-[12px] text-text">{w.Label} window</span>
+                    <span class="truncate text-[12px] text-text">{w.Title || `${w.Label} window`}</span>
                     <span class="ml-auto shrink-0 text-[12px] font-bold tabular-nums {sevText(w.UsedSeverity)}">
                       {percentText(w.UsedPercent)} used
                     </span>
@@ -185,9 +198,42 @@
                       >{resetText(w)}</span>
                     {/if}
                   </div>
+                  {#if w.Detail}
+                    <div class="truncate text-[10px] text-subtext" title={w.Detail}>{w.Detail}</div>
+                  {/if}
                 </div>
               {/each}
             </div>
+
+            {#if report.Resets?.length}
+              <div class="mt-3 flex flex-col gap-1 border-t border-border/60 pt-2">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-subtext">Resets</div>
+                {#each report.Resets as r}
+                  <div class="flex flex-col">
+                    <span class="truncate text-[11px] text-text" title={r.Label}>{r.Label}</span>
+                    <span
+                      class="truncate text-[10px] tabular-nums {r.Usable ? 'text-activity-writing' : 'text-subtext'}"
+                      title={r.ExpiresAbsolute ? `expires ${r.ExpiresAbsolute}` : r.Text}
+                    >{resetLine(r)}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            {#if report.Credits?.length}
+              <div class="mt-3 flex flex-col gap-1 border-t border-border/60 pt-2">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-subtext">Credits</div>
+                {#each report.Credits as c}
+                  <div class="flex items-baseline gap-2">
+                    <span class="shrink-0 text-[11px] text-text">{c.Label}</span>
+                    <span
+                      class="ml-auto truncate text-right text-[10px] tabular-nums {c.Enabled ? 'text-text' : 'text-subtext'}"
+                      title={c.Text}
+                    >{c.Text}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/each}
       </div>

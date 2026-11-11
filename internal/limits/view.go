@@ -20,6 +20,9 @@ const (
 // WindowView is a fully-computed, render-ready window (no styling, no time.Time).
 type WindowView struct {
 	Label           string
+	Scope           string // model or feature the window is limited to, "" when plan-wide
+	Title           string // "7-day window" or "7-day window (Fable)"
+	Detail          string // optional provider context, "" when none
 	UsedPercent     float64
 	ExpectedPercent float64 // linear pace for elapsed window time
 	PaceLabel       string  // "underutilizing" | "on track" | "overutilizing"
@@ -37,6 +40,27 @@ type ReportView struct {
 	Source   string
 	Note     string
 	Windows  []WindowView
+	Resets   []ResetView
+	Credits  []CreditView
+}
+
+// ResetView is a render-ready banked limit reset.
+type ResetView struct {
+	Label           string
+	Left            int
+	Total           int  // 0 when the provider does not say
+	Usable          bool // redeemable right now, per the provider
+	Status          string
+	ExpiresUnix     int64  // 0 when unknown
+	ExpiresAbsolute string // "Tue 9 Mar 08:59 CET" or ""
+	Text            string // full one-line rendering, as the CLI prints it
+}
+
+// CreditView is a render-ready credit balance or spend pool.
+type CreditView struct {
+	Label   string
+	Enabled bool
+	Text    string // "28,315.67 credits", "disabled · set by your organization"
 }
 
 type SummaryCell struct {
@@ -103,8 +127,16 @@ func BuildView(reports []Report, now time.Time) View {
 		for _, w := range r.Windows {
 			rv.Windows = append(rv.Windows, buildWindowView(w, now))
 		}
+		for _, rs := range r.Resets {
+			rv.Resets = append(rv.Resets, buildResetView(rs, now))
+		}
+		for _, c := range r.Credits {
+			rv.Credits = append(rv.Credits, CreditView{Label: c.Label, Enabled: c.Enabled, Text: creditText(c)})
+		}
 		v.Reports = append(v.Reports, rv)
-		v.Summary = append(v.Summary, buildSummaryRow(r, now))
+		for _, row := range summaryRowReports(r) {
+			v.Summary = append(v.Summary, buildSummaryRow(row.name, row.report, now))
+		}
 	}
 	return v
 }
@@ -113,6 +145,9 @@ func buildWindowView(w Window, now time.Time) WindowView {
 	wp := paceForWindow(w, now)
 	wv := WindowView{
 		Label:           w.Label,
+		Scope:           w.Scope,
+		Title:           windowTitle(w),
+		Detail:          w.Detail,
 		UsedPercent:     w.UsedPercent,
 		ExpectedPercent: wp.elapsedPercent,
 		PaceRatio:       wp.ratio,
@@ -132,9 +167,25 @@ func buildWindowView(w Window, now time.Time) WindowView {
 	return wv
 }
 
-func buildSummaryRow(r Report, now time.Time) SummaryRow {
+func buildResetView(r Reset, now time.Time) ResetView {
+	rv := ResetView{
+		Label:  r.Label,
+		Left:   r.Left,
+		Total:  r.Total,
+		Usable: r.Usable,
+		Status: r.Status,
+		Text:   resetText(r, now),
+	}
+	if !r.ExpiresAt.IsZero() {
+		rv.ExpiresUnix = r.ExpiresAt.Unix()
+		rv.ExpiresAbsolute = r.ExpiresAt.Local().Format("Mon 2 Jan 15:04 MST")
+	}
+	return rv
+}
+
+func buildSummaryRow(name string, r Report, now time.Time) SummaryRow {
 	return SummaryRow{
-		Provider:   summaryProviderName(r.Provider),
+		Provider:   name,
 		FiveHour:   buildSummaryCell(r, summaryFiveHour, now),
 		WeekGlobal: buildSummaryCell(r, summaryWeekGlobal, now),
 	}
