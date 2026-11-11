@@ -33,6 +33,8 @@ type Server struct {
 	authSalt string
 	cloud    *cloudAgents
 
+	cloudConfigErr error
+
 	// SSE subscribers.
 	ssemu   sync.Mutex
 	sseSubs map[chan struct{}]struct{}
@@ -65,12 +67,14 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 		manager.SetEventBus(bus)
 	}
 
+	cloudKey, _, cloudConfigErr := core.ResolveProviderAPIKey("cursor")
 	s := &Server{
 		manager:  manager,
 		authSalt: authSalt,
-		cloud:    newCloudAgents(cursorAPIBase, cursorKeyFromEnv()),
+		cloud:    newCloudAgents(cursorAPIBase, cloudKey),
 		sseSubs:  make(map[chan struct{}]struct{}),
 	}
+	s.cloudConfigErr = cloudConfigErr
 	s.mux = http.NewServeMux()
 	s.routes()
 

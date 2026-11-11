@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -17,8 +16,7 @@ import (
 )
 
 const (
-	// cursorKeyEnv holds the Cursor API key used to list cloud agents.
-	// Unset disables the cloud half of /api/agents.
+	// cursorKeyEnv overrides the shared saved Cursor API key.
 	cursorKeyEnv      = "LAZYAGENT_CURSOR_API_KEY"
 	cursorAPIBase     = "https://api.cursor.com"
 	cloudCacheTTL     = 30 * time.Second
@@ -355,7 +353,9 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, r *http.Request) {
 	resp := AgentsResponse{Agents: []AgentItem{}, Errors: []string{}}
 
 	all := s.ideAgents()
-	if s.cloud.enabled() {
+	if s.cloudConfigErr != nil {
+		resp.Errors = append(resp.Errors, "cloud: "+s.cloudConfigErr.Error())
+	} else if s.cloud.enabled() {
 		cloud, err := s.cloud.list()
 		if err != nil {
 			resp.Errors = append(resp.Errors, "cloud: "+err.Error())
@@ -373,6 +373,3 @@ func (s *Server) handleGetAgents(w http.ResponseWriter, r *http.Request) {
 	})
 	writeJSON(w, http.StatusOK, resp)
 }
-
-// cursorKeyFromEnv returns the configured Cursor API key, trimmed.
-func cursorKeyFromEnv() string { return strings.TrimSpace(os.Getenv(cursorKeyEnv)) }

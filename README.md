@@ -183,6 +183,7 @@ lazyagent latest --yolo      Resume the most recent session in YOLO mode
 lazyagent limits             Show 5h / weekly / monthly usage summary
 lazyagent limits --json      Same data as JSON, for scripts and widgets
 lazyagent passphrase         Set or rotate the HTTP API passphrase
+lazyagent credentials set cursor  Save the shared Cursor cloud API key
 lazyagent --help             Show full help
 ```
 

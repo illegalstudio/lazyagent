@@ -333,33 +333,47 @@ Also triggers an SSE `update`.
 
 IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents are omitted unless `?all=true`.
 
-Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
+Cloud agents need a saved Cursor API key or the `LAZYAGENT_CURSOR_API_KEY` environment override. Without either, only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
 
 #### Cursor cloud agent setup
 
 1. Sign in to [Cursor Dashboard → API Keys](https://cursor.com/dashboard/api) and create a **user API key** for the Cloud Agents API. See [Cursor's API key documentation](https://cursor.com/docs/api#creating-api-keys).
-2. Pass the key to the process that starts the lazyagent API:
+2. Save it once using the hidden prompt:
 
    ```bash
-   LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+   lazyagent credentials set cursor
    ```
 
-   To reuse it for commands launched from the same terminal:
+   This writes `providers.cursor.api_key` to `credentials.json` beside lazyagent's `config.json`. The file has `0600` permissions and the directory has `0700` permissions. The same Go resolver is available to all interfaces; keys are kept outside ordinary config responses and GUI bindings.
+
+3. Start or restart the API:
 
    ```bash
-   export LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY'
    lazyagent --api
    ```
 
-3. Query `GET /api/agents` using your usual lazyagent bearer token. Add `?all=true` to include idle cloud agents, and check `errors` for failed or pending cloud lookups.
+4. Query `GET /api/agents` using your usual lazyagent bearer token. Add `?all=true` to include idle cloud agents, and check `errors` for failed or pending cloud lookups.
 
 The Cursor key authenticates lazyagent to Cursor. The [API passphrase](#authentication) authenticates your clients to lazyagent; configure it separately.
 
-The key is read when the API server is created. Restart the API after setting or rotating it. There is no Cursor cloud key field in `config.json` or the desktop Settings panel, and lazyagent does not save this environment variable to disk.
+Check the active source or remove the saved key without printing its value:
 
-For a service, login item, or other automatic startup, supply `LAZYAGENT_CURSOR_API_KEY` through that service or launcher's environment or secret manager. A terminal `export` only applies to processes started from that terminal; an already-running API or a desktop app launched separately will not receive it.
+```bash
+lazyagent credentials status cursor
+lazyagent credentials remove cursor
+```
 
-Cloud agents appear in `GET /api/agents`. Local Cursor session discovery needs no cloud API key; `/api/sessions` and the TUI/desktop session lists continue to show local sessions.
+For temporary overrides or a secret-manager deployment, the existing environment variable still works and takes precedence over the saved key:
+
+```bash
+LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
+```
+
+Environment overrides are not copied into `credentials.json`. Removing a saved key does not unset an environment override. The key is resolved when the API server is created; restart running interfaces after setting, rotating, or removing credentials.
+
+Services, login items, and separately launched desktop processes can use the saved credential when running as the same user with the same config directory. See [Provider API credentials](../reference/configuration.md#provider-api-credentials) for paths and the extensible file format. There is no key field in ordinary `config.json` or the desktop Settings panel.
+
+Cloud agents currently appear in `GET /api/agents`. Shared credential storage prepares TUI and GUI integration; their session lists and `/api/sessions` still show local sessions. Local Cursor discovery needs no cloud API key.
 
 #### Cloud caching and errors
 

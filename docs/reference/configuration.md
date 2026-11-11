@@ -175,6 +175,32 @@ Default: `[]` (empty — no outbound webhooks). A list of HTTP endpoints that re
 
 See [Outbound Webhooks](webhooks.md) for the full field reference, payload schema, request headers, HMAC verification, delivery semantics, and troubleshooting tips.
 
+## Provider API credentials
+
+Provider API keys live in `credentials.json` beside `config.json`: `~/.config/lazyagent/credentials.json`, or `$XDG_CONFIG_HOME/lazyagent/credentials.json` when set. This shared location is independent of the interface that starts lazyagent.
+
+```bash
+lazyagent credentials set cursor     # hidden prompt; also accepts a key on stdin
+lazyagent credentials status cursor  # active source, never the key value
+lazyagent credentials remove cursor  # remove the saved key only
+```
+
+The file contains plaintext secrets, has `0600` permissions, and is written atomically under a file lock; its directory has `0700` permissions. Updating one provider preserves the others. Its extensible shape is:
+
+```json
+{
+  "providers": {
+    "cursor": {
+      "api_key": "YOUR_CURSOR_API_KEY"
+    }
+  }
+}
+```
+
+A nonempty `LAZYAGENT_<PROVIDER>_API_KEY` environment variable takes precedence over the saved value, for example `LAZYAGENT_CURSOR_API_KEY`. Environment overrides are never saved automatically. Removing a saved key does not unset an override. Restart running interfaces after changing credentials.
+
+The shared Go resolver can be reused by API, TUI, and GUI code. Provider keys are separate from `Config`, so `/api/config` and desktop config bindings never return them. Currently the Cursor key enables cloud agents in `GET /api/agents`; TUI/GUI cloud session views require a separate integration. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup).
+
 ## HTTP API environment variables
 
 These variables are supplied to the process that starts the API server. Restart the API after changing either value. Environment values are not saved to `config.json`.
@@ -182,7 +208,7 @@ These variables are supplied to the process that starts the API server. Restart 
 | Variable | Purpose |
 |----------|---------|
 | `LAZYAGENT_API_PASSPHRASE` | Overrides `api_passphrase` for client authentication to the lazyagent API. |
-| `LAZYAGENT_CURSOR_API_KEY` | Optional Cursor user API key that enables cloud agents in `GET /api/agents`. Without it, that endpoint returns local sessions only. |
+| `LAZYAGENT_CURSOR_API_KEY` | Overrides the saved Cursor key in `credentials.json`. Cloud lookup is disabled only when both sources are empty. |
 
 For example:
 
@@ -190,7 +216,7 @@ For example:
 LAZYAGENT_CURSOR_API_KEY='YOUR_CURSOR_API_KEY' lazyagent --api
 ```
 
-The Cursor cloud key has no JSON config field or desktop Settings control. For automatic startup, set it in the service or launcher's environment or secret manager. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation, shell usage, and client authentication.
+For automatic startup, save the key once with `lazyagent credentials set cursor`, or supply the override through the service or launcher's environment or secret manager. See [Cursor cloud agent setup](../interfaces/http-api.md#cursor-cloud-agent-setup) for key creation and client authentication.
 
 ## Where the config file lives
 
@@ -201,4 +227,5 @@ The Cursor cloud key has no JSON config field or desktop Settings control. For a
 
 Related files in the same directory:
 
+- `credentials.json` - private provider API keys shared across interfaces.
 - `session-names.json` — persistent custom session names, one JSON object keyed by session ID. Changes land here whenever you rename a session from any interface.

@@ -23,6 +23,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/compact"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/credentials"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/passphrase"
@@ -67,6 +68,8 @@ func main() {
 			os.Exit(limits.Run(os.Args[2:]))
 		case "passphrase":
 			os.Exit(passphrase.Run(os.Args[2:]))
+		case "credentials":
+			os.Exit(credentials.Run(os.Args[2:]))
 		case "sessions", "history":
 			os.Exit(sessions.Run(os.Args[2:]))
 		case "latest":
@@ -121,6 +124,8 @@ Subcommands:
   lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|cursor|all, --detailed, --json)
   lazyagent passphrase          Set or rotate the HTTP API passphrase
   lazyagent passphrase --show   Print the current bearer token without prompting
+  lazyagent credentials set cursor  Save a shared Cursor cloud API key
+  lazyagent credentials --help      Manage shared provider API keys
 
 Flags:
 `, version.String())
