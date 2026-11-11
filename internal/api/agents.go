@@ -19,6 +19,7 @@ const (
 	cursorKeyEnv      = "LAZYAGENT_CURSOR_API_KEY"
 	cursorAPIBase     = "https://api.cursor.com"
 	cloudCacheTTL     = 30 * time.Second
+	cloudErrorTTL     = 5 * time.Second
 	cloudFetchTimeout = 10 * time.Second
 )
 
@@ -51,14 +52,17 @@ type AgentsResponse struct {
 
 // cloudAgents lists Cursor cloud agents and caches the result briefly, so
 // several consumers polling /api/agents make one upstream call per TTL.
+// Failures are cached too (for a shorter TTL) so requests queued on mu during
+// a Cursor outage share one failed lookup instead of each waiting out a timeout.
 type cloudAgents struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
 
-	mu      sync.Mutex
-	cached  []AgentItem
-	fetched time.Time
+	mu        sync.Mutex
+	cached    []AgentItem
+	cachedErr error
+	fetched   time.Time
 }
 
 func newCloudAgents(baseURL, apiKey string) *cloudAgents {
@@ -68,14 +72,26 @@ func newCloudAgents(baseURL, apiKey string) *cloudAgents {
 // enabled reports whether a Cursor API key is configured.
 func (c *cloudAgents) enabled() bool { return c.apiKey != "" }
 
-// list returns all cloud agents, newest first, from cache when fresh.
+// list returns all cloud agents, or the last error, from cache when fresh.
+// Successes live for cloudCacheTTL, failures for cloudErrorTTL.
 func (c *cloudAgents) list() ([]AgentItem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.fetched.IsZero() && time.Since(c.fetched) < cloudCacheTTL {
-		return c.cached, nil
+	ttl := cloudCacheTTL
+	if c.cachedErr != nil {
+		ttl = cloudErrorTTL
+	}
+	if !c.fetched.IsZero() && time.Since(c.fetched) < ttl {
+		return c.cached, c.cachedErr
 	}
 
+	c.cached, c.cachedErr = c.fetch()
+	c.fetched = time.Now()
+	return c.cached, c.cachedErr
+}
+
+// fetch calls the Cursor API once and maps the agents to AgentItems.
+func (c *cloudAgents) fetch() ([]AgentItem, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/v1/agents?limit=100", nil)
 	if err != nil {
 		return nil, err
@@ -122,7 +138,6 @@ func (c *cloudAgents) list() ([]AgentItem, error) {
 		}
 		items = append(items, item)
 	}
-	c.cached, c.fetched = items, time.Now()
 	return items, nil
 }
 

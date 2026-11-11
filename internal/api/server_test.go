@@ -38,6 +38,7 @@ const testSalt = "lazyagent-api-v1-test"
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(cursorKeyEnv, "")
 	srv, err := New(":0", testProvider{}, testToken, testSalt, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -79,6 +80,7 @@ func (fixedSessionProvider) WatchDirs() []string                           { ret
 func newTestServerWithSessions(t *testing.T, sessions []*model.Session) (*Server, *httptest.Server) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(cursorKeyEnv, "")
 	srv, err := New(":0", fixedSessionProvider{sessions: sessions}, testToken, testSalt, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)

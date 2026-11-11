@@ -97,18 +97,32 @@ func TestGetAgentsCachesCloudCalls(t *testing.T) {
 }
 
 func TestGetAgentsReportsCloudErrorButKeepsIDE(t *testing.T) {
-	srv, ts := newTestServer(t)
+	srv, ts := newTestServerWithSessions(t, []*model.Session{
+		{SessionID: "ide-1", Agent: "cursor", CWD: t.TempDir(), Name: "refactor", LastActivity: time.Now()},
+	})
 	defer ts.Close()
 
+	calls := 0
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer broken.Close()
 	srv.cloud = newCloudAgents(broken.URL, "key")
 
-	out := getAgents(t, ts.URL)
+	out := getAgentsAt(t, ts.URL+"/api/agents?all=true")
 	if len(out.Errors) != 1 {
 		t.Errorf("errors = %v, want one cloud error", out.Errors)
+	}
+	if len(out.Agents) != 1 || out.Agents[0].ID != "ide-1" {
+		t.Errorf("agents = %+v, want the IDE agent kept", out.Agents)
+	}
+
+	if again := getAgents(t, ts.URL); len(again.Errors) != 1 {
+		t.Errorf("cached errors = %v, want the cloud error again", again.Errors)
+	}
+	if calls != 1 {
+		t.Errorf("cursor api calls = %d, want 1 (failure cached)", calls)
 	}
 }
 
