@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -21,6 +24,8 @@ const (
 	cloudCacheTTL     = 30 * time.Second
 	cloudErrorTTL     = 5 * time.Second
 	cloudFetchTimeout = 10 * time.Second
+	cloudRepoTTL      = 5 * time.Minute
+	cloudRepoWorkers  = 4
 )
 
 // Normalized agent states shared by IDE and cloud agents.
@@ -51,7 +56,7 @@ type AgentsResponse struct {
 }
 
 // cloudAgents lists Cursor cloud agents and caches the result briefly, so
-// several consumers polling /api/agents make one upstream call per TTL.
+// several consumers polling /api/agents share one upstream refresh per TTL.
 // Failures are cached too (for a shorter TTL) so requests queued on mu during
 // a Cursor outage share one failed lookup instead of each waiting out a timeout.
 type cloudAgents struct {
@@ -63,10 +68,21 @@ type cloudAgents struct {
 	cached    []AgentItem
 	cachedErr error
 	fetched   time.Time
+	repos     map[string]cloudRepo
+}
+
+type cloudRepo struct {
+	url     string
+	fetched time.Time
 }
 
 func newCloudAgents(baseURL, apiKey string) *cloudAgents {
-	return &cloudAgents{baseURL: baseURL, apiKey: apiKey, client: &http.Client{Timeout: cloudFetchTimeout}}
+	return &cloudAgents{
+		baseURL: baseURL,
+		apiKey:  apiKey,
+		client:  &http.Client{Timeout: cloudFetchTimeout},
+		repos:   make(map[string]cloudRepo),
+	}
 }
 
 // enabled reports whether a Cursor API key is configured.
@@ -85,60 +101,156 @@ func (c *cloudAgents) list() ([]AgentItem, error) {
 		return c.cached, c.cachedErr
 	}
 
-	c.cached, c.cachedErr = c.fetch()
+	ctx, cancel := context.WithTimeout(context.Background(), cloudFetchTimeout)
+	defer cancel()
+	c.cached, c.cachedErr = c.fetch(ctx)
 	c.fetched = time.Now()
 	return c.cached, c.cachedErr
 }
 
-// fetch calls the Cursor API once and maps the agents to AgentItems.
-func (c *cloudAgents) fetch() ([]AgentItem, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/v1/agents?limit=100", nil)
+// get decodes one authenticated Cursor response within the refresh deadline.
+func (c *cloudAgents) get(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.SetBasicAuth(c.apiKey, "")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("cursor api returned %d", resp.StatusCode)
+		return fmt.Errorf("cursor api returned %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// fetchPages follows every page before filtering by status. A failed page or
+// repeated cursor returns the agents already found together with an error.
+func (c *cloudAgents) fetchPages(ctx context.Context) ([]AgentItem, error) {
+	var items []AgentItem
+	seenIDs := make(map[string]bool)
+	seenCursors := make(map[string]bool)
+	cursor := ""
+	for {
+		seenCursors[cursor] = true
+		query := url.Values{"limit": {"100"}}
+		if cursor != "" {
+			query.Set("cursor", cursor)
+		}
+		var page struct {
+			Items []struct {
+				ID        string    `json:"id"`
+				Name      string    `json:"name"`
+				Status    string    `json:"status"`
+				URL       string    `json:"url"`
+				UpdatedAt time.Time `json:"updatedAt"`
+			} `json:"items"`
+			NextCursor string `json:"nextCursor"`
+		}
+		if err := c.get(ctx, "/v1/agents?"+query.Encode(), &page); err != nil {
+			return items, fmt.Errorf("list cursor agents: %w", err)
+		}
+		for _, a := range page.Items {
+			// Agents can move between pages while the upstream list changes.
+			if seenIDs[a.ID] {
+				continue
+			}
+			seenIDs[a.ID] = true
+			items = append(items, AgentItem{
+				ID:        a.ID,
+				Source:    "cloud",
+				Agent:     "cursor",
+				Name:      a.Name,
+				Status:    cloudStatus(a.Status),
+				URL:       a.URL,
+				UpdatedAt: a.UpdatedAt,
+			})
+		}
+		if page.NextCursor == "" {
+			return items, nil
+		}
+		if seenCursors[page.NextCursor] {
+			return items, fmt.Errorf("cursor pagination repeated a cursor")
+		}
+		cursor = page.NextCursor
+	}
+}
+
+// fetch enriches the list with repository metadata, which Cursor exposes only
+// on agent details. The caller holds mu throughout the refresh, including the
+// worker lifetime; workers write distinct item/error slots, never the repo map.
+func (c *cloudAgents) fetch(ctx context.Context) ([]AgentItem, error) {
+	items, listErr := c.fetchPages(ctx)
+	if listErr == nil {
+		present := make(map[string]bool, len(items))
+		for _, item := range items {
+			present[item.ID] = true
+		}
+		for id := range c.repos {
+			if !present[id] {
+				delete(c.repos, id)
+			}
+		}
+	}
+	var pending []int
+	for i := range items {
+		cached, ok := c.repos[items[i].ID]
+		items[i].Repo = cached.url
+		if !ok || time.Since(cached.fetched) >= cloudRepoTTL {
+			pending = append(pending, i)
+		}
 	}
 
-	var body struct {
-		Items []struct {
-			ID        string    `json:"id"`
-			Name      string    `json:"name"`
-			Status    string    `json:"status"`
-			URL       string    `json:"url"`
-			UpdatedAt time.Time `json:"updatedAt"`
-			Repos     []struct {
-				URL string `json:"url"`
-			} `json:"repos"`
-		} `json:"items"`
+	detailErrs := make([]error, len(pending))
+	workers := min(cloudRepoWorkers, len(pending))
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := worker; n < len(pending); n += workers {
+				i := pending[n]
+				if err := ctx.Err(); err != nil {
+					detailErrs[n] = err
+					continue
+				}
+				var detail struct {
+					Repos []struct {
+						URL string `json:"url"`
+					} `json:"repos"`
+				}
+				if err := c.get(ctx, "/v1/agents/"+url.PathEscape(items[i].ID), &detail); err != nil {
+					detailErrs[n] = fmt.Errorf("agent %q: %w", items[i].ID, err)
+					continue
+				}
+				items[i].Repo = ""
+				if len(detail.Repos) > 0 {
+					items[i].Repo = detail.Repos[0].URL
+				}
+			}
+		}()
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 
-	items := make([]AgentItem, 0, len(body.Items))
-	for _, a := range body.Items {
-		item := AgentItem{
-			ID:        a.ID,
-			Source:    "cloud",
-			Agent:     "cursor",
-			Name:      a.Name,
-			Status:    cloudStatus(a.Status),
-			URL:       a.URL,
-			UpdatedAt: a.UpdatedAt,
+	var firstErr error
+	failed := 0
+	for n, i := range pending {
+		if err := detailErrs[n]; err != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
-		if len(a.Repos) > 0 {
-			item.Repo = a.Repos[0].URL
-		}
-		items = append(items, item)
+		// Cache empty repositories too: Cursor supports agents without a repo.
+		c.repos[items[i].ID] = cloudRepo{url: items[i].Repo, fetched: time.Now()}
 	}
-	return items, nil
+	if failed > 0 {
+		return items, errors.Join(listErr, fmt.Errorf("repository lookup failed for %d agents: %w", failed, firstErr))
+	}
+	return items, listErr
 }
 
 // cloudStatus maps a Cursor agent status to the shared states. ACTIVE means a

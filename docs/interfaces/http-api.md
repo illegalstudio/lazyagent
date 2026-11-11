@@ -333,7 +333,11 @@ Also triggers an SSE `update`.
 
 IDE chats and Cursor cloud agents in one list, with a shared status. Idle agents are omitted unless `?all=true`.
 
-Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. Cloud results are cached for 30 seconds.
+Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Without it only IDE chats are returned. All Cursor list pages are read before idle agents are filtered out, so an active agent beyond the first 100 is still included.
+
+Cloud results are cached for 30 seconds; failures and partial results are cached for 5 seconds. Repository metadata is loaded from each agent's detail endpoint and cached for 5 minutes. The cloud `repo` field contains the first repository URL and is omitted for agents without a repository.
+
+A cloud refresh has a 10-second deadline covering all list pages and detail requests. If a page or repository lookup fails, available IDE and cloud agents are still returned alongside an entry in `errors`. A failed repository lookup leaves `repo` absent, or keeps its last cached value if available. Check `errors` before treating the result as complete.
 
 **Response: `200 OK`**
 
@@ -355,7 +359,7 @@ Cloud agents need `LAZYAGENT_CURSOR_API_KEY` in the server's environment. Withou
 }
 ```
 
-`source` is `ide` or `cloud`. `status` is `working`, `needs_you` or `idle` (IDE `waiting` maps to `needs_you`). `errors` lists sources that failed, such as `cloud: cursor api returned 401`, so an empty `agents` list can be told apart from a broken lookup.
+`source` is `ide` or `cloud`. `status` is `working`, `needs_you` or `idle` (IDE `waiting` maps to `needs_you`). `errors` lists sources that failed, such as `cloud: list cursor agents: cursor api returned 401`, so an empty `agents` list can be told apart from a broken lookup.
 
 ### `GET /api/stats`
 
